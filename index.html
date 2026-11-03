@@ -1,0 +1,1610 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f7f4">
+  <title>Bora! Gestão — custos e cardápio</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #20231f;
+      --muted: #777d74;
+      --line: #e9ebe5;
+      --surface: #fff;
+      --canvas: #f7f7f4;
+      --green: #245c43;
+      --green-dark: #194733;
+      --green-soft: #eaf3ed;
+      --lime: #d7ed9f;
+      --orange: #e98a4a;
+      --orange-soft: #fff1e7;
+      --red: #bd5245;
+      --shadow: 0 12px 35px rgba(30, 43, 32, .07);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; min-height: 100vh; background: var(--canvas); color: var(--ink); }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+    .app-shell { display: flex; min-height: 100vh; }
+    .sidebar {
+      width: 244px; flex: 0 0 244px; background: var(--green-dark); color: #fff;
+      padding: 28px 17px 20px; display: flex; flex-direction: column;
+    }
+    .brand { display: flex; align-items: center; gap: 11px; padding: 0 11px 33px; }
+    .brand-mark {
+      width: 38px; height: 38px; display: grid; place-items: center; border-radius: 13px;
+      color: var(--green-dark); background: var(--lime); font-size: 19px; font-weight: 900;
+    }
+    .brand-name { font-size: 17px; font-weight: 750; letter-spacing: -.5px; }
+    .brand-sub { margin-top: 2px; color: #a7c2ae; font-size: 11px; }
+    .nav-label { padding: 0 12px 9px; color: #88a592; font-size: 10px; font-weight: 750; letter-spacing: 1.3px; text-transform: uppercase; }
+    .nav { display: grid; gap: 5px; }
+    .nav button {
+      display: flex; align-items: center; gap: 12px; padding: 11px 12px; border: 0;
+      border-radius: 10px; color: #c4d5c9; background: transparent; text-align: left; font-size: 13px;
+    }
+    .nav button:hover, .nav button.active { color: #fff; background: #32634c; }
+    .nav-icon { width: 19px; text-align: center; font-size: 16px; }
+    .sidebar-bottom { margin-top: auto; }
+    .help-card { padding: 15px; border: 1px solid #47705a; border-radius: 12px; color: #dce8df; font-size: 12px; line-height: 1.5; }
+    .help-card strong { display: block; margin-bottom: 5px; color: #fff; font-size: 13px; }
+    .auth-gate { min-height: 100vh; display: grid; place-items: center; padding: 22px; background: var(--canvas); }
+    .auth-card { width: min(420px, 100%); padding: 28px; border: 1px solid var(--line); border-radius: 16px; background: #fff; box-shadow: var(--shadow); }
+    .auth-card h1 { margin: 0; font-size: 25px; }
+    .auth-card > p { margin: 8px 0 22px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+    .auth-card .field { margin-bottom: 14px; }
+    .auth-message { min-height: 20px; margin: 12px 0; color: var(--red); font-size: 12px; line-height: 1.5; }
+    .auth-actions { display: grid; gap: 10px; }
+    .auth-actions .button { width: 100%; }
+    .auth-switch { width: 100%; margin-top: 15px; padding: 5px; border: 0; color: var(--green); background: transparent; font-size: 12px; font-weight: 700; }
+    .sync-status { color: var(--muted); font-size: 11px; }
+    .user-chip { border: 0; background: transparent; }
+    .user-chip .button { margin-left: 8px; }
+    .main { min-width: 0; flex: 1; }
+    .topbar {
+      height: 76px; padding: 0 38px; display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--line); background: rgba(255,255,255,.72);
+    }
+    .crumb { color: var(--muted); font-size: 12px; }
+    .crumb strong { color: var(--ink); font-weight: 650; }
+    .user-chip { display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 650; }
+    .user-avatar { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; color: var(--green); background: var(--green-soft); font-weight: 800; }
+    .content { width: min(1120px, 100%); margin: 0 auto; padding: 34px 38px 55px; }
+    .page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 25px; }
+    .eyebrow { margin-bottom: 7px; color: var(--green); font-size: 11px; font-weight: 750; letter-spacing: 1.1px; text-transform: uppercase; }
+    h1 { margin: 0; font-size: clamp(24px, 3vw, 32px); letter-spacing: -1.1px; }
+    .subtitle { margin: 7px 0 0; color: var(--muted); font-size: 13px; }
+    .button {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px;
+      padding: 0 15px; border: 1px solid var(--line); border-radius: 9px; background: #fff;
+      color: var(--ink); font-size: 12px; font-weight: 700; transition: .15s ease;
+    }
+    .button:hover { border-color: #b7c8ba; transform: translateY(-1px); }
+    .button.primary { border-color: var(--green); color: #fff; background: var(--green); }
+    .button.primary:hover { background: var(--green-dark); }
+    .button:disabled { cursor: not-allowed; opacity: .5; transform: none; }
+    .button.small { min-height: 32px; padding: 0 11px; font-size: 11px; }
+    .button.danger { color: var(--red); }
+    .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 13px; margin-bottom: 21px; }
+    .stat-card, .panel, .product-card { border: 1px solid var(--line); border-radius: 13px; background: var(--surface); }
+    .stat-card { min-height: 116px; padding: 17px 18px; }
+    .stat-top { display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: 11px; }
+    .stat-icon { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 9px; color: var(--green); background: var(--green-soft); font-size: 14px; }
+    .stat-value { margin-top: 12px; font-size: 24px; font-weight: 750; letter-spacing: -.8px; }
+    .stat-note { margin-top: 3px; color: var(--muted); font-size: 10px; }
+    .dashboard-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 15px; }
+    .panel { min-width: 0; padding: 19px; }
+    .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+    .panel-heading h2 { margin: 0; font-size: 14px; letter-spacing: -.2px; }
+    .panel-heading span { color: var(--muted); font-size: 11px; }
+    .table-wrap { width: 100%; min-width: 0; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; text-align: left; }
+    th { padding: 9px 8px; border-bottom: 1px solid var(--line); color: #90958d; font-size: 9px; font-weight: 750; letter-spacing: .7px; text-transform: uppercase; white-space: nowrap; }
+    td { padding: 12px 8px; border-bottom: 1px solid #f0f1ed; font-size: 11px; white-space: nowrap; }
+    tbody tr:last-child td { border-bottom: 0; }
+    .product-name-cell { display: flex; align-items: center; gap: 9px; font-weight: 650; }
+    .food-thumb { width: 31px; height: 31px; display: grid; place-items: center; border-radius: 9px; background: #f7efe5; font-size: 16px; }
+    .pill { display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 20px; color: var(--green); background: var(--green-soft); font-size: 9px; font-weight: 700; }
+    .pill.orange { color: #a9602d; background: var(--orange-soft); }
+    .margin-cell { color: var(--green); font-weight: 750; }
+    .margin-cell.low { color: var(--red); }
+    .cost-summary { display: grid; gap: 14px; }
+    .cost-row { display: flex; justify-content: space-between; gap: 15px; font-size: 11px; }
+    .cost-row span { color: var(--muted); }
+    .cost-row strong { font-weight: 700; }
+    .cost-progress { height: 7px; margin-top: -6px; overflow: hidden; border-radius: 6px; background: #eef0ea; }
+    .cost-progress span { display: block; width: 32%; height: 100%; border-radius: inherit; background: var(--orange); }
+    .callout { display: flex; gap: 10px; margin-top: 19px; padding: 12px; border-radius: 9px; color: #695337; background: #fbf5e9; font-size: 10px; line-height: 1.45; }
+    .callout b { display: block; margin-bottom: 2px; color: #4a3c29; font-size: 11px; }
+    .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 17px; }
+    .filters { display: flex; flex-wrap: wrap; gap: 7px; }
+    .filter-btn { padding: 8px 12px; border: 1px solid var(--line); border-radius: 20px; color: var(--muted); background: #fff; font-size: 10px; font-weight: 700; }
+    .filter-btn.active { border-color: var(--green); color: #fff; background: var(--green); }
+    .search { width: 210px; min-height: 36px; padding: 0 11px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: 11px; outline: none; }
+    .search:focus, input:focus, select:focus { border-color: #6b9478; box-shadow: 0 0 0 3px rgba(36,92,67,.09); outline: none; }
+    .product-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 13px; }
+    .product-card { padding: 15px; }
+    .product-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+    .product-card-title { display: flex; align-items: center; gap: 10px; }
+    .product-card-title .food-thumb { width: 39px; height: 39px; font-size: 20px; }
+    .product-card h3 { margin: 0; font-size: 13px; }
+    .product-card .category-label { margin-top: 4px; color: var(--muted); font-size: 10px; }
+    .icon-button { width: 29px; height: 29px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: #fff; }
+    .product-pricing { display: flex; justify-content: space-between; gap: 10px; margin-top: 17px; padding-top: 12px; border-top: 1px solid var(--line); }
+    .product-pricing span { display: block; color: var(--muted); font-size: 9px; }
+    .product-pricing strong { display: block; margin-top: 4px; font-size: 13px; }
+    .empty-state { grid-column: 1/-1; padding: 35px 20px; border: 1px dashed #d6dbd2; border-radius: 12px; color: var(--muted); background: #fff; text-align: center; font-size: 12px; }
+    .ingredient-list { display: grid; gap: 0; }
+    .ingredient-row { display: grid; grid-template-columns: 1fr 100px 100px 84px; align-items: center; gap: 12px; padding: 13px 8px; border-bottom: 1px solid var(--line); font-size: 12px; }
+    .ingredient-row:first-child { color: #90958d; font-size: 9px; font-weight: 750; letter-spacing: .6px; text-transform: uppercase; }
+    .ingredient-row:last-child { border-bottom: 0; }
+    .ingredient-row strong { font-size: 12px; }
+    .settings-list { display: grid; gap: 12px; }
+    .setting-item { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 17px; border: 1px solid var(--line); border-radius: 11px; background: #fff; }
+    .setting-item strong { display: block; font-size: 12px; }
+    .setting-item p { margin: 5px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+    .switch { position: relative; width: 43px; height: 24px; flex: 0 0 43px; }
+    .switch input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+    .switch span { position: absolute; inset: 0; border-radius: 20px; background: #daddd7; transition: .2s; }
+    .switch span::after { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; content: ""; transition: .2s; box-shadow: 0 1px 3px #0002; }
+    .switch input:checked + span { background: var(--green); }
+    .switch input:checked + span::after { transform: translateX(19px); }
+    .bottom-nav { display: none; }
+    .modal-backdrop { position: fixed; z-index: 20; inset: 0; display: none; align-items: center; justify-content: center; padding: 18px; background: rgba(24,33,27,.48); }
+    .modal-backdrop.open { display: flex; }
+    .modal { width: min(650px, 100%); max-height: min(88vh, 850px); overflow: auto; border-radius: 15px; background: #fff; box-shadow: 0 24px 80px #0003; }
+    .modal-header { position: sticky; z-index: 1; top: 0; display: flex; align-items: center; justify-content: space-between; padding: 17px 21px; border-bottom: 1px solid var(--line); background: #fff; }
+    .modal-header h2 { margin: 0; font-size: 16px; }
+    .close-button { width: 30px; height: 30px; border: 0; border-radius: 8px; color: var(--muted); background: #f3f4f1; font-size: 17px; }
+    .modal-body { padding: 19px 21px 5px; }
+    .modal-footer { position: sticky; bottom: 0; display: flex; justify-content: flex-end; gap: 8px; padding: 14px 21px; border-top: 1px solid var(--line); background: #fff; }
+    .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 13px; }
+    .field { display: grid; gap: 6px; }
+    .field.full { grid-column: 1/-1; }
+    .field label, .section-label { color: #555d55; font-size: 10px; font-weight: 700; }
+    .field input, .field select, .recipe-row select, .recipe-row input, .size-row input, .addon-row input, .addon-row select {
+      width: 100%; min-width: 0; height: 37px; padding: 0 10px; border: 1px solid #e1e4dc;
+      border-radius: 7px; color: var(--ink); background: #fff; font-size: 11px;
+    }
+    .form-section { margin: 19px 0 8px; padding-top: 14px; border-top: 1px solid var(--line); }
+    .form-section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+    .form-section-head strong { font-size: 11px; }
+    .form-section-head small { color: var(--muted); font-size: 9px; }
+    .dynamic-rows { display: grid; gap: 7px; }
+    .recipe-row { display: grid; grid-template-columns: 1fr 105px 31px; gap: 7px; }
+    .size-row { display: grid; grid-template-columns: 1fr 115px 100px 31px; gap: 7px; }
+    .addon-row { display: grid; grid-template-columns: 1.2fr 95px 95px 31px; gap: 7px; }
+    .row-remove { border: 0; border-radius: 7px; color: #9c6259; background: #fbefed; font-size: 14px; }
+    .helper { margin: 7px 0 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
+    .recipe-total { margin-top: 9px; color: var(--green); font-size: 10px; font-weight: 700; }
+    .sale-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(290px, .85fr); gap: 15px; align-items: start; }
+    .sale-builder { display: grid; gap: 12px; }
+    .sale-product-form { display: grid; grid-template-columns: 1.4fr 1fr 85px auto; align-items: end; gap: 9px; }
+    .sale-addons { display: flex; flex-wrap: wrap; gap: 7px; grid-column: 1/-1; }
+    .addon-choice { display: inline-flex; align-items: center; gap: 6px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; color: #555d55; background: #fff; font-size: 10px; }
+    .addon-choice input { accent-color: var(--green); }
+    .sale-cart-row { display: grid; grid-template-columns: 1fr auto auto 28px; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 11px; }
+    .sale-cart-row:last-child { border-bottom: 0; }
+    .sale-cart-row strong { display: block; font-size: 11px; }
+    .sale-cart-row small { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; }
+    .sale-total { display: flex; align-items: center; justify-content: space-between; margin-top: 13px; padding-top: 13px; border-top: 1px solid var(--line); font-size: 12px; }
+    .sale-total strong { color: var(--green); font-size: 20px; }
+    .sale-checkout { display: grid; gap: 12px; margin-top: 17px; }
+    .customer-card { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .customer-name { font-size: 11px; font-weight: 700; }
+    .customer-detail { margin-top: 3px; color: var(--muted); font-size: 9px; }
+    .order-status-select { min-width: 120px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: #fff; font-size: 10px; }
+    .customer-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+    .customer-item { border: 1px solid var(--line); border-radius: 12px; background: #fff; padding: 15px; }
+    .customer-item-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .customer-avatar { width: 36px; height: 36px; display: grid; place-items: center; flex: 0 0 36px; border-radius: 50%; color: var(--green); background: var(--green-soft); font-size: 13px; font-weight: 800; }
+    .customer-info { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .customer-info strong { display: block; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+    .customer-info span { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; }
+    .customer-address { margin-top: 13px; padding-top: 11px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; line-height: 1.45; }
+    .cash-hero { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 16px; padding: 22px; border-radius: 13px; color: #fff; background: var(--green-dark); }
+    .cash-hero span { color: #c1d5c8; font-size: 11px; }
+    .cash-hero strong { display: block; margin-top: 6px; font-size: 30px; letter-spacing: -.8px; }
+    .cash-hero .button { border-color: #ffffff55; color: #fff; background: #ffffff12; }
+    .cash-metrics { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin: 14px 0; }
+    .cash-metric { padding: 15px; border: 1px solid var(--line); border-radius: 11px; background: #fff; }
+    .cash-metric span { color: var(--muted); font-size: 10px; }
+    .cash-metric strong { display: block; margin-top: 7px; font-size: 17px; }
+    .report-filters { display: flex; align-items: end; gap: 10px; }
+    .report-filters .field { min-width: 130px; }
+    .digital-hero { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 24px; border-radius: 14px; color: #fff; background: var(--green-dark); }
+    .digital-hero h1 { font-size: 28px; }
+    .digital-hero p { margin: 8px 0 0; color: #cfdfd3; font-size: 12px; }
+    .digital-product-card { display: grid; grid-template-columns: 1fr auto; gap: 13px; padding: 17px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+    .digital-product-card h3 { margin: 0; font-size: 14px; }
+    .digital-product-card p { margin: 5px 0 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+    .digital-product-card .field { margin-top: 10px; }
+    .digital-product-card .sale-addons { margin-top: 9px; }
+    .digital-product-card .option-group { margin-top: 13px; }
+    .digital-product-card .option-group .section-label { display: block; margin-bottom: 7px; color: var(--ink); font-size: 11px; }
+    .border-picker { margin-top: 11px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+    .border-picker summary { padding: 11px 12px; color: var(--ink); font-size: 11px; font-weight: 700; cursor: pointer; }
+    .border-picker[open] summary { border-bottom: 1px solid var(--line); }
+    .border-picker .sale-addons { padding: 10px; }
+    .digital-product-card .addon-choice { min-height: 40px; padding: 9px 11px; cursor: pointer; font-size: 11px; }
+    .digital-product-card .addon-choice:has(input:checked) { border-color: var(--green); color: var(--green-dark); background: #f0f6ee; }
+    .digital-product-card .addon-choice:focus-within { outline: 2px solid var(--green); outline-offset: 2px; }
+    .category-tabs { position: sticky; z-index: 2; top: 0; padding: 10px 0; overflow-x: auto; flex-wrap: nowrap; background: var(--canvas); }
+    .category-tabs .filter-btn { flex: 0 0 auto; padding: 10px 15px; font-size: 11px; }
+    .public-menu .category-tabs { top: 0; }
+    .digital-menu-list { display: grid; gap: 10px; }
+    .public-menu { background: #f7f7f4; }
+    .public-menu .sidebar, .public-menu .topbar, .public-menu .bottom-nav { display: none; }
+    .public-menu .app-shell { display: block; min-height: 100vh; padding: 0; }
+    .public-menu .content { width: min(820px,100%); padding-top: 24px; }
+    .public-menu .digital-hero { border-radius: 0 0 14px 14px; }
+    .public-menu .digital-hero .button { display: none; }
+    .public-menu .public-note { display: block; }
+    .public-note { display: none; }
+    .more-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+    .more-link { display: flex; align-items: center; gap: 12px; padding: 15px; border: 1px solid var(--line); border-radius: 11px; color: var(--ink); background: #fff; text-align: left; font-size: 12px; font-weight: 700; }
+    .more-link span { font-size: 18px; }
+    @media print {
+      .sidebar, .topbar, .bottom-nav, .page-heading .button, .report-filters, .toast { display: none !important; }
+      .app-shell, .main, .content { display: block; width: 100%; padding: 0; }
+      .panel, .stat-card { break-inside: avoid; box-shadow: none; }
+    }
+    .toast { position: fixed; z-index: 40; right: 22px; bottom: 22px; padding: 12px 16px; border-radius: 9px; color: #fff; background: var(--green-dark); box-shadow: var(--shadow); font-size: 12px; opacity: 0; transform: translateY(8px); pointer-events: none; transition: .2s; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    @media (max-width: 900px) {
+      .sidebar { width: 215px; flex-basis: 215px; }
+      .content { padding-right: 25px; padding-left: 25px; }
+      .topbar { padding: 0 25px; }
+      .stats { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .product-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    }
+    @media (max-width: 640px) {
+      .app-shell { display: block; padding-bottom: 66px; }
+      .sidebar { display: none; }
+      .topbar { height: 58px; padding: 0 17px; }
+      .user-chip > span:last-child { display: none; }
+      .content { padding: 23px 16px 30px; }
+      .page-heading { align-items: flex-start; margin-bottom: 19px; }
+      .page-heading .button { min-height: 36px; padding: 0 10px; font-size: 10px; }
+      .subtitle { max-width: 260px; font-size: 11px; line-height: 1.45; }
+      .stats { gap: 9px; margin-bottom: 13px; }
+      .stat-card { min-height: 104px; padding: 13px; }
+      .stat-value { font-size: 21px; }
+      .dashboard-grid { grid-template-columns: 1fr; gap: 11px; }
+      .panel { padding: 15px; }
+      .toolbar { align-items: stretch; flex-direction: column; }
+      .search { width: 100%; }
+      .product-grid { grid-template-columns: 1fr; gap: 9px; }
+      .ingredient-row { grid-template-columns: 1fr 72px 82px 63px; gap: 7px; padding-right: 0; padding-left: 0; font-size: 10px; }
+      .ingredient-row strong { font-size: 10px; }
+      .setting-item { padding: 13px; }
+      .sale-grid { grid-template-columns: 1fr; }
+      .sale-product-form { grid-template-columns: 1fr 1fr; }
+      .sale-product-form > .button { width: 100%; }
+      .customer-grid { grid-template-columns: 1fr; }
+      .cash-metrics { grid-template-columns: 1fr; gap: 8px; }
+      .report-filters { align-items: stretch; flex-direction: column; }
+      .report-filters .field { min-width: 0; }
+      .digital-hero { align-items: flex-start; flex-direction: column; padding: 19px; }
+      .digital-product-card { grid-template-columns: 1fr; }
+      .digital-product-card > .button { width: 100%; }
+      .more-grid { grid-template-columns: 1fr; }
+      .sale-cart-row { grid-template-columns: 1fr auto 28px; gap: 7px; }
+      .sale-cart-row > span:nth-child(3) { grid-column: 2; grid-row: 2; }
+      .sale-cart-row > button { grid-column: 3; grid-row: 1 / span 2; }
+      .bottom-nav { position: fixed; z-index: 10; right: 0; bottom: 0; left: 0; display: grid; grid-template-columns: repeat(6,1fr); padding: 7px 5px max(7px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: rgba(255,255,255,.97); }
+      .bottom-nav button { display: grid; justify-items: center; gap: 3px; border: 0; color: #838a81; background: transparent; font-size: 9px; }
+      .bottom-nav button.active { color: var(--green); font-weight: 750; }
+      .bottom-nav .nav-icon { font-size: 16px; }
+      .modal-backdrop { align-items: flex-end; padding: 0; }
+      .modal { width: 100%; max-height: 92vh; border-radius: 16px 16px 0 0; }
+      .modal-header { padding: 15px 17px; }
+      .modal-body { padding: 15px 16px 5px; }
+      .modal-footer { padding: 12px 16px max(12px, env(safe-area-inset-bottom)); }
+      .form-grid { gap: 10px; }
+      .size-row { grid-template-columns: 1fr 85px 76px 29px; gap: 5px; }
+      .addon-row { grid-template-columns: 1fr 71px 71px 29px; gap: 5px; }
+      .recipe-row { grid-template-columns: 1fr 83px 29px; gap: 5px; }
+      .size-row input, .addon-row input, .recipe-row input, .recipe-row select { padding: 0 6px; font-size: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <section class="auth-gate" id="authGate" hidden>
+    <div class="auth-card">
+      <div class="brand-mark" style="margin-bottom:18px">B!</div>
+      <h1 id="authTitle">Entre no Bora! Gestão</h1>
+      <p id="authDescription">Acesse sua conta para carregar e sincronizar os dados do seu negócio.</p>
+      <form id="authForm">
+        <div class="field"><label for="authEmail">E-mail</label><input id="authEmail" name="email" type="email" autocomplete="email" required maxlength="254"></div>
+        <div class="field"><label for="authPassword">Senha</label><input id="authPassword" name="password" type="password" autocomplete="current-password" required minlength="8" maxlength="128"></div>
+        <div class="auth-message" id="authMessage" role="status" aria-live="polite"></div>
+        <div class="auth-actions"><button class="button primary" id="authSubmit" type="submit">Entrar</button></div>
+      </form>
+      <button class="auth-switch" id="authSwitch" type="button">Ainda não tem conta? Criar conta</button>
+    </div>
+  </section>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">B!</div>
+        <div><div class="brand-name">bora! gestão</div><div class="brand-sub">seu delivery, no controle</div></div>
+      </div>
+      <div class="nav-label">Menu principal</div>
+      <nav class="nav" aria-label="Menu principal">
+        <button class="active" data-page="inicio"><span class="nav-icon">⌂</span>Visão geral</button>
+        <button data-page="vendas"><span class="nav-icon">＋</span>Vendas e pedidos</button>
+        <button data-page="cardapio"><span class="nav-icon">▤</span>Cardápio digital</button>
+        <button data-page="caixa"><span class="nav-icon">▣</span>Caixa</button>
+        <button data-page="relatorios"><span class="nav-icon">▥</span>Relatórios</button>
+        <button data-page="clientes"><span class="nav-icon">♙</span>Clientes</button>
+        <button data-page="produtos"><span class="nav-icon">▦</span>Produtos e cardápio</button>
+        <button data-page="insumos"><span class="nav-icon">◈</span>Insumos e custos</button>
+        <button data-page="configuracoes"><span class="nav-icon">⚙</span>Configurações</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="help-card"><strong>Uma dica pra começar</strong>Cadastre seus insumos com o custo por grama, ml ou unidade. A ficha técnica calcula o custo real de cada produto.</div>
+      </div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div class="crumb">Meu delivery <span> / </span> <strong id="crumbTitle">Visão geral</strong></div>
+        <div class="user-chip"><span class="sync-status" id="syncStatus"></span><span class="user-avatar" id="userAvatar">B</span><span id="userEmail">Meu negócio</span><button class="button small" id="signOutButton" type="button">Sair</button></div>
+      </header>
+      <div class="content" id="pageContent"></div>
+    </main>
+  </div>
+  <nav class="bottom-nav" aria-label="Navegação mobile">
+    <button class="active" data-page="inicio"><span class="nav-icon">⌂</span>Início</button>
+    <button data-page="vendas"><span class="nav-icon">＋</span>Vendas</button>
+    <button data-page="cardapio"><span class="nav-icon">▤</span>Cardápio</button>
+    <button data-page="caixa"><span class="nav-icon">▣</span>Caixa</button>
+    <button data-page="relatorios"><span class="nav-icon">▥</span>Relatórios</button>
+    <button data-page="mais"><span class="nav-icon">•••</span>Mais</button>
+  </nav>
+  <div class="modal-backdrop" id="modalBackdrop" role="presentation">
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modal-header"><h2 id="modalTitle"></h2><button class="close-button" id="closeModal" aria-label="Fechar">×</button></div>
+      <form id="modalForm">
+        <div class="modal-body" id="modalBody"></div>
+        <div class="modal-footer"><button type="button" class="button" id="cancelModal">Cancelar</button><button type="submit" class="button primary">Salvar</button></div>
+      </form>
+    </section>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    (() => {
+      const STORAGE_KEY = "bora-delivery-v1";
+      const SUPABASE_URL = "https://jnqwtqixklmuxaeppkry.supabase.co";
+      const SUPABASE_PUBLIC_KEY = "sb_publishable_aw3z7ZcPxJ4bhTWfQTWJuw_1GaWkb7J";
+      const supabaseClient = window.supabase?.createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY);
+      const LEGACY_IMPORT_KEY = "bora-delivery-legacy-imported";
+      let currentUser = null;
+      let syncQueue = Promise.resolve();
+      let authMode = "signin";
+      const seedData = {
+        pizzaEnabled: true,
+        customers: [],
+        sales: [],
+        cashSessions: [],
+        ingredients: [
+          { id: "ing-massa", name: "Massa de pizza", unit: "g", cost: 0.018 },
+          { id: "ing-mozzarella", name: "Muçarela", unit: "g", cost: 0.045 },
+          { id: "ing-tomato", name: "Molho de tomate", unit: "g", cost: 0.016 },
+          { id: "ing-pepperoni", name: "Calabresa", unit: "g", cost: 0.032 },
+          { id: "ing-bun", name: "Pão de hambúrguer", unit: "un", cost: 1.6 },
+          { id: "ing-beef", name: "Hambúrguer bovino", unit: "g", cost: 0.035 },
+          { id: "ing-lettuce", name: "Alface", unit: "g", cost: 0.012 },
+          { id: "ing-soda", name: "Refrigerante lata", unit: "un", cost: 4.2 }
+        ],
+        products: [
+          {
+            id: "prod-pizza", name: "Pizza Calabresa", category: "pizza", active: true,
+            recipe: [{ ingredientId: "ing-massa", quantity: 250 }, { ingredientId: "ing-mozzarella", quantity: 180 }, { ingredientId: "ing-tomato", quantity: 80 }, { ingredientId: "ing-pepperoni", quantity: 120 }],
+            sizes: [{ name: "Broto", price: 34.9, factor: 0.65 }, { name: "Média", price: 49.9, factor: 1 }, { name: "Grande", price: 64.9, factor: 1.35 }],
+            borderOptions: [{ name: "Borda recheada", price: 8, cost: 2.8 }],
+            addons: []
+          },
+          {
+            id: "prod-burger", name: "X-Burger da Casa", category: "lanche", active: true,
+            recipe: [{ ingredientId: "ing-bun", quantity: 1 }, { ingredientId: "ing-beef", quantity: 150 }, { ingredientId: "ing-lettuce", quantity: 15 }],
+            price: 27.9, addons: [{ name: "Queijo extra", price: 4, cost: 1.8 }, { name: "Bacon", price: 5, cost: 2.2 }]
+          },
+          {
+            id: "prod-drink", name: "Refrigerante lata", category: "bebida", active: true,
+            cost: 4.2, price: 7.5, addons: []
+          }
+        ]
+      };
+      let state = loadState();
+      let currentPage = "inicio";
+      let productFilter = "todos";
+      let editingId = null;
+      let editingType = null;
+
+      function loadState() {
+        try {
+          const saved = localStorage.getItem(STORAGE_KEY);
+          if (!saved) return JSON.parse(JSON.stringify(seedData));
+          const parsed = JSON.parse(saved);
+          if (!Array.isArray(parsed.products) || !Array.isArray(parsed.ingredients)) throw new Error("Dados salvos inválidos");
+          const products = parsed.products.map(product => {
+            if (product.category !== "pizza") return product;
+            const legacyAddons = Array.isArray(product.addons) ? product.addons : [];
+            const legacyBorders = legacyAddons.filter(addon => /borda/i.test(addon.name));
+            return {
+              ...product,
+              borderOptions: Array.isArray(product.borderOptions) ? product.borderOptions : legacyBorders,
+              addons: legacyAddons.filter(addon => !/borda/i.test(addon.name))
+            };
+          });
+          return {
+            ...JSON.parse(JSON.stringify(seedData)),
+            ...parsed,
+            products,
+            customers: Array.isArray(parsed.customers) ? parsed.customers : [],
+            sales: Array.isArray(parsed.sales) ? parsed.sales : [],
+            cashSessions: Array.isArray(parsed.cashSessions) ? parsed.cashSessions : []
+          };
+        } catch (error) {
+          console.error("Não foi possível carregar os dados salvos:", error);
+          return JSON.parse(JSON.stringify(seedData));
+        }
+      }
+
+      function saveState() {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        } catch (error) {
+          console.error("Não foi possível salvar os dados:", error);
+          showToast("Não foi possível salvar. Verifique o espaço do navegador.");
+          return false;
+        }
+        if (currentUser && supabaseClient) {
+          const snapshot = JSON.parse(JSON.stringify(state));
+          const userId = currentUser.id;
+          syncQueue = syncQueue.then(async () => {
+            setSyncStatus("Sincronizando…");
+            const { error } = await supabaseClient.from("business_data").upsert({
+              user_id: userId,
+              data: snapshot,
+              updated_at: new Date().toISOString()
+            }, { onConflict: "user_id" });
+            if (error) throw error;
+            setSyncStatus("Sincronizado");
+          }).catch(error => {
+            console.error("Não foi possível sincronizar os dados com o Supabase:", error);
+            setSyncStatus("Falha na sincronização");
+            showToast("Alteração salva neste navegador, mas não sincronizou. Verifique a conexão e o SQL do Supabase.");
+          });
+        }
+        return true;
+      }
+
+      function setSyncStatus(message) {
+        const status = document.getElementById("syncStatus");
+        if (status) status.textContent = message;
+      }
+
+      function showAuth(message = "") {
+        document.getElementById("authGate").hidden = false;
+        document.querySelector(".app-shell").hidden = true;
+        document.querySelector(".bottom-nav").hidden = true;
+        document.getElementById("authMessage").textContent = message;
+      }
+
+      function setAuthMode(mode) {
+        authMode = mode;
+        const signup = mode === "signup";
+        document.getElementById("authTitle").textContent = signup ? "Crie sua conta" : "Entre no Bora! Gestão";
+        document.getElementById("authDescription").textContent = signup
+          ? "Cadastre seu e-mail e uma senha com pelo menos 8 caracteres para começar."
+          : "Acesse sua conta para carregar e sincronizar os dados do seu negócio.";
+        document.getElementById("authSubmit").textContent = signup ? "Criar conta" : "Entrar";
+        document.getElementById("authSwitch").textContent = signup ? "Já tem conta? Entrar" : "Ainda não tem conta? Criar conta";
+        document.getElementById("authPassword").autocomplete = signup ? "new-password" : "current-password";
+        document.getElementById("authMessage").textContent = "";
+      }
+
+      async function openBusinessSession(user) {
+        currentUser = user;
+        setSyncStatus("Carregando…");
+        const { data: record, error } = await supabaseClient
+          .from("business_data")
+          .select("data")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (error) throw error;
+        if (record?.data) {
+          const parsed = record.data;
+          if (!Array.isArray(parsed.products) || !Array.isArray(parsed.ingredients)) {
+            throw new Error("Os dados da conta estão inválidos. Nenhuma alteração foi feita.");
+          }
+          state = {
+            ...JSON.parse(JSON.stringify(seedData)),
+            ...parsed,
+            customers: Array.isArray(parsed.customers) ? parsed.customers : [],
+            sales: Array.isArray(parsed.sales) ? parsed.sales : [],
+            cashSessions: Array.isArray(parsed.cashSessions) ? parsed.cashSessions : []
+          };
+          localStorage.setItem(LEGACY_IMPORT_KEY, "true");
+        } else {
+          const hasLegacyData = localStorage.getItem(STORAGE_KEY) !== null;
+          if (hasLegacyData && localStorage.getItem(LEGACY_IMPORT_KEY) !== "true") {
+            if (!confirm("Encontramos dados deste delivery salvos neste navegador. Deseja importá-los para esta conta do Supabase?")) {
+              state = JSON.parse(JSON.stringify(seedData));
+            }
+          } else {
+            state = JSON.parse(JSON.stringify(seedData));
+          }
+          const { error: insertError } = await supabaseClient.from("business_data").insert({
+            user_id: user.id,
+            data: state
+          });
+          if (insertError) throw insertError;
+          localStorage.setItem(LEGACY_IMPORT_KEY, "true");
+        }
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        document.getElementById("authGate").hidden = true;
+        document.querySelector(".app-shell").hidden = false;
+        document.querySelector(".bottom-nav").hidden = false;
+        document.getElementById("userEmail").textContent = user.email || "Meu negócio";
+        document.getElementById("userAvatar").textContent = (user.email || "B").charAt(0).toUpperCase();
+        setSyncStatus("Sincronizado");
+        render();
+      }
+
+      async function initializeAuth() {
+        if (new URLSearchParams(location.search).has("cardapio")) {
+          document.getElementById("authGate").hidden = true;
+          document.querySelector(".app-shell").hidden = false;
+          document.querySelector(".bottom-nav").hidden = true;
+          document.getElementById("signOutButton").hidden = true;
+          document.body.classList.add("public-menu");
+          renderPublicMenu();
+          return;
+        }
+        if (!supabaseClient) {
+          showAuth("Não foi possível carregar o SDK do Supabase. Confira sua conexão e recarregue a página.");
+          document.getElementById("authSubmit").disabled = true;
+          return;
+        }
+        supabaseClient.auth.onAuthStateChange(event => {
+          if (event === "SIGNED_OUT") {
+            currentUser = null;
+            showAuth();
+          }
+        });
+        const { data, error } = await supabaseClient.auth.getSession();
+        if (error) {
+          showAuth(`Erro ao verificar a sessão: ${error.message}`);
+          return;
+        }
+        if (!data.session) {
+          showAuth();
+          return;
+        }
+        try {
+          await openBusinessSession(data.session.user);
+        } catch (error) {
+          console.error("Não foi possível carregar os dados da conta:", error);
+          showAuth(`Não foi possível carregar os dados. Confirme se executou supabase-schema.sql no SQL Editor. Detalhe: ${error.message}`);
+        }
+      }
+
+      const money = value => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value) || 0);
+      const number = value => Number(value) || 0;
+      const roundMoney = value => Math.round((number(value) + Number.EPSILON) * 100) / 100;
+      const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+      const categoryName = category => ({ pizza: "Pizza", lanche: "Lanche", bebida: "Bebida" }[category] || category);
+      const categoryIcon = category => ({ pizza: "🍕", lanche: "🍔", bebida: "🥤" }[category] || "🍽️");
+
+      function ingredientCost(ingredientId) {
+        const ingredient = state.ingredients.find(item => item.id === ingredientId);
+        return ingredient ? number(ingredient.cost) : 0;
+      }
+
+      function recipeCost(product, factor = 1) {
+        return (product.recipe || []).reduce((total, item) => total + number(item.quantity) * ingredientCost(item.ingredientId) * factor, 0);
+      }
+
+      function productOptions(product) {
+        if (product.category === "pizza") return product.sizes || [];
+        return [{ name: "Padrão", price: product.price, factor: 1 }];
+      }
+
+      function productCost(product, option) {
+        return product.category === "bebida" ? number(product.cost) : recipeCost(product, number(option?.factor) || 1);
+      }
+
+      function currentCashSession() {
+        return state.cashSessions.find(session => !session.closedAt) || null;
+      }
+
+      function paidSales(sessionId = null) {
+        return state.sales.filter(sale => sale.paid && sale.status !== "Cancelado" && (!sessionId || sale.cashSessionId === sessionId));
+      }
+
+      function overallStats() {
+        const products = state.products.filter(item => item.active && (item.category !== "pizza" || state.pizzaEnabled));
+        const entries = products.flatMap(product => productOptions(product).map(option => ({
+          product, option, cost: productCost(product, option), price: number(option.price)
+        })));
+        const averageMargin = entries.length ? entries.reduce((sum, item) => sum + (item.price ? ((item.price - item.cost) / item.price) * 100 : 0), 0) / entries.length : 0;
+        const averageCost = entries.length ? entries.reduce((sum, item) => sum + item.cost, 0) / entries.length : 0;
+        return { products: products.length, entries, averageMargin, averageCost };
+      }
+
+      function render() {
+        const labels = { inicio: "Visão geral", vendas: "Vendas e pedidos", cardapio: "Cardápio digital", caixa: "Caixa", relatorios: "Relatórios", clientes: "Clientes", produtos: "Produtos e cardápio", insumos: "Insumos e custos", configuracoes: "Configurações", mais: "Mais opções" };
+        if (new URLSearchParams(location.search).has("cardapio")) {
+          document.body.classList.add("public-menu");
+          renderPublicMenu();
+          return;
+        }
+        document.getElementById("crumbTitle").textContent = labels[currentPage];
+        document.querySelectorAll("[data-page]").forEach(button => button.classList.toggle("active", button.dataset.page === currentPage));
+        if (currentPage === "inicio") renderDashboard();
+        if (currentPage === "vendas") renderSales();
+        if (currentPage === "cardapio") renderDigitalMenu();
+        if (currentPage === "caixa") renderCash();
+        if (currentPage === "relatorios") renderReports();
+        if (currentPage === "mais") renderMore();
+        if (currentPage === "clientes") renderCustomers();
+        if (currentPage === "produtos") renderProducts();
+        if (currentPage === "insumos") renderIngredients();
+        if (currentPage === "configuracoes") renderSettings();
+      }
+
+      function renderDashboard() {
+        const summary = overallStats();
+        const todayKey = new Date().toLocaleDateString("pt-BR");
+        const todaysSales = paidSales().filter(sale => new Date(sale.createdAt).toLocaleDateString("pt-BR") === todayKey);
+        const todayRevenue = todaysSales.reduce((sum, sale) => sum + number(sale.total), 0);
+        const mostExpensive = [...summary.entries].sort((a, b) => b.cost - a.cost).slice(0, 4);
+        const marginText = summary.averageMargin.toFixed(1).replace(".", ",") + "%";
+        const costRatio = summary.entries.length ? Math.min(100, (summary.averageCost / (summary.entries.reduce((sum, item) => sum + item.price, 0) / summary.entries.length)) * 100) : 0;
+        const today = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "numeric", month: "long" }).format(new Date());
+        document.getElementById("pageContent").innerHTML = `
+          <div class="page-heading"><div><div class="eyebrow">${escapeHtml(today)}, seu negócio em dia</div><h1>Visão geral</h1><p class="subtitle">Acompanhe seus produtos e saiba quanto custa cada pedido.</p></div><button class="button primary" data-action="new-product">＋ Novo produto</button></div>
+          <section class="stats">
+            <article class="stat-card"><div class="stat-top"><span>Produtos ativos</span><span class="stat-icon">▦</span></div><div class="stat-value">${summary.products}</div><div class="stat-note">no seu cardápio</div></article>
+            <article class="stat-card"><div class="stat-top"><span>Margem média</span><span class="stat-icon">↗</span></div><div class="stat-value">${marginText}</div><div class="stat-note">preço menos custo de produção</div></article>
+            <article class="stat-card"><div class="stat-top"><span>Custo médio</span><span class="stat-icon">◈</span></div><div class="stat-value">${money(summary.averageCost)}</div><div class="stat-note">por produto / tamanho</div></article>
+            <article class="stat-card"><div class="stat-top"><span>Vendas hoje</span><span class="stat-icon">＋</span></div><div class="stat-value">${money(todayRevenue)}</div><div class="stat-note">${todaysSales.length} pedido${todaysSales.length === 1 ? "" : "s"} registrado${todaysSales.length === 1 ? "" : "s"}</div></article>
+          </section>
+          <section class="dashboard-grid">
+            <article class="panel"><div class="panel-heading"><h2>Seus produtos</h2><button class="button small" data-page="produtos">Ver cardápio →</button></div>
+              <div class="table-wrap"><table><thead><tr><th>Produto</th><th>Categoria</th><th>Custo</th><th>Preço</th><th>Margem</th></tr></thead><tbody>
+              ${mostExpensive.length ? mostExpensive.map(item => {
+                const margin = item.price ? (item.price - item.cost) / item.price * 100 : 0;
+                return `<tr><td><div class="product-name-cell"><span class="food-thumb">${categoryIcon(item.product.category)}</span>${escapeHtml(item.product.name)}${item.product.category === "pizza" ? ` · ${escapeHtml(item.option.name)}` : ""}</div></td><td><span class="pill">${categoryName(item.product.category)}</span></td><td>${money(item.cost)}</td><td>${money(item.price)}</td><td class="margin-cell ${margin < 30 ? "low" : ""}">${margin.toFixed(0)}%</td></tr>`;
+              }).join("") : `<tr><td colspan="5">Cadastre seu primeiro produto para acompanhar os custos.</td></tr>`}
+              </tbody></table></div>
+            </article>
+            <article class="panel"><div class="panel-heading"><h2>Resumo de custos</h2><span>do cardápio ativo</span></div>
+              <div class="cost-summary">
+                <div class="cost-row"><span>Custo médio por item</span><strong>${money(summary.averageCost)}</strong></div>
+                <div class="cost-progress"><span style="width:${costRatio.toFixed(0)}%"></span></div>
+                <div class="cost-row"><span>Margem bruta média estimada</span><strong>${marginText}</strong></div>
+                <div class="cost-row"><span>Insumos cadastrados</span><strong>${state.ingredients.length} itens</strong></div>
+              </div>
+              <div class="callout"><span>✦</span><div><b>Seu custo começa na ficha técnica</b>Atualize os preços dos ingredientes para manter os cálculos sempre em dia.</div></div>
+            </article>
+          </section>`;
+      }
+
+      let saleCart = [];
+
+      function activeSaleProducts() {
+        return state.products.filter(product => product.active && (product.category !== "pizza" || state.pizzaEnabled));
+      }
+
+      function saleLineTotal(item) {
+        return (number(item.price) + number(item.border?.price) + (item.addons || []).reduce((sum, addon) => sum + number(addon.price), 0)) * number(item.quantity);
+      }
+
+      function saleLineCost(item) {
+        return roundMoney((number(item.cost) + number(item.border?.cost) + (item.addons || []).reduce((sum, addon) => sum + number(addon.cost), 0)) * number(item.quantity));
+      }
+
+      function productBorderOptions(product) {
+        return [{ name: "Sem borda", price: 0, cost: 0 }, ...(product.borderOptions || [])];
+      }
+
+      function renderSales() {
+        const products = activeSaleProducts();
+        const customerOptions = state.customers.map(customer => `<option value="${customer.id}">${escapeHtml(customer.name)}${customer.phone ? ` · ${escapeHtml(customer.phone)}` : ""}</option>`).join("");
+        const history = [...state.sales].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        const cartHtml = saleCart.length ? saleCart.map((item, index) => `
+          <div class="sale-cart-row">
+            <div><strong>${escapeHtml(item.name)}${item.optionName && item.optionName !== "Padrão" ? ` · ${escapeHtml(item.optionName)}` : ""} × ${item.quantity}</strong><small>${[item.border?.name, ...item.addons.map(addon => addon.name), item.category !== "bebida" ? categoryName(item.category) : "Bebida"].filter(Boolean).join(" · ")}</small></div>
+            <span>${money(saleLineTotal(item))}</span><span>${money(item.price)} / un.</span>
+            <button type="button" class="icon-button" data-action="remove-sale-item" data-index="${index}" aria-label="Remover item">×</button>
+          </div>`).join("") : `<div class="empty-state">Adicione produtos para começar a venda.</div>`;
+        const total = saleCart.reduce((sum, item) => sum + saleLineTotal(item), 0);
+        document.getElementById("pageContent").innerHTML = `
+          <div class="page-heading"><div><div class="eyebrow">Caixa do delivery</div><h1>Vendas e pedidos</h1><p class="subtitle">Monte um pedido, escolha o cliente e registre a venda.</p></div><button class="button" data-page="clientes">♙ Cadastrar cliente</button></div>
+          <section class="sale-grid">
+            <div class="sale-builder">
+              <article class="panel"><div class="panel-heading"><h2>Adicionar produtos</h2><span>${products.length} produto${products.length === 1 ? " disponível" : "s disponíveis"}</span></div>
+                ${products.length ? `<form class="sale-product-form" id="addSaleItemForm">
+                  <div class="field"><label for="saleProduct">Produto</label><select id="saleProduct" name="productId" required><option value="">Escolha um produto</option>${products.map(product => `<option value="${product.id}">${categoryIcon(product.category)} ${escapeHtml(product.name)}</option>`).join("")}</select></div>
+                  <div class="field" id="saleOptionField"><label for="saleOption">Tamanho / opção</label><select id="saleOption" name="optionIndex" required disabled><option value="">Escolha primeiro o produto</option></select></div>
+                  <div class="field"><label for="saleQuantity">Qtd.</label><input id="saleQuantity" name="quantity" type="number" min="1" step="1" value="1" required></div>
+                  <button type="submit" class="button primary">＋ Adicionar</button>
+                  <div id="saleBorderChoices" class="sale-addons"></div>
+                  <div id="saleAddonChoices" class="sale-addons"></div>
+                </form>` : `<div class="empty-state">Não há produtos ativos no cardápio. Cadastre ou ative produtos antes de vender.</div>`}
+              </article>
+              <article class="panel"><div class="panel-heading"><h2>Pedidos registrados</h2><span>${history.length} pedido${history.length === 1 ? "" : "s"}</span></div>
+                ${!currentCashSession() ? `<div class="callout" style="margin:0 0 12px"><span>ⓘ</span><div><b>Caixa fechado</b>Abra o caixa para registrar vendas e receber pedidos. <button class="button small" data-page="caixa">Abrir caixa</button></div></div>` : ""}
+                ${history.length ? `<div class="table-wrap"><table><thead><tr><th>Pedido</th><th>Cliente</th><th>Itens</th><th>Total</th><th>Pagamento</th><th>Recebimento</th><th>Status</th></tr></thead><tbody>${history.map(sale => `<tr><td>#${escapeHtml(sale.id.slice(-5))}<br><span class="helper">${new Date(sale.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span></td><td>${escapeHtml(sale.customerName || "Balcão")}</td><td>${sale.items.reduce((sum, item) => sum + number(item.quantity), 0)}</td><td>${money(sale.total)}</td><td>${escapeHtml(sale.payment)}</td><td>${sale.paid ? `<span class="pill">Pago</span>` : `<button class="button small" data-action="receive-sale" data-id="${sale.id}" ${currentCashSession() ? "" : "disabled"}>Receber</button>`}</td><td><select class="order-status-select" data-sale-status="${sale.id}" aria-label="Status do pedido">${["Recebido", "Em preparo", "Saiu para entrega", "Concluído", "Cancelado"].map(status => `<option ${sale.status === status ? "selected" : ""}>${status}</option>`).join("")}</select></td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">Suas vendas aparecerão aqui depois que você registrar o primeiro pedido.</div>`}
+              </article>
+            </div>
+            <article class="panel"><div class="panel-heading"><h2>Resumo do pedido</h2><span>${saleCart.reduce((sum, item) => sum + number(item.quantity), 0)} item(ns)</span></div>
+              ${cartHtml}
+              <div class="sale-total"><span>Total da venda</span><strong>${money(total)}</strong></div>
+              <form class="sale-checkout" id="checkoutForm">
+                <div class="field"><label for="saleCustomer">Cliente</label><select id="saleCustomer" name="customerId"><option value="">Venda de balcão / sem cadastro</option>${customerOptions}</select></div>
+                <div class="field"><label for="salePayment">Forma de pagamento</label><select id="salePayment" name="payment" required><option>Pix</option><option>Dinheiro</option><option>Cartão de crédito</option><option>Cartão de débito</option></select></div>
+                <button type="submit" class="button primary" ${saleCart.length && currentCashSession() ? "" : "disabled"}>Registrar venda · ${money(total)}</button>
+                ${!currentCashSession() ? `<p class="helper">Abra o caixa para registrar uma venda paga. <button type="button" class="button small" data-page="caixa">Abrir caixa</button></p>` : ""}
+              </form>
+            </article>
+          </section>`;
+        const productSelect = document.getElementById("saleProduct");
+        if (productSelect) productSelect.addEventListener("change", updateSaleProductOptions);
+        const addForm = document.getElementById("addSaleItemForm");
+        if (addForm) addForm.addEventListener("submit", addSaleItem);
+        document.getElementById("checkoutForm").addEventListener("submit", finishSale);
+        document.querySelectorAll("[data-sale-status]").forEach(select => select.addEventListener("change", updateSaleStatus));
+      }
+
+      function updateSaleProductOptions() {
+        const product = state.products.find(item => item.id === document.getElementById("saleProduct").value);
+        const optionSelect = document.getElementById("saleOption");
+        const borderContainer = document.getElementById("saleBorderChoices");
+        const addonContainer = document.getElementById("saleAddonChoices");
+        if (!product) {
+          optionSelect.innerHTML = `<option value="">Escolha primeiro o produto</option>`;
+          optionSelect.disabled = true;
+          borderContainer.innerHTML = "";
+          addonContainer.innerHTML = "";
+          return;
+        }
+        const options = productOptions(product);
+        optionSelect.innerHTML = options.map((option, index) => `<option value="${index}">${escapeHtml(option.name)} · ${money(option.price)}</option>`).join("");
+        optionSelect.disabled = options.length <= 1;
+        optionSelect.required = product.category === "pizza";
+        borderContainer.innerHTML = product.category === "pizza"
+          ? `<span class="section-label">Escolha a borda</span>${productBorderOptions(product).map((border, index) => `<label class="addon-choice"><input type="radio" name="saleBorder" value="${index}" ${index === 0 ? "checked" : ""}>${escapeHtml(border.name)}${border.price ? ` + ${money(border.price)}` : ""}</label>`).join("")}`
+          : "";
+        addonContainer.innerHTML = (product.addons || []).map((addon, index) => `<label class="addon-choice"><input type="checkbox" name="saleAddon" value="${index}">${escapeHtml(addon.name)} + ${money(addon.price)}</label>`).join("");
+      }
+
+      function addSaleItem(event) {
+        event.preventDefault();
+        const form = event.currentTarget;
+        if (!form.reportValidity()) return;
+        const data = new FormData(form);
+        const product = state.products.find(item => item.id === data.get("productId"));
+        if (!product || !product.active) {
+          showToast("Esse produto não está disponível para venda.");
+          return;
+        }
+        const options = productOptions(product);
+        const option = options[Number(data.get("optionIndex"))] || options[0];
+        if (!option) {
+          showToast("Escolha um tamanho ou opção para o produto.");
+          return;
+        }
+        const addons = [...form.querySelectorAll("input[name='saleAddon']:checked")].map(input => {
+          const addon = product.addons[Number(input.value)];
+          return { name: addon.name, price: number(addon.price), cost: number(addon.cost) };
+        });
+        const borderIndex = Number(form.querySelector("input[name='saleBorder']:checked")?.value || 0);
+        const border = product.category === "pizza" ? productBorderOptions(product)[borderIndex] : null;
+        saleCart.push({
+          productId: product.id,
+          name: product.name,
+          category: product.category,
+          optionName: option.name,
+          price: number(option.price),
+          cost: productCost(product, option),
+          quantity: Math.max(1, Math.floor(number(data.get("quantity")))),
+          border: border ? { ...border } : null,
+          addons
+        });
+        renderSales();
+        showToast("Produto adicionado ao pedido.");
+      }
+
+      function finishSale(event) {
+        event.preventDefault();
+        if (!saleCart.length) {
+          showToast("Adicione pelo menos um produto antes de registrar a venda.");
+          return;
+        }
+        const form = event.currentTarget;
+        const data = new FormData(form);
+        const customer = state.customers.find(item => item.id === data.get("customerId"));
+        const session = currentCashSession();
+        if (!session) {
+          showToast("Abra o caixa antes de registrar uma venda paga.");
+          return;
+        }
+        const sale = {
+          id: `sale-${Date.now()}`,
+          createdAt: new Date().toISOString(),
+          customerId: customer?.id || null,
+          customerName: customer?.name || "Balcão",
+          customerPhone: customer?.phone || "",
+          payment: data.get("payment"),
+          paid: true,
+          cashSessionId: session.id,
+          status: "Recebido",
+          items: saleCart.map(item => ({ ...item, addons: item.addons.map(addon => ({ ...addon })) })),
+          total: saleCart.reduce((sum, item) => sum + saleLineTotal(item), 0)
+        };
+        state.sales.push(sale);
+        if (!saveState()) {
+          state.sales.pop();
+          return;
+        }
+        saleCart = [];
+        renderSales();
+        showToast("Venda registrada com sucesso.");
+      }
+
+      function updateSaleStatus(event) {
+        const sale = state.sales.find(item => item.id === event.currentTarget.dataset.saleStatus);
+        if (!sale) return;
+        const previousStatus = sale.status;
+        sale.status = event.currentTarget.value;
+        if (!saveState()) {
+          sale.status = previousStatus;
+          renderSales();
+          return;
+        }
+        renderSales();
+        showToast("Status do pedido atualizado.");
+      }
+
+      function receiveSale(sale) {
+        if (!currentCashSession()) {
+          showToast("Abra o caixa antes de receber o pagamento.");
+          return;
+        }
+        const body = `<div class="field"><label for="receivePayment">Forma de pagamento</label><select id="receivePayment" name="payment" required><option>Pix</option><option>Dinheiro</option><option>Cartão de crédito</option><option>Cartão de débito</option></select></div><p class="helper">Pedido de ${escapeHtml(sale.customerName || "Balcão")} · Total ${money(sale.total)}.</p>`;
+        openModal("Receber pagamento", body, "receivePayment", sale.id);
+      }
+
+      function saveReceivedPayment(form) {
+        const sale = state.sales.find(item => item.id === editingId);
+        const session = currentCashSession();
+        if (!sale || sale.paid || !session) {
+          showToast("Não foi possível receber esse pagamento. Confira o pedido e o caixa.");
+          return;
+        }
+        const previous = { paid: sale.paid, payment: sale.payment, cashSessionId: sale.cashSessionId };
+        sale.payment = new FormData(form).get("payment");
+        sale.paid = true;
+        sale.cashSessionId = session.id;
+        if (!saveState()) {
+          Object.assign(sale, previous);
+          return;
+        }
+        closeModal();
+        renderSales();
+        showToast("Pagamento registrado no caixa.");
+      }
+
+      function renderCustomers() {
+        const customers = [...state.customers].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+        const cards = customers.map(customer => {
+          const orders = state.sales.filter(sale => sale.customerId === customer.id && sale.status !== "Cancelado");
+          const total = paidSales().filter(sale => sale.customerId === customer.id).reduce((sum, sale) => sum + number(sale.total), 0);
+          const address = [customer.address, customer.neighborhood].filter(Boolean).join(" · ");
+          return `<article class="customer-item"><div class="customer-item-top"><div class="customer-info"><span class="customer-avatar">${escapeHtml(customer.name.trim().charAt(0).toUpperCase())}</span><div><strong>${escapeHtml(customer.name)}</strong><span>${escapeHtml(customer.phone || "Sem telefone")} · ${orders.length} pedido${orders.length === 1 ? "" : "s"}</span></div></div><button class="icon-button" data-action="edit-customer" data-id="${customer.id}" aria-label="Editar ${escapeHtml(customer.name)}">✎</button></div><div class="customer-address">${escapeHtml(address || "Endereço não informado")}<br>Total recebido: <strong>${money(total)}</strong>${customer.notes ? `<br>${escapeHtml(customer.notes)}` : ""}</div></article>`;
+        }).join("");
+        document.getElementById("pageContent").innerHTML = `
+          <div class="page-heading"><div><div class="eyebrow">Sua base de clientes</div><h1>Clientes</h1><p class="subtitle">Salve contatos e endereços para agilizar os próximos pedidos.</p></div><button class="button primary" data-action="new-customer">＋ Novo cliente</button></div>
+          <div class="toolbar"><div class="panel-heading" style="margin:0"><h2>${customers.length} cliente${customers.length === 1 ? "" : "s"} cadastrado${customers.length === 1 ? "" : "s"}</h2></div><input class="search" id="customerSearch" type="search" placeholder="⌕  Buscar cliente..."></div>
+          <div class="customer-grid" id="customerGrid">${cards || `<div class="empty-state">Ainda não há clientes cadastrados. Adicione um cliente ou registre uma venda de balcão.</div>`}</div>`;
+        document.getElementById("customerSearch").addEventListener("input", event => {
+          const term = event.target.value.trim().toLocaleLowerCase("pt-BR");
+          document.querySelectorAll(".customer-item").forEach(card => { card.hidden = !card.innerText.toLocaleLowerCase("pt-BR").includes(term); });
+        });
+      }
+
+      function customerForm(customer = null) {
+        const body = `<div class="form-grid">
+          <div class="field full"><label for="customerName">Nome do cliente</label><input id="customerName" name="name" required maxlength="70" value="${escapeHtml(customer?.name || "")}" placeholder="Ex.: Ana Souza"></div>
+          <div class="field"><label for="customerPhone">Telefone / WhatsApp</label><input id="customerPhone" name="phone" type="tel" maxlength="25" value="${escapeHtml(customer?.phone || "")}" placeholder="(11) 99999-9999"></div>
+          <div class="field"><label for="customerNeighborhood">Bairro</label><input id="customerNeighborhood" name="neighborhood" maxlength="60" value="${escapeHtml(customer?.neighborhood || "")}" placeholder="Ex.: Centro"></div>
+          <div class="field full"><label for="customerAddress">Endereço de entrega</label><input id="customerAddress" name="address" maxlength="120" value="${escapeHtml(customer?.address || "")}" placeholder="Rua, número e complemento"></div>
+          <div class="field full"><label for="customerNotes">Observações</label><input id="customerNotes" name="notes" maxlength="160" value="${escapeHtml(customer?.notes || "")}" placeholder="Referência, preferência ou instruções"></div>
+        </div>`;
+        openModal(customer ? "Editar cliente" : "Novo cliente", body, "customer", customer?.id || null);
+      }
+
+      function saveCustomer(form) {
+        const data = new FormData(form);
+        const customer = {
+          id: editingId || `customer-${Date.now()}`,
+          name: String(data.get("name")).trim(),
+          phone: String(data.get("phone") || "").trim(),
+          neighborhood: String(data.get("neighborhood") || "").trim(),
+          address: String(data.get("address") || "").trim(),
+          notes: String(data.get("notes") || "").trim()
+        };
+        const previousState = JSON.stringify(state);
+        const index = state.customers.findIndex(item => item.id === customer.id);
+        if (index >= 0) state.customers[index] = customer;
+        else state.customers.push(customer);
+        if (!saveState()) {
+          state = JSON.parse(previousState);
+          return;
+        }
+        closeModal();
+        render();
+        showToast(editingId ? "Cliente atualizado." : "Cliente cadastrado.");
+      }
+
+      let digitalCart = [];
+      let digitalCategory = null;
+
+      function renderDigitalMenu() {
+        const products = activeSaleProducts();
+        const groups = ["pizza", "lanche", "bebida"].filter(category => products.some(product => product.category === category));
+        if (!groups.includes(digitalCategory)) digitalCategory = groups[0] || null;
+        const shownProducts = products.filter(product => product.category === digitalCategory);
+        const shareUrl = `${location.href.split("?")[0]}?cardapio=1`;
+        document.getElementById("pageContent").innerHTML = `
+          <div class="page-heading"><div><div class="eyebrow">Vendas online</div><h1>Cardápio digital</h1><p class="subtitle">Configure produtos e preços para seu cardápio.</p></div><button class="button primary" disabled>Cardápio público em configuração</button></div>
+          <div class="toolbar"><div class="field" style="flex:1"><label for="menuShareUrl">Link de prévia (não compartilhar ainda)</label><input class="search" id="menuShareUrl" style="width:100%" readonly value="${escapeHtml(shareUrl)}"></div><button class="button" disabled>Indisponível</button></div>
+          <div class="callout" style="margin:0 0 15px"><span>ⓘ</span><div><b>Pedidos online ainda não estão conectados</b>Esta tela é apenas uma prévia local. Os pedidos de outros celulares ainda não chegam ao seu painel.</div></div>
+          ${groups.length ? `<div class="filters" style="margin-bottom:13px">${groups.map(category => `<button class="filter-btn ${digitalCategory === category ? "active" : ""}" data-digital-category="${category}">${categoryIcon(category)} ${categoryName(category)}s</button>`).join("")}</div><article class="panel" style="margin-bottom:13px"><div class="panel-heading"><h2>${categoryIcon(digitalCategory)} ${categoryName(digitalCategory)}s</h2><span>${shownProducts.length} produto(s)</span></div><div class="digital-menu-list">${shownProducts.map(product => {
+            const prices = productOptions(product).map(option => number(option.price));
+            const priceLabel = prices.length > 1 ? `A partir de ${money(Math.min(...prices))}` : money(prices[0]);
+            const borderCount = product.category === "pizza" ? productBorderOptions(product).length : 0;
+            return `<div class="product-card-title"><span class="food-thumb">${categoryIcon(product.category)}</span><div><strong style="font-size:12px">${escapeHtml(product.name)}</strong><div class="category-label">${priceLabel} · ${borderCount ? `${borderCount} opções de borda · ` : ""}${product.addons?.length || 0} adicional(is) disponível(is)</div></div></div>`;
+          }).join("")}</div></article>` : `<div class="empty-state">Ative ou cadastre produtos para montar seu cardápio digital.</div>`}
+          <p class="helper public-note">Prévia local: pedidos online ainda não estão conectados.</p>`;
+      }
+
+      function renderPublicMenu() {
+        const products = activeSaleProducts();
+        const groups = ["pizza", "lanche", "bebida"].filter(category => products.some(product => product.category === category));
+        if (!groups.includes(digitalCategory)) digitalCategory = groups[0] || null;
+        const shownProducts = products.filter(product => product.category === digitalCategory);
+        const items = shownProducts.map(product => `<article class="digital-product-card" data-public-product="${product.id}">
+            <div><h3>${categoryIcon(product.category)} ${escapeHtml(product.name)}</h3><p>${product.category === "pizza" ? `${productOptions(product).length} tamanho(s) disponível(is)` : product.category === "bebida" ? "Bebida gelada" : "Feito na hora"}</p>
+              <div class="field"><label>Opção / tamanho</label><select data-public-option>${productOptions(product).map((option, index) => `<option value="${index}">${escapeHtml(option.name)} · ${money(option.price)}</option>`).join("")}</select></div>
+              ${product.category === "pizza" ? `<details class="border-picker"><summary data-border-summary>Borda: Sem borda · toque para escolher</summary><div class="sale-addons" role="radiogroup" aria-label="Escolha uma borda">${productBorderOptions(product).map((border, index) => `<label class="addon-choice"><input type="radio" name="publicBorder-${product.id}" data-public-border="${index}" aria-label="${escapeHtml(border.name)}" ${index === 0 ? "checked" : ""}>${escapeHtml(border.name)}${border.price ? ` + ${money(border.price)}` : ""}</label>`).join("")}</div></details>` : ""}
+              ${(product.addons || []).length ? `<div class="option-group"><span class="section-label">Adicionais deste produto (opcional)</span><div class="sale-addons">${product.addons.map((addon, index) => `<label class="addon-choice"><input type="checkbox" data-public-addon="${index}">${escapeHtml(addon.name)} + ${money(addon.price)}</label>`).join("")}</div></div>` : ""}
+            </div><button type="button" class="button primary" data-action="public-add" data-id="${product.id}">Adicionar</button>
+          </article>`).join("");
+        const categoryButtons = groups.map(category => `<button class="filter-btn ${digitalCategory === category ? "active" : ""}" data-public-category="${category}">${categoryIcon(category)} ${categoryName(category)}s</button>`).join("");
+        document.getElementById("pageContent").innerHTML = `
+          <header class="digital-hero"><div><div class="eyebrow" style="color:var(--lime)">BORA! DELIVERY</div><h1>Peça algo gostoso.</h1><p>Escolha seus favoritos e receba em casa.</p></div><button class="button" data-action="return-to-system">Voltar ao sistema</button></header>
+          <p class="callout public-note"><span>ⓘ</span><span>Este é apenas um cardápio de demonstração. Não é possível enviar pedidos ainda.</span></p>
+          ${groups.length ? `<nav class="filters category-tabs" aria-label="Categorias do cardápio">${categoryButtons}</nav><section><div class="panel-heading" style="margin:16px 0 10px"><h2>${categoryIcon(digitalCategory)} ${categoryName(digitalCategory)}s</h2><span>${shownProducts.length} produto(s)</span></div><div class="digital-menu-list">${items}</div></section>` : `<div class="empty-state" style="margin-top:13px">O cardápio está temporariamente sem produtos disponíveis.</div>`}
+          <section class="panel" style="margin-top:18px"><div class="panel-heading"><h2>Seu pedido</h2><span id="digitalCartCount">${digitalCart.length} item(ns)</span></div><div id="digitalCartSummary">${digitalCart.length ? digitalCart.map((item, index) => `<div class="sale-cart-row"><div><strong>${escapeHtml(item.name)}${item.optionName !== "Padrão" ? ` · ${escapeHtml(item.optionName)}` : ""} × ${item.quantity}</strong><small>${[item.border?.name, ...item.addons.map(addon => addon.name)].filter(Boolean).join(" · ") || "Sem adicionais"}</small></div><span>${money(saleLineTotal(item))}</span><span></span><button type="button" class="icon-button" data-action="remove-digital-item" data-index="${index}">×</button></div>`).join("") : `<div class="empty-state">Adicione um produto ao pedido.</div>`}</div>
+            <div class="sale-total"><span>Total</span><strong>${money(digitalCart.reduce((sum, item) => sum + saleLineTotal(item), 0))}</strong></div>
+            <form class="sale-checkout" id="digitalCheckout"><div class="form-grid">
+              <div class="field"><label for="digitalName">Seu nome</label><input id="digitalName" name="name" required maxlength="70"></div>
+              <div class="field"><label for="digitalPhone">WhatsApp / telefone</label><input id="digitalPhone" name="phone" type="tel" required maxlength="25"></div>
+              <div class="field full"><label for="digitalAddress">Endereço de entrega</label><input id="digitalAddress" name="address" required maxlength="140" placeholder="Rua, número, bairro e complemento"></div>
+              <div class="field full"><label for="digitalNotes">Observações do pedido</label><input id="digitalNotes" name="notes" maxlength="160" placeholder="Ponto de referência, sem cebola..."></div>
+            </div>
+            <button type="submit" class="button primary" ${digitalCart.length ? "" : "disabled"}>Enviar pedido · ${money(digitalCart.reduce((sum, item) => sum + saleLineTotal(item), 0))}</button></form>
+          </section>`;
+        document.querySelectorAll("[data-public-product]").forEach(card => {
+          card.querySelectorAll("[data-public-border]").forEach(input => input.addEventListener("change", () => {
+            const border = productBorderOptions(state.products.find(product => product.id === card.dataset.publicProduct))[Number(input.dataset.publicBorder)];
+            card.querySelector("[data-border-summary]").textContent = `Borda: ${border.name}${border.price ? ` · + ${money(border.price)}` : ""} · toque para alterar`;
+          }));
+        });
+        document.getElementById("digitalCheckout").addEventListener("submit", submitDigitalOrder);
+      }
+
+      function addDigitalItem(productId) {
+        const product = state.products.find(item => item.id === productId);
+        if (!product || !product.active || (product.category === "pizza" && !state.pizzaEnabled)) {
+          showToast("Esse produto não está mais disponível.");
+          return;
+        }
+        const card = document.querySelector(`[data-public-product="${productId}"]`);
+        const options = productOptions(product);
+        const option = options[Number(card.querySelector("[data-public-option]").value)] || options[0];
+        const addons = [...card.querySelectorAll("[data-public-addon]:checked")].map(input => {
+          const addon = product.addons[Number(input.dataset.publicAddon)];
+          return { name: addon.name, price: number(addon.price), cost: number(addon.cost) };
+        });
+        const borderIndex = Number(card.querySelector("[data-public-border]:checked")?.dataset.publicBorder || 0);
+        const border = product.category === "pizza" ? productBorderOptions(product)[borderIndex] : null;
+        digitalCart.push({
+          productId: product.id,
+          name: product.name,
+          category: product.category,
+          optionName: option.name,
+          price: number(option.price),
+          cost: productCost(product, option),
+          quantity: 1,
+          border: border ? { ...border } : null,
+          addons
+        });
+        renderPublicMenu();
+        showToast("Adicionado ao pedido.");
+      }
+
+      function submitDigitalOrder(event) {
+        event.preventDefault();
+        showToast("Pedidos online ainda não estão ativados. Nenhum pedido foi enviado.");
+      }
+
+      function renderMore() {
+        const links = [
+          ["clientes", "♙", "Clientes"],
+          ["produtos", "▦", "Produtos e cardápio"],
+          ["insumos", "◈", "Insumos e custos"],
+          ["configuracoes", "⚙", "Configurações"]
+        ];
+        document.getElementById("pageContent").innerHTML = `<div class="page-heading"><div><div class="eyebrow">Navegação</div><h1>Mais opções</h1><p class="subtitle">Acesse cadastros e configurações do delivery.</p></div></div><div class="more-grid">${links.map(([page, icon, label]) => `<button class="more-link" data-page="${page}"><span>${icon}</span>${label}</button>`).join("")}</div>`;
+      }
+
+      function openCashForm(closeSession = false) {
+        const session = currentCashSession();
+        const expected = session ? session.openingAmount + paidSales(session.id).filter(sale => sale.payment === "Dinheiro").reduce((sum, sale) => sum + number(sale.total), 0) : 0;
+        const body = closeSession
+          ? `<p class="helper">Dinheiro esperado no caixa: <strong>${money(expected)}</strong> (valor inicial + vendas recebidas em dinheiro).</p><div class="field" style="margin-top:14px"><label for="cashCounted">Dinheiro contado no fechamento (R$)</label><input id="cashCounted" name="counted" type="number" min="0" step="0.01" value="${expected.toFixed(2)}" required></div><div class="field" style="margin-top:12px"><label for="cashCloseNotes">Observações</label><input id="cashCloseNotes" name="notes" maxlength="160" placeholder="Diferenças ou ocorrências"></div>`
+          : `<div class="field"><label for="cashOpening">Valor inicial em dinheiro (R$)</label><input id="cashOpening" name="openingAmount" type="number" min="0" step="0.01" value="0" required></div><div class="field" style="margin-top:12px"><label for="cashOpenNotes">Observações</label><input id="cashOpenNotes" name="notes" maxlength="160" placeholder="Fundo de troco, operador..."></div>`;
+        openModal(closeSession ? "Fechar caixa" : "Abrir caixa", body, closeSession ? "closeCash" : "openCash", session?.id || null);
+      }
+
+      function saveCashSession(form, closeSession) {
+        const data = new FormData(form);
+        if (closeSession) {
+          const session = currentCashSession();
+          if (!session) {
+            showToast("Não há caixa aberto para fechar.");
+            return;
+          }
+          const expected = roundMoney(session.openingAmount + paidSales(session.id).filter(sale => sale.payment === "Dinheiro").reduce((sum, sale) => sum + number(sale.total), 0));
+          session.closedAt = new Date().toISOString();
+          session.expectedCash = expected;
+          session.countedCash = number(data.get("counted"));
+          session.difference = roundMoney(session.countedCash - expected);
+          session.closeNotes = String(data.get("notes") || "").trim();
+          if (!saveState()) {
+            delete session.closedAt;
+            delete session.expectedCash;
+            delete session.countedCash;
+            delete session.difference;
+            delete session.closeNotes;
+            return;
+          }
+        } else {
+          if (currentCashSession()) {
+            showToast("Já existe um caixa aberto.");
+            return;
+          }
+          const session = {
+            id: `cash-${Date.now()}`,
+            openedAt: new Date().toISOString(),
+            openingAmount: number(data.get("openingAmount")),
+            openNotes: String(data.get("notes") || "").trim()
+          };
+          state.cashSessions.push(session);
+          if (!saveState()) {
+            state.cashSessions.pop();
+            return;
+          }
+        }
+        closeModal();
+        renderCash();
+        showToast(closeSession ? "Caixa fechado." : "Caixa aberto.");
+      }
+
+      function renderCash() {
+        const session = currentCashSession();
+        const sessions = [...state.cashSessions].sort((a, b) => new Date(b.openedAt) - new Date(a.openedAt));
+        const sessionSales = session ? paidSales(session.id) : [];
+        const cashSales = sessionSales.filter(sale => sale.payment === "Dinheiro").reduce((sum, sale) => sum + number(sale.total), 0);
+        const expected = roundMoney((session?.openingAmount || 0) + cashSales);
+        const paymentTotals = ["Dinheiro", "Pix", "Cartão de crédito", "Cartão de débito"].map(payment => ({
+          payment,
+          amount: sessionSales.filter(sale => sale.payment === payment).reduce((sum, sale) => sum + number(sale.total), 0)
+        }));
+        document.getElementById("pageContent").innerHTML = `
+          <div class="page-heading"><div><div class="eyebrow">Controle financeiro</div><h1>Caixa</h1><p class="subtitle">Abra o turno, registre vendas pagas e confira o valor contado no fechamento.</p></div></div>
+          ${session ? `<section class="cash-hero"><div><span>Caixa aberto desde ${new Date(session.openedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span><strong>${money(expected)}</strong><span>Dinheiro esperado no caixa</span></div><button class="button" data-action="close-cash">Fechar caixa</button></section>
+            <section class="cash-metrics"><article class="cash-metric"><span>Fundo inicial</span><strong>${money(session.openingAmount)}</strong></article><article class="cash-metric"><span>Vendas em dinheiro</span><strong>${money(cashSales)}</strong></article><article class="cash-metric"><span>Vendas pagas no turno</span><strong>${money(sessionSales.reduce((sum, sale) => sum + number(sale.total), 0))}</strong></article></section>
+            <article class="panel"><div class="panel-heading"><h2>Vendas por forma de pagamento</h2><span>${sessionSales.length} recebimento(s)</span></div><div class="cost-summary">${paymentTotals.map(item => `<div class="cost-row"><span>${escapeHtml(item.payment)}</span><strong>${money(item.amount)}</strong></div>`).join("")}</div></article>` :
+            `<section class="panel" style="text-align:center;padding:35px"><div class="stat-icon" style="margin:0 auto 13px;width:44px;height:44px">▣</div><h2 style="margin:0;font-size:17px">Nenhum caixa aberto</h2><p class="subtitle">Informe o valor inicial do troco para começar a registrar vendas.</p><button class="button primary" style="margin-top:12px" data-action="open-cash">Abrir caixa</button></section>`}
+          <article class="panel" style="margin-top:14px"><div class="panel-heading"><h2>Histórico de caixas</h2><span>${sessions.length} turno(s)</span></div>
+            ${sessions.length ? `<div class="table-wrap"><table><thead><tr><th>Abertura</th><th>Fechamento</th><th>Fundo inicial</th><th>Esperado</th><th>Contado</th><th>Diferença</th><th>Status</th></tr></thead><tbody>${sessions.map(item => `<tr><td>${new Date(item.openedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</td><td>${item.closedAt ? new Date(item.closedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—"}</td><td>${money(item.openingAmount)}</td><td>${item.closedAt ? money(item.expectedCash) : "—"}</td><td>${item.closedAt ? money(item.countedCash) : "—"}</td><td class="${number(item.difference) < 0 ? "margin-cell low" : "margin-cell"}">${item.closedAt ? money(item.difference) : "—"}</td><td><span class="pill ${item.closedAt ? "orange" : ""}">${item.closedAt ? "Fechado" : "Aberto"}</span></td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">Os turnos abertos e fechados serão listados aqui.</div>`}
+          </article>`;
+      }
+
+      function localDateKey(value) {
+        const date = new Date(value);
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+      }
+
+      function renderReports() {
+        const today = localDateKey(new Date());
+        const start = reportStart || today;
+        const end = reportEnd || today;
+        const sales = paidSales().filter(sale => {
+          const day = localDateKey(sale.createdAt);
+          return day >= start && day <= end;
+        });
+        const revenue = sales.reduce((sum, sale) => sum + number(sale.total), 0);
+        const cost = sales.reduce((sum, sale) => sum + sale.items.reduce((itemSum, item) => itemSum + saleLineCost(item), 0), 0);
+        const units = sales.reduce((sum, sale) => sum + sale.items.reduce((itemSum, item) => itemSum + number(item.quantity), 0), 0);
+        const itemTotals = new Map();
+        sales.forEach(sale => sale.items.forEach(item => {
+          const current = itemTotals.get(item.name) || { quantity: 0, total: 0 };
+          current.quantity += number(item.quantity);
+          current.total += saleLineTotal(item);
+          itemTotals.set(item.name, current);
+        }));
+        const topItems = [...itemTotals.entries()].sort((a, b) => b[1].quantity - a[1].quantity).slice(0, 5);
+        const payments = ["Dinheiro", "Pix", "Cartão de crédito", "Cartão de débito", "A combinar"].map(payment => ({ payment, total: sales.filter(sale => sale.payment === payment).reduce((sum, sale) => sum + number(sale.total), 0) })).filter(item => item.total > 0);
+        document.getElementById("pageContent").innerHTML = `
+          <div class="page-heading"><div><div class="eyebrow">Desempenho do delivery</div><h1>Relatórios</h1><p class="subtitle">Consulte vendas recebidas, custos e produtos mais vendidos por período.</p></div><button class="button" data-action="print-report">Imprimir relatório</button></div>
+          <form class="report-filters" id="reportFilters"><div class="field"><label for="reportStart">De</label><input id="reportStart" name="start" type="date" value="${start}" required></div><div class="field"><label for="reportEnd">Até</label><input id="reportEnd" name="end" type="date" value="${end}" required></div><button class="button primary" type="submit">Aplicar período</button></form>
+          ${start > end ? `<div class="callout"><span>!</span><div><b>Período inválido</b>A data inicial precisa ser anterior à data final.</div></div>` : ""}
+          <section class="stats" style="margin-top:15px"><article class="stat-card"><div class="stat-top"><span>Vendas recebidas</span><span class="stat-icon">↗</span></div><div class="stat-value">${money(revenue)}</div><div class="stat-note">${sales.length} pedido(s) pago(s)</div></article><article class="stat-card"><div class="stat-top"><span>Custo dos produtos</span><span class="stat-icon">◈</span></div><div class="stat-value">${money(cost)}</div><div class="stat-note">ingredientes e adicionais</div></article><article class="stat-card"><div class="stat-top"><span>Lucro bruto estimado</span><span class="stat-icon">＋</span></div><div class="stat-value">${money(revenue - cost)}</div><div class="stat-note">sem despesas fixas ou taxas</div></article><article class="stat-card"><div class="stat-top"><span>Ticket médio</span><span class="stat-icon">▤</span></div><div class="stat-value">${money(sales.length ? revenue / sales.length : 0)}</div><div class="stat-note">${units} item(ns) vendidos</div></article></section>
+          <section class="dashboard-grid"><article class="panel"><div class="panel-heading"><h2>Vendas por pagamento</h2></div>${payments.length ? `<div class="cost-summary">${payments.map(item => `<div class="cost-row"><span>${escapeHtml(item.payment)}</span><strong>${money(item.total)}</strong></div>`).join("")}</div>` : `<div class="empty-state">Não há recebimentos neste período.</div>`}</article>
+            <article class="panel"><div class="panel-heading"><h2>Mais vendidos</h2></div>${topItems.length ? `<div class="cost-summary">${topItems.map(([name, item]) => `<div class="cost-row"><span>${escapeHtml(name)} · ${item.quantity} un.</span><strong>${money(item.total)}</strong></div>`).join("")}</div>` : `<div class="empty-state">Os produtos mais vendidos aparecerão aqui.</div>`}</article></section>
+          <p class="helper" style="margin-top:12px">Relatório de lucro bruto estimado: não inclui taxas de cartão, embalagens, entrega, impostos ou despesas fixas.</p>`;
+        document.getElementById("reportFilters").addEventListener("submit", event => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          reportStart = String(data.get("start"));
+          reportEnd = String(data.get("end"));
+          renderReports();
+        });
+      }
+
+      let reportStart = "";
+      let reportEnd = "";
+
+      function renderProducts() {
+        const selected = productFilter === "todos" ? state.products : state.products.filter(item => item.category === productFilter);
+        const shown = selected.filter(item => item.category !== "pizza" || state.pizzaEnabled);
+        document.getElementById("pageContent").innerHTML = `
+          <div class="page-heading"><div><div class="eyebrow">Seu cardápio</div><h1>Produtos</h1><p class="subtitle">Separe seu menu por categoria e acompanhe o custo de cada item.</p></div><button class="button primary" data-action="new-product">＋ Novo produto</button></div>
+          <div class="toolbar"><div class="filters">
+            <button class="filter-btn ${productFilter === "todos" ? "active" : ""}" data-filter="todos">Todos</button>
+            ${state.pizzaEnabled ? `<button class="filter-btn ${productFilter === "pizza" ? "active" : ""}" data-filter="pizza">🍕 Pizzas</button>` : ""}
+            <button class="filter-btn ${productFilter === "lanche" ? "active" : ""}" data-filter="lanche">🍔 Lanches</button>
+            <button class="filter-btn ${productFilter === "bebida" ? "active" : ""}" data-filter="bebida">🥤 Bebidas</button>
+          </div><input class="search" id="productSearch" type="search" placeholder="⌕  Buscar produto..."></div>
+          <div class="product-grid" id="productGrid">${productCards(shown)}</div>`;
+        document.getElementById("productSearch").addEventListener("input", event => {
+          const term = event.target.value.trim().toLocaleLowerCase("pt-BR");
+          const filtered = shown.filter(item => item.name.toLocaleLowerCase("pt-BR").includes(term));
+          document.getElementById("productGrid").innerHTML = productCards(filtered);
+        });
+      }
+
+      function productCards(products) {
+        if (!products.length) return `<div class="empty-state">Nenhum produto nesta categoria ainda. Use <strong>＋ Novo produto</strong> para cadastrar.</div>`;
+        return products.map(product => {
+          const options = productOptions(product);
+          const startingPrice = Math.min(...options.map(option => number(option.price)));
+          const startingCost = Math.min(...options.map(option => productCost(product, option)));
+          const margin = startingPrice ? (startingPrice - startingCost) / startingPrice * 100 : 0;
+          const extras = (product.addons || []).length;
+          const detail = product.category === "pizza" ? `${options.length} tamanho${options.length === 1 ? "" : "s"}` : product.category === "bebida" ? "Custo de compra" : `${(product.recipe || []).length} ingrediente${(product.recipe || []).length === 1 ? "" : "s"}`;
+          return `<article class="product-card" data-product-card="${escapeHtml(product.name.toLocaleLowerCase("pt-BR"))}">
+            <div class="product-card-top"><div class="product-card-title"><span class="food-thumb">${categoryIcon(product.category)}</span><div><h3>${escapeHtml(product.name)}</h3><div class="category-label">${categoryName(product.category)} · ${detail}</div></div></div>
+            <button class="icon-button" data-action="edit-product" data-id="${product.id}" aria-label="Editar ${escapeHtml(product.name)}">✎</button></div>
+            <div class="product-pricing"><div><span>Custo base</span><strong>${money(startingCost)}</strong></div><div><span>Preço${product.category === "pizza" ? " inicial" : ""}</span><strong>${money(startingPrice)}</strong></div><div><span>Margem</span><strong class="${margin < 30 ? "margin-cell low" : "margin-cell"}">${margin.toFixed(0)}%</strong></div></div>
+            <div class="product-pricing" style="margin-top:0;padding-top:10px;border-top:0"><div><span>Adicionais</span><strong>${extras}</strong></div><div><span>Status</span><strong>${product.active ? "Ativo" : "Pausado"}</strong></div><div><button class="button small danger" data-action="delete-product" data-id="${product.id}">Excluir</button></div></div>
+            ${extras ? `<div class="helper">${product.addons.map(addon => `${escapeHtml(addon.name)}: vende por ${money(addon.price)}, custa ${money(addon.cost)} · margem ${addon.price ? ((addon.price - addon.cost) / addon.price * 100).toFixed(0) : 0}%`).join("<br>")}</div>` : ""}
+          </article>`;
+        }).join("");
+      }
+
+      function renderIngredients() {
+        const rows = state.ingredients.map(ingredient => `<div class="ingredient-row"><strong>${escapeHtml(ingredient.name)}</strong><span>${escapeHtml(ingredient.unit)}</span><span>${money(ingredient.cost)} / ${escapeHtml(ingredient.unit)}</span><button class="button small" data-action="edit-ingredient" data-id="${ingredient.id}">Editar</button></div>`).join("");
+        document.getElementById("pageContent").innerHTML = `
+          <div class="page-heading"><div><div class="eyebrow">Ficha técnica</div><h1>Insumos e custos</h1><p class="subtitle">Cadastre os ingredientes e o custo por grama, ml ou unidade. Os produtos usam estes valores na ficha técnica.</p></div><button class="button primary" data-action="new-ingredient">＋ Novo insumo</button></div>
+          <article class="panel"><div class="panel-heading"><h2>Lista de insumos</h2><span>${state.ingredients.length} cadastrado${state.ingredients.length === 1 ? "" : "s"}</span></div>
+            ${state.ingredients.length ? `<div class="ingredient-list"><div class="ingredient-row"><span>Insumo</span><span>Unidade</span><span>Custo unitário</span><span>Ação</span></div>${rows}</div>` : `<div class="empty-state">Cadastre insumos para calcular o custo dos seus lanches e pizzas.</div>`}
+          </article>
+          <div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b>Como informar o custo unitário?</b>Se um pacote de 1 kg custa R$ 30, informe R$ 0,03 por grama. Na receita, indique quantos gramas o produto utiliza.</div></div>`;
+      }
+
+      function renderSettings() {
+        document.getElementById("pageContent").innerHTML = `
+          <div class="page-heading"><div><div class="eyebrow">Personalize seu sistema</div><h1>Configurações</h1><p class="subtitle">Ative apenas as categorias que fazem parte do seu delivery.</p></div></div>
+          <div class="settings-list">
+            <div class="setting-item"><div><strong>Trabalho com pizzas</strong><p>Mostra a categoria de pizzas no cardápio e permite cadastrar tamanhos, ficha técnica e adicionais.</p></div><label class="switch" aria-label="Ativar categoria de pizzas"><input id="pizzaToggle" type="checkbox" ${state.pizzaEnabled ? "checked" : ""}><span></span></label></div>
+            <div class="setting-item"><div><strong>Categoria de lanches</strong><p>Fichas técnicas com ingredientes, custo de produção e adicionais opcionais.</p></div><span class="pill">Sempre disponível</span></div>
+            <div class="setting-item"><div><strong>Categoria de bebidas</strong><p>Informe o custo de compra de cada bebida para acompanhar sua margem.</p></div><span class="pill">Sempre disponível</span></div>
+          </div>
+          <div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b>Seus dados ficam neste aparelho</b>Este protótipo salva as informações no armazenamento local do navegador. Para usar em vários celulares ou receber pedidos, será necessário conectar um servidor e um banco de dados.</div></div>`;
+        document.getElementById("pizzaToggle").addEventListener("change", event => {
+          const previousValue = state.pizzaEnabled;
+          state.pizzaEnabled = event.target.checked;
+          if (!state.pizzaEnabled && productFilter === "pizza") productFilter = "todos";
+          if (!saveState()) {
+            state.pizzaEnabled = previousValue;
+            render();
+            return;
+          }
+          render();
+          showToast(state.pizzaEnabled ? "Categoria de pizzas ativada." : "Categoria de pizzas desativada.");
+        });
+      }
+
+      function openModal(title, bodyHtml, type, id = null) {
+        editingType = type;
+        editingId = id;
+        document.getElementById("modalTitle").textContent = title;
+        document.getElementById("modalBody").innerHTML = bodyHtml;
+        document.getElementById("modalBackdrop").classList.add("open");
+        document.body.style.overflow = "hidden";
+        document.getElementById("modalForm").dataset.type = type;
+        document.getElementById("modalForm").dataset.id = id || "";
+        document.getElementById("modalBody").querySelectorAll("[data-add-row]").forEach(button => button.addEventListener("click", addDynamicRow));
+        document.getElementById("modalBody").querySelectorAll("[data-remove-row]").forEach(button => button.addEventListener("click", () => button.parentElement.remove()));
+        document.getElementById("modalBody").querySelectorAll("[data-product-category]").forEach(select => select.addEventListener("change", () => updateProductFields(select.value)));
+      }
+
+      function closeModal() {
+        document.getElementById("modalBackdrop").classList.remove("open");
+        document.body.style.overflow = "";
+      }
+
+      function productForm(product = null) {
+        const category = product?.category || (state.pizzaEnabled ? "pizza" : "lanche");
+        const ingredientOptions = state.ingredients.map(item => `<option value="${item.id}">${escapeHtml(item.name)} (${escapeHtml(item.unit)})</option>`).join("");
+        const recipeRows = product?.recipe?.length ? product.recipe.map(item => `<div class="recipe-row"><select name="recipeIngredient" required aria-label="Insumo">${ingredientOptions}</select><input name="recipeQuantity" type="number" min="0.0001" step="any" required value="${number(item.quantity)}" placeholder="Qtd." aria-label="Quantidade"><button type="button" class="row-remove" data-remove-row aria-label="Remover ingrediente">×</button></div>`).join("") : "";
+        const sizeRows = product?.sizes?.length ? product.sizes.map(item => sizeRow(item)).join("") : category === "pizza" ? sizeRow({ name: "Média", price: "", factor: 1 }) : "";
+        const borderRows = product?.borderOptions?.length ? product.borderOptions.map(borderOptionRow).join("") : "";
+        const addonRows = product?.addons?.length ? product.addons.map(item => addonRow(item)).join("") : "";
+        const body = `<div class="form-grid">
+          <div class="field full"><label for="productName">Nome do produto</label><input id="productName" name="name" required maxlength="70" value="${escapeHtml(product?.name || "")}" placeholder="Ex.: Pizza Calabresa"></div>
+          <div class="field"><label for="productCategory">Categoria</label><select id="productCategory" name="category" data-product-category>${state.pizzaEnabled ? `<option value="pizza" ${category === "pizza" ? "selected" : ""}>Pizza</option>` : ""}<option value="lanche" ${category === "lanche" ? "selected" : ""}>Lanche</option><option value="bebida" ${category === "bebida" ? "selected" : ""}>Bebida</option></select></div>
+          <div class="field"><label for="productActive">Disponibilidade</label><select id="productActive" name="active"><option value="true" ${product?.active !== false ? "selected" : ""}>Ativo no cardápio</option><option value="false" ${product?.active === false ? "selected" : ""}>Pausado</option></select></div>
+        </div>
+        <div id="productSpecificFields"></div>`;
+        openModal(product ? "Editar produto" : "Novo produto", body, "product", product?.id || null);
+        updateProductFields(category, product, { ingredientOptions, recipeRows, sizeRows, borderRows, addonRows });
+      }
+
+      function sizeRow(item = {}) {
+        return `<div class="size-row"><input name="sizeName" required maxlength="30" value="${escapeHtml(item.name || "")}" placeholder="Tamanho"><input name="sizePrice" type="number" min="0.01" step="0.01" required value="${item.price === "" ? "" : number(item.price) || ""}" placeholder="Preço R$"><input name="sizeFactor" type="number" min="0.01" step="0.01" required value="${number(item.factor) || 1}" placeholder="Fator"><button type="button" class="row-remove" data-remove-row aria-label="Remover tamanho">×</button></div>`;
+      }
+
+      function addonRow(item = {}) {
+        return `<div class="addon-row"><input name="addonName" required maxlength="40" value="${escapeHtml(item.name || "")}" placeholder="Ex.: Bacon"><input name="addonPrice" type="number" min="0" step="0.01" required value="${item.price == null ? "" : number(item.price)}" placeholder="Venda R$"><input name="addonCost" type="number" min="0" step="0.01" required value="${item.cost == null ? "" : number(item.cost)}" placeholder="Custo R$"><button type="button" class="row-remove" data-remove-row aria-label="Remover adicional">×</button></div>`;
+      }
+
+      function borderOptionRow(item = {}) {
+        return `<div class="addon-row"><input name="borderName" required maxlength="40" value="${escapeHtml(item.name || "")}" placeholder="Ex.: Catupiry"><input name="borderPrice" type="number" min="0" step="0.01" required value="${item.price == null ? "" : number(item.price)}" placeholder="Venda R$"><input name="borderCost" type="number" min="0" step="0.01" required value="${item.cost == null ? "" : number(item.cost)}" placeholder="Custo R$"><button type="button" class="row-remove" data-remove-row aria-label="Remover opção de borda">×</button></div>`;
+      }
+
+      function updateProductFields(category, product = null, cached = null) {
+        const ingredientOptions = cached?.ingredientOptions ?? state.ingredients.map(item => `<option value="${item.id}">${escapeHtml(item.name)} (${escapeHtml(item.unit)})</option>`).join("");
+        let recipeRows = cached?.recipeRows;
+        if (recipeRows === undefined) recipeRows = product?.recipe?.length ? product.recipe.map(item => `<div class="recipe-row"><select name="recipeIngredient" required aria-label="Insumo">${ingredientOptions}</select><input name="recipeQuantity" type="number" min="0.0001" step="any" required value="${number(item.quantity)}" placeholder="Qtd." aria-label="Quantidade"><button type="button" class="row-remove" data-remove-row aria-label="Remover ingrediente">×</button></div>`).join("") : "";
+        let sizeRows = cached?.sizeRows;
+        if (sizeRows === undefined) sizeRows = product?.sizes?.length ? product.sizes.map(sizeRow).join("") : sizeRow({ name: "Média", price: "", factor: 1 });
+        const borderRows = cached?.borderRows ?? (product?.borderOptions?.length ? product.borderOptions.map(borderOptionRow).join("") : "");
+        const addonRows = cached?.addonRows ?? (product?.addons?.length ? product.addons.map(addonRow).join("") : "");
+        const specific = document.getElementById("productSpecificFields");
+        const recipeSection = `<div class="form-section"><div class="form-section-head"><div><strong>Ficha técnica</strong><div class="helper">Selecione os insumos e a quantidade usada na receita.</div></div><button type="button" class="button small" data-add-row="recipe">＋ Ingrediente</button></div><div class="dynamic-rows" id="recipeRows">${recipeRows}</div><div class="recipe-total" id="recipeTotal"></div></div>`;
+        const addonsSection = `<div class="form-section"><div class="form-section-head"><div><strong>Adicionais deste produto</strong><div class="helper">Cadastre aqui os adicionais que o cliente poderá escolher no cardápio, com preço de venda e custo.</div></div><button type="button" class="button small" data-add-row="addon">＋ Adicional</button></div><div class="dynamic-rows" id="addonRows">${addonRows}</div></div>`;
+        if (category === "bebida") {
+          specific.innerHTML = `<div class="form-grid" style="margin-top:14px"><div class="field"><label for="drinkCost">Custo de compra (R$)</label><input id="drinkCost" name="drinkCost" type="number" min="0" step="0.01" required value="${product ? number(product.cost) : ""}" placeholder="Ex.: 4,50"></div><div class="field"><label for="productPrice">Preço de venda (R$)</label><input id="productPrice" name="price" type="number" min="0" step="0.01" required value="${product ? number(product.price) : ""}" placeholder="Ex.: 7,50"></div></div>${addonsSection}`;
+        } else if (category === "pizza") {
+          specific.innerHTML = `${recipeSection}<div class="form-section"><div class="form-section-head"><div><strong>Tamanhos e preços</strong><div class="helper">O fator multiplica as quantidades da ficha técnica (média = 1).</div></div><button type="button" class="button small" data-add-row="size">＋ Tamanho</button></div><div class="dynamic-rows" id="sizeRows">${sizeRows}</div></div><div class="form-section"><div class="form-section-head"><div><strong>Opções de borda</strong><div class="helper">“Sem borda” será incluída automaticamente. Cadastre aqui as bordas pagas para o cliente escolher.</div></div><button type="button" class="button small" data-add-row="border">＋ Cadastrar borda</button></div><div class="dynamic-rows" id="borderRows">${borderRows}</div></div>${addonsSection}`;
+        } else {
+          specific.innerHTML = `${recipeSection}<div class="field" style="margin-top:13px"><label for="productPrice">Preço de venda (R$)</label><input id="productPrice" name="price" type="number" min="0" step="0.01" required value="${product ? number(product.price) : ""}" placeholder="Ex.: 27,90"></div>${addonsSection}`;
+        }
+        specific.querySelectorAll("[data-add-row]").forEach(button => button.addEventListener("click", addDynamicRow));
+        specific.querySelectorAll("[data-remove-row]").forEach(button => button.addEventListener("click", () => { button.parentElement.remove(); updateRecipeTotal(); }));
+        specific.querySelectorAll("select[name='recipeIngredient']").forEach((select, index) => {
+          if (product?.recipe?.[index]) select.value = product.recipe[index].ingredientId;
+        });
+        specific.querySelectorAll("input[name='recipeQuantity']").forEach(input => input.addEventListener("input", updateRecipeTotal));
+        specific.querySelectorAll("select[name='recipeIngredient']").forEach(input => input.addEventListener("change", updateRecipeTotal));
+        updateRecipeTotal();
+      }
+
+      function addDynamicRow(event) {
+        const type = event.currentTarget.dataset.addRow;
+        const parent = event.currentTarget.closest(".form-section");
+        const rows = parent.querySelector(".dynamic-rows");
+        if (type === "recipe") {
+          if (!state.ingredients.length) {
+            showToast("Cadastre um insumo antes de montar a ficha técnica.");
+            return;
+          }
+          const options = state.ingredients.map(item => `<option value="${item.id}">${escapeHtml(item.name)} (${escapeHtml(item.unit)})</option>`).join("");
+          rows.insertAdjacentHTML("beforeend", `<div class="recipe-row"><select name="recipeIngredient" required aria-label="Insumo">${options}</select><input name="recipeQuantity" type="number" min="0.0001" step="any" required placeholder="Qtd." aria-label="Quantidade"><button type="button" class="row-remove" data-remove-row aria-label="Remover ingrediente">×</button></div>`);
+          const row = rows.lastElementChild;
+          row.querySelector("[data-remove-row]").addEventListener("click", () => { row.remove(); updateRecipeTotal(); });
+          row.querySelectorAll("input,select").forEach(input => input.addEventListener(input.tagName === "SELECT" ? "change" : "input", updateRecipeTotal));
+        }
+        if (type === "size") {
+          rows.insertAdjacentHTML("beforeend", sizeRow({ name: "", price: "", factor: 1 }));
+          rows.lastElementChild.querySelector("[data-remove-row]").addEventListener("click", event => event.currentTarget.parentElement.remove());
+        }
+        if (type === "border") {
+          rows.insertAdjacentHTML("beforeend", borderOptionRow());
+          rows.lastElementChild.querySelector("[data-remove-row]").addEventListener("click", event => event.currentTarget.parentElement.remove());
+        }
+        if (type === "addon") {
+          rows.insertAdjacentHTML("beforeend", addonRow());
+          rows.lastElementChild.querySelector("[data-remove-row]").addEventListener("click", event => event.currentTarget.parentElement.remove());
+        }
+      }
+
+      function updateRecipeTotal() {
+        const modalBody = document.getElementById("modalBody");
+        const label = modalBody.querySelector("#recipeTotal");
+        if (!label) return;
+        const total = [...modalBody.querySelectorAll(".recipe-row")].reduce((sum, row) => {
+          const id = row.querySelector("[name='recipeIngredient']")?.value;
+          const quantity = number(row.querySelector("[name='recipeQuantity']")?.value);
+          return sum + quantity * ingredientCost(id);
+        }, 0);
+        label.textContent = `Custo atual da ficha: ${money(total)}`;
+      }
+
+      function ingredientForm(ingredient = null) {
+        const body = `<div class="form-grid"><div class="field full"><label for="ingredientName">Nome do insumo</label><input id="ingredientName" name="name" required maxlength="60" value="${escapeHtml(ingredient?.name || "")}" placeholder="Ex.: Muçarela"></div>
+          <div class="field"><label for="ingredientUnit">Unidade usada na receita</label><select id="ingredientUnit" name="unit"><option value="g" ${ingredient?.unit === "g" ? "selected" : ""}>Grama (g)</option><option value="ml" ${ingredient?.unit === "ml" ? "selected" : ""}>Mililitro (ml)</option><option value="un" ${ingredient?.unit === "un" ? "selected" : ""}>Unidade (un)</option></select></div>
+          <div class="field"><label for="ingredientCost">Custo por unidade (R$)</label><input id="ingredientCost" name="cost" type="number" min="0" step="0.0001" required value="${ingredient ? number(ingredient.cost) : ""}" placeholder="Ex.: 0,045"></div></div>
+          <p class="helper">Exemplo: se 1 kg custa R$ 30, o custo por grama é R$ 0,03. Use a mesma unidade ao preencher a ficha técnica.</p>`;
+        openModal(ingredient ? "Editar insumo" : "Novo insumo", body, "ingredient", ingredient?.id || null);
+      }
+
+      function saveProduct(form) {
+        const data = new FormData(form);
+        const category = data.get("category");
+        const recipe = [...document.querySelectorAll("#recipeRows .recipe-row")].map(row => ({
+          ingredientId: row.querySelector("[name='recipeIngredient']").value,
+          quantity: number(row.querySelector("[name='recipeQuantity']").value)
+        })).filter(item => item.ingredientId && item.quantity > 0);
+        const addons = [...document.querySelectorAll("#addonRows .addon-row")].map(row => ({
+          name: row.querySelector("[name='addonName']").value.trim(),
+          price: number(row.querySelector("[name='addonPrice']").value),
+          cost: number(row.querySelector("[name='addonCost']").value)
+        })).filter(item => item.name);
+        const product = {
+          id: editingId || `prod-${Date.now()}`,
+          name: String(data.get("name")).trim(),
+          category,
+          active: data.get("active") === "true",
+          addons
+        };
+        if (category === "bebida") {
+          product.cost = number(data.get("drinkCost"));
+          product.price = number(data.get("price"));
+        } else {
+          if (!recipe.length) {
+            showToast("Adicione pelo menos um ingrediente à ficha técnica.");
+            return;
+          }
+          product.recipe = recipe;
+          if (category === "pizza") {
+            product.sizes = [...document.querySelectorAll("#sizeRows .size-row")].map(row => ({
+              name: row.querySelector("[name='sizeName']").value.trim(),
+              price: number(row.querySelector("[name='sizePrice']").value),
+              factor: number(row.querySelector("[name='sizeFactor']").value) || 1
+            })).filter(item => item.name);
+            product.borderOptions = [...document.querySelectorAll("#borderRows .addon-row")].map(row => ({
+              name: row.querySelector("[name='borderName']").value.trim(),
+              price: number(row.querySelector("[name='borderPrice']").value),
+              cost: number(row.querySelector("[name='borderCost']").value)
+            })).filter(item => item.name);
+            if (!product.sizes.length) {
+              showToast("Adicione pelo menos um tamanho para a pizza.");
+              return;
+            }
+          } else {
+            product.price = number(data.get("price"));
+          }
+        }
+        const previousState = JSON.stringify(state);
+        const index = state.products.findIndex(item => item.id === product.id);
+        if (index >= 0) state.products[index] = product;
+        else state.products.push(product);
+        if (!saveState()) {
+          state = JSON.parse(previousState);
+          return;
+        }
+        closeModal();
+        render();
+        showToast(editingId ? "Produto atualizado." : "Produto cadastrado.");
+      }
+
+      function saveIngredient(form) {
+        const data = new FormData(form);
+        const ingredient = {
+          id: editingId || `ing-${Date.now()}`,
+          name: String(data.get("name")).trim(),
+          unit: data.get("unit"),
+          cost: number(data.get("cost"))
+        };
+        const previousState = JSON.stringify(state);
+        const index = state.ingredients.findIndex(item => item.id === ingredient.id);
+        if (index >= 0) state.ingredients[index] = ingredient;
+        else state.ingredients.push(ingredient);
+        if (!saveState()) {
+          state = JSON.parse(previousState);
+          return;
+        }
+        closeModal();
+        render();
+        showToast(editingId ? "Insumo atualizado." : "Insumo cadastrado.");
+      }
+
+      function showToast(message) {
+        const toast = document.getElementById("toast");
+        toast.textContent = message;
+        toast.classList.add("show");
+        clearTimeout(showToast.timeout);
+        showToast.timeout = setTimeout(() => toast.classList.remove("show"), 2600);
+      }
+
+      document.getElementById("authSwitch").addEventListener("click", () => {
+        setAuthMode(authMode === "signin" ? "signup" : "signin");
+      });
+      document.getElementById("authForm").addEventListener("submit", async event => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        if (!form.reportValidity()) return;
+        const button = document.getElementById("authSubmit");
+        const data = new FormData(form);
+        const email = String(data.get("email")).trim();
+        const password = String(data.get("password"));
+        button.disabled = true;
+        document.getElementById("authMessage").textContent = "";
+        try {
+          if (authMode === "signup") {
+            const { data: result, error } = await supabaseClient.auth.signUp({ email, password });
+            if (error) throw error;
+            if (!result.session) {
+              setAuthMode("signin");
+              showAuth("Conta criada. Confira seu e-mail para confirmar o cadastro e depois entre.");
+              return;
+            }
+            await openBusinessSession(result.user);
+          } else {
+            const { data: result, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+            if (error) throw error;
+            await openBusinessSession(result.user);
+          }
+        } catch (error) {
+          console.error("Não foi possível autenticar ou abrir a conta:", error);
+          document.getElementById("authMessage").textContent = error.message || "Não foi possível acessar a conta.";
+        } finally {
+          button.disabled = false;
+        }
+      });
+      document.getElementById("signOutButton").addEventListener("click", async () => {
+        const { error } = await supabaseClient.auth.signOut();
+        if (error) {
+          console.error("Não foi possível encerrar a sessão:", error);
+          showToast("Não foi possível sair da conta.");
+        }
+      });
+
+      document.addEventListener("click", event => {
+        const pageButton = event.target.closest("[data-page]");
+        if (pageButton) {
+          currentPage = pageButton.dataset.page;
+          render();
+          return;
+        }
+        const digitalCategoryButton = event.target.closest("[data-digital-category], [data-public-category]");
+        if (digitalCategoryButton) {
+          digitalCategory = digitalCategoryButton.dataset.digitalCategory || digitalCategoryButton.dataset.publicCategory;
+          if (new URLSearchParams(location.search).has("cardapio")) renderPublicMenu();
+          else renderDigitalMenu();
+          return;
+        }
+        const filter = event.target.closest("[data-filter]");
+        if (filter) {
+          productFilter = filter.dataset.filter;
+          renderProducts();
+          document.querySelectorAll(".filter-btn").forEach(button => button.classList.toggle("active", button.dataset.filter === productFilter));
+          return;
+        }
+        const action = event.target.closest("[data-action]");
+        if (!action) return;
+        const id = action.dataset.id;
+        if (action.dataset.action === "remove-sale-item") {
+          saleCart.splice(Number(action.dataset.index), 1);
+          renderSales();
+        }
+        if (action.dataset.action === "remove-digital-item") {
+          digitalCart.splice(Number(action.dataset.index), 1);
+          renderPublicMenu();
+        }
+        if (action.dataset.action === "public-add") addDigitalItem(id);
+        if (action.dataset.action === "return-to-system") location.href = location.pathname;
+        if (action.dataset.action === "open-public-menu") window.open(`${location.pathname}?cardapio=1`, "_blank", "noopener,noreferrer");
+        if (action.dataset.action === "copy-menu-link") {
+          const shareUrl = document.getElementById("menuShareUrl")?.value;
+          if (shareUrl && navigator.clipboard?.writeText) {
+            navigator.clipboard.writeText(shareUrl).then(
+              () => showToast("Link do cardápio copiado."),
+              error => {
+                console.error("Não foi possível copiar o link do cardápio:", error);
+                showToast("Não foi possível copiar; selecione e copie o link exibido.");
+              }
+            );
+          } else {
+            document.getElementById("menuShareUrl")?.select();
+            showToast("Link selecionado. Copie usando Ctrl+C.");
+          }
+        }
+        if (action.dataset.action === "open-cash") openCashForm();
+        if (action.dataset.action === "close-cash") openCashForm(true);
+        if (action.dataset.action === "receive-sale") receiveSale(state.sales.find(sale => sale.id === id));
+        if (action.dataset.action === "print-report") window.print();
+        if (action.dataset.action === "new-product") productForm();
+        if (action.dataset.action === "edit-product") productForm(state.products.find(item => item.id === id));
+        if (action.dataset.action === "delete-product") {
+          const product = state.products.find(item => item.id === id);
+          if (product && confirm(`Excluir "${product.name}" do cardápio?`)) {
+            state.products = state.products.filter(item => item.id !== id);
+            saveState();
+            render();
+            showToast("Produto excluído.");
+          }
+        }
+        if (action.dataset.action === "new-ingredient") ingredientForm();
+        if (action.dataset.action === "edit-ingredient") ingredientForm(state.ingredients.find(item => item.id === id));
+        if (action.dataset.action === "new-customer") customerForm();
+        if (action.dataset.action === "edit-customer") customerForm(state.customers.find(item => item.id === id));
+      });
+
+      document.getElementById("closeModal").addEventListener("click", closeModal);
+      document.getElementById("cancelModal").addEventListener("click", closeModal);
+      document.getElementById("modalBackdrop").addEventListener("click", event => { if (event.target.id === "modalBackdrop") closeModal(); });
+      document.getElementById("modalForm").addEventListener("submit", event => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        if (!form.reportValidity()) return;
+        if (form.dataset.type === "product") saveProduct(form);
+        if (form.dataset.type === "ingredient") saveIngredient(form);
+        if (form.dataset.type === "customer") saveCustomer(form);
+        if (form.dataset.type === "openCash") saveCashSession(form, false);
+        if (form.dataset.type === "closeCash") saveCashSession(form, true);
+        if (form.dataset.type === "receivePayment") saveReceivedPayment(form);
+      });
+      document.addEventListener("keydown", event => { if (event.key === "Escape") closeModal(); });
+      window.addEventListener("storage", event => {
+        if (event.key !== STORAGE_KEY || !event.newValue) return;
+        state = loadState();
+        if (new URLSearchParams(location.search).has("cardapio")) {
+          digitalCart = digitalCart.filter(item => activeSaleProducts().some(product => product.id === item.productId));
+          renderPublicMenu();
+          return;
+        }
+        if (["vendas", "caixa", "relatorios", "inicio", "clientes"].includes(currentPage)) render();
+      });
+      initializeAuth();
+    })();
+  </script>
+</body>
+</html>
