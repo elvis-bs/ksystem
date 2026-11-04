@@ -126,13 +126,21 @@
     .filter-btn.active { border-color: var(--green); color: #fff; background: var(--green); }
     .search { width: 210px; min-height: 36px; padding: 0 11px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: 11px; outline: none; }
     .search:focus, input:focus, select:focus { border-color: #6b9478; box-shadow: 0 0 0 3px rgba(36,92,67,.09); outline: none; }
-    .product-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 13px; }
-    .product-card { padding: 15px; }
+    .product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 10px; align-items: start; }
+    .product-card { padding: 12px; }
     .product-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-    .product-card-title { display: flex; align-items: center; gap: 10px; }
-    .product-card-title .food-thumb { width: 39px; height: 39px; font-size: 20px; }
-    .product-card h3 { margin: 0; font-size: 13px; }
+    .product-card-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .product-card-title .food-thumb { width: 32px; height: 32px; flex: 0 0 32px; font-size: 17px; }
+    .product-card h3 { margin: 0; font-size: 12px; }
     .product-card .category-label { margin-top: 4px; color: var(--muted); font-size: 10px; }
+    .product-details { min-width: 0; flex: 1; }
+    .product-details > summary { cursor: pointer; list-style: none; }
+    .product-details > summary::-webkit-details-marker { display: none; }
+    .product-details > summary::after { display: block; margin: 5px 0 0 40px; color: var(--green); content: "Ver detalhes +"; font-size: 9px; font-weight: 700; }
+    .product-details[open] > summary::after { content: "Ocultar detalhes −"; }
+    .product-detail-content { margin-top: 10px; }
+    .product-detail-content .product-pricing { margin-top: 10px; padding-top: 9px; }
+    .product-detail-content .product-pricing strong { font-size: 11px; }
     .icon-button { width: 29px; height: 29px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: #fff; }
     .product-pricing { display: flex; justify-content: space-between; gap: 10px; margin-top: 17px; padding-top: 12px; border-top: 1px solid var(--line); }
     .product-pricing span { display: block; color: var(--muted); font-size: 9px; }
@@ -147,6 +155,7 @@
     .setting-item { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 17px; border: 1px solid var(--line); border-radius: 11px; background: #fff; }
     .setting-item strong { display: block; font-size: 12px; }
     .setting-item p { margin: 5px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+    .pizza-price-control { width: 220px; flex: 0 0 220px; }
     .switch { position: relative; width: 43px; height: 24px; flex: 0 0 43px; }
     .switch input { position: absolute; width: 1px; height: 1px; opacity: 0; }
     .switch span { position: absolute; inset: 0; border-radius: 20px; background: #daddd7; transition: .2s; }
@@ -176,7 +185,7 @@
     .form-section-head small { color: var(--muted); font-size: 9px; }
     .dynamic-rows { display: grid; gap: 7px; }
     .recipe-row { display: grid; grid-template-columns: 1fr 105px 31px; gap: 7px; }
-    .size-row { display: grid; grid-template-columns: 1fr 115px 100px 31px; gap: 7px; }
+    .size-row { display: grid; grid-template-columns: 1fr 95px 75px 95px 31px; gap: 7px; }
     .addon-row { display: grid; grid-template-columns: 1.2fr 95px 95px 31px; gap: 7px; }
     .row-remove { border: 0; border-radius: 7px; color: #9c6259; background: #fbefed; font-size: 14px; }
     .helper { margin: 7px 0 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
@@ -199,6 +208,33 @@
     .customer-detail { margin-top: 3px; color: var(--muted); font-size: 9px; }
     .order-status-select { min-width: 120px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: #fff; font-size: 10px; }
     .customer-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+    .orders-summary { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; margin-bottom: 15px; }
+    .orders-summary-card { padding: 13px 15px; border: 1px solid var(--line); border-radius: 11px; background: #fff; }
+    .orders-summary-card span { display: block; color: var(--muted); font-size: 10px; }
+    .orders-summary-card strong { display: block; margin-top: 5px; font-size: 20px; }
+    .orders-board { display: grid; grid-template-columns: repeat(4, minmax(230px, 1fr)); gap: 12px; align-items: start; overflow-x: auto; padding-bottom: 8px; }
+    .orders-column { min-width: 230px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: #f0f2ed; }
+    .orders-column-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+    .orders-column-head h2 { margin: 0; font-size: 12px; }
+    .orders-column-count { min-width: 24px; padding: 4px 7px; border-radius: 20px; color: var(--green-dark); background: #dfece2; text-align: center; font-size: 10px; font-weight: 750; }
+    .orders-column-list { display: grid; gap: 9px; }
+    .order-card { padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; box-shadow: 0 3px 12px rgba(30,43,32,.04); }
+    .order-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+    .order-card-id { color: var(--muted); font-size: 9px; font-weight: 750; letter-spacing: .5px; text-transform: uppercase; }
+    .order-card-age { color: var(--orange); font-size: 10px; font-weight: 750; white-space: nowrap; }
+    .order-card-customer { margin-top: 5px; font-size: 12px; font-weight: 750; }
+    .order-card-contact { margin-top: 3px; color: var(--muted); font-size: 10px; }
+    .order-card-items { display: grid; gap: 6px; margin: 11px 0; padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .order-card-item { font-size: 10px; line-height: 1.4; }
+    .order-card-item small { display: block; margin-top: 2px; color: var(--muted); }
+    .order-card-total { display: flex; justify-content: space-between; gap: 8px; font-size: 10px; }
+    .order-card-total strong { color: var(--green-dark); font-size: 13px; }
+    .order-card-meta { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; color: var(--muted); font-size: 9px; }
+    .order-card-actions { display: grid; gap: 7px; margin-top: 11px; }
+    .order-card-actions .button { min-height: 32px; width: 100%; padding: 0 8px; font-size: 10px; }
+    .order-card-actions .order-status-select { min-width: 0; width: 100%; }
+    .orders-empty { padding: 18px 8px; border: 1px dashed #d6dbd2; border-radius: 9px; color: var(--muted); background: rgba(255,255,255,.55); text-align: center; font-size: 10px; }
+    .orders-cancelled { margin-top: 15px; }
     .customer-item { border: 1px solid var(--line); border-radius: 12px; background: #fff; padding: 15px; }
     .customer-item-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
     .customer-avatar { width: 36px; height: 36px; display: grid; place-items: center; flex: 0 0 36px; border-radius: 50%; color: var(--green); background: var(--green-soft); font-size: 13px; font-weight: 800; }
@@ -219,9 +255,15 @@
     .digital-hero { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 24px; border-radius: 14px; color: #fff; background: var(--green-dark); }
     .digital-hero h1 { font-size: 28px; }
     .digital-hero p { margin: 8px 0 0; color: #cfdfd3; font-size: 12px; }
-    .digital-product-card { display: grid; grid-template-columns: 1fr auto; gap: 13px; padding: 17px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
-    .digital-product-card h3 { margin: 0; font-size: 14px; }
-    .digital-product-card p { margin: 5px 0 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+    .digital-product-card { padding: 0; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+    .digital-product-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 66px; padding: 12px 15px; cursor: pointer; list-style: none; }
+    .digital-product-summary::-webkit-details-marker { display: none; }
+    .digital-product-summary::after { flex: 0 0 auto; color: var(--green); content: "Escolher +"; font-size: 10px; font-weight: 700; }
+    .digital-product-card[open] .digital-product-summary { border-bottom: 1px solid var(--line); }
+    .digital-product-card[open] .digital-product-summary::after { content: "Fechar −"; }
+    .digital-product-summary h3 { margin: 0; font-size: 13px; }
+    .digital-product-summary p { margin: 4px 0 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
+    .digital-product-options { padding: 13px 15px 15px; }
     .digital-product-card .field { margin-top: 10px; }
     .digital-product-card .sale-addons { margin-top: 9px; }
     .digital-product-card .option-group { margin-top: 13px; }
@@ -233,6 +275,9 @@
     .digital-product-card .addon-choice { min-height: 40px; padding: 9px 11px; cursor: pointer; font-size: 11px; }
     .digital-product-card .addon-choice:has(input:checked) { border-color: var(--green); color: var(--green-dark); background: #f0f6ee; }
     .digital-product-card .addon-choice:focus-within { outline: 2px solid var(--green); outline-offset: 2px; }
+    .pizza-flavor-picker { margin-top: 11px; }
+    .pizza-flavor-picker > .section-label { display: block; margin-bottom: 7px; color: var(--ink); font-size: 11px; }
+    .digital-product-options > .button { margin-top: 13px; }
     .category-tabs { position: sticky; z-index: 2; top: 0; padding: 10px 0; overflow-x: auto; flex-wrap: nowrap; background: var(--canvas); }
     .category-tabs .filter-btn { flex: 0 0 auto; padding: 10px 15px; font-size: 11px; }
     .public-menu .category-tabs { top: 0; }
@@ -244,6 +289,33 @@
     .public-menu .digital-hero { border-radius: 0 0 14px 14px; }
     .public-menu .digital-hero .button { display: none; }
     .public-menu .public-note { display: block; }
+    .pdv-mode { background: #f0f2ed; }
+    .pdv-mode .sidebar, .pdv-mode .bottom-nav { display: none; }
+    .pdv-mode .app-shell { display: block; min-height: 100vh; padding: 0; }
+    .pdv-mode .main { min-height: 100vh; }
+    .pdv-mode .topbar { height: 64px; padding: 0 24px; }
+    .pdv-mode .content { width: min(1500px, 100%); padding: 22px 24px 32px; }
+    .pdv-back { display: none; }
+    .pdv-mode .pdv-back { display: inline-flex; }
+    .pdv-mode .sale-grid { grid-template-columns: minmax(0, 1.3fr) minmax(340px, .7fr); gap: 18px; }
+    .pdv-mode .sale-builder { gap: 14px; }
+    .pdv-mode .sale-grid > .panel { position: sticky; top: 16px; }
+    .pdv-mode .sale-product-form { grid-template-columns: minmax(170px, 1.4fr) minmax(150px, 1fr) 75px auto; }
+    .pdv-mode .sale-product-form > .sale-addons { grid-column: 1 / -1; }
+    .pdv-mode .sale-grid .panel { padding: 22px; }
+    .pdv-mode .sale-total strong { font-size: 25px; }
+    .pdv-mode .pdv-title { display: flex; align-items: center; gap: 10px; }
+    .pdv-mode .pdv-title h1 { font-size: clamp(26px, 3vw, 36px); }
+    .pdv-mode .pdv-title .stat-icon { width: 38px; height: 38px; font-size: 19px; }
+    @media (max-width: 760px) {
+      .pdv-mode .topbar { height: 58px; padding: 0 14px; }
+      .pdv-mode .content { padding: 17px 12px 24px; }
+      .pdv-mode .sale-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+      .pdv-mode .sale-grid > .panel { position: static; }
+      .pdv-mode .sale-product-form { grid-template-columns: 1fr 1fr; }
+      .pdv-mode .sale-product-form > .button { width: 100%; }
+      .pdv-mode .sale-grid .panel { padding: 15px; }
+    }
     .public-note { display: none; }
     .more-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
     .more-link { display: flex; align-items: center; gap: 12px; padding: 15px; border: 1px solid var(--line); border-radius: 11px; color: var(--ink); background: #fff; text-align: left; font-size: 12px; font-weight: 700; }
@@ -279,9 +351,14 @@
       .toolbar { align-items: stretch; flex-direction: column; }
       .search { width: 100%; }
       .product-grid { grid-template-columns: 1fr; gap: 9px; }
+      .orders-summary { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .orders-board { grid-template-columns: minmax(0,1fr); overflow: visible; }
+      .orders-column { min-width: 0; }
       .ingredient-row { grid-template-columns: 1fr 72px 82px 63px; gap: 7px; padding-right: 0; padding-left: 0; font-size: 10px; }
       .ingredient-row strong { font-size: 10px; }
       .setting-item { padding: 13px; }
+      .pizza-price-control { width: 100%; flex: 1; }
+      .setting-item:has(.pizza-price-control) { align-items: stretch; flex-direction: column; gap: 10px; }
       .sale-grid { grid-template-columns: 1fr; }
       .sale-product-form { grid-template-columns: 1fr 1fr; }
       .sale-product-form > .button { width: 100%; }
@@ -290,8 +367,9 @@
       .report-filters { align-items: stretch; flex-direction: column; }
       .report-filters .field { min-width: 0; }
       .digital-hero { align-items: flex-start; flex-direction: column; padding: 19px; }
-      .digital-product-card { grid-template-columns: 1fr; }
-      .digital-product-card > .button { width: 100%; }
+      .digital-product-summary { min-height: 62px; padding: 11px 12px; }
+      .digital-product-options { padding: 11px 12px 13px; }
+      .digital-product-options > .button { width: 100%; }
       .more-grid { grid-template-columns: 1fr; }
       .sale-cart-row { grid-template-columns: 1fr auto 28px; gap: 7px; }
       .sale-cart-row > span:nth-child(3) { grid-column: 2; grid-row: 2; }
@@ -306,7 +384,7 @@
       .modal-body { padding: 15px 16px 5px; }
       .modal-footer { padding: 12px 16px max(12px, env(safe-area-inset-bottom)); }
       .form-grid { gap: 10px; }
-      .size-row { grid-template-columns: 1fr 85px 76px 29px; gap: 5px; }
+      .size-row { grid-template-columns: 1fr 68px 55px 75px 29px; gap: 4px; }
       .addon-row { grid-template-columns: 1fr 71px 71px 29px; gap: 5px; }
       .recipe-row { grid-template-columns: 1fr 83px 29px; gap: 5px; }
       .size-row input, .addon-row input, .recipe-row input, .recipe-row select { padding: 0 6px; font-size: 10px; }
@@ -338,6 +416,7 @@
       <nav class="nav" aria-label="Menu principal">
         <button class="active" data-page="inicio"><span class="nav-icon">⌂</span>Visão geral</button>
         <button data-page="vendas"><span class="nav-icon">＋</span>Vendas e pedidos</button>
+        <button data-page="pedidos"><span class="nav-icon">▣</span>Acompanhar pedidos</button>
         <button data-page="cardapio"><span class="nav-icon">▤</span>Cardápio digital</button>
         <button data-page="caixa"><span class="nav-icon">▣</span>Caixa</button>
         <button data-page="relatorios"><span class="nav-icon">▥</span>Relatórios</button>
@@ -353,7 +432,7 @@
     <main class="main">
       <header class="topbar">
         <div class="crumb">Meu delivery <span> / </span> <strong id="crumbTitle">Visão geral</strong></div>
-        <div class="user-chip"><span class="sync-status" id="syncStatus"></span><span class="user-avatar" id="userAvatar">B</span><span id="userEmail">Meu negócio</span><button class="button small" id="signOutButton" type="button">Sair</button></div>
+        <div class="user-chip"><button class="button small pdv-back" data-action="return-to-system" type="button">Voltar ao sistema</button><span class="sync-status" id="syncStatus"></span><span class="user-avatar" id="userAvatar">B</span><span id="userEmail">Meu negócio</span><button class="button small" id="signOutButton" type="button">Sair</button></div>
       </header>
       <div class="content" id="pageContent"></div>
     </main>
@@ -361,9 +440,9 @@
   <nav class="bottom-nav" aria-label="Navegação mobile">
     <button class="active" data-page="inicio"><span class="nav-icon">⌂</span>Início</button>
     <button data-page="vendas"><span class="nav-icon">＋</span>Vendas</button>
+    <button data-page="pedidos"><span class="nav-icon">▣</span>Pedidos</button>
     <button data-page="cardapio"><span class="nav-icon">▤</span>Cardápio</button>
     <button data-page="caixa"><span class="nav-icon">▣</span>Caixa</button>
-    <button data-page="relatorios"><span class="nav-icon">▥</span>Relatórios</button>
     <button data-page="mais"><span class="nav-icon">•••</span>Mais</button>
   </nav>
   <div class="modal-backdrop" id="modalBackdrop" role="presentation">
@@ -389,6 +468,7 @@
       let authMode = "signin";
       const seedData = {
         pizzaEnabled: true,
+        pizzaPricingMode: "size",
         customers: [],
         sales: [],
         cashSessions: [],
@@ -446,6 +526,7 @@
           return {
             ...JSON.parse(JSON.stringify(seedData)),
             ...parsed,
+            pizzaPricingMode: parsed.pizzaPricingMode === "highest" ? "highest" : "size",
             products,
             customers: Array.isArray(parsed.customers) ? parsed.customers : [],
             sales: Array.isArray(parsed.sales) ? parsed.sales : [],
@@ -528,6 +609,7 @@
           state = {
             ...JSON.parse(JSON.stringify(seedData)),
             ...parsed,
+            pizzaPricingMode: parsed.pizzaPricingMode === "highest" ? "highest" : "size",
             customers: Array.isArray(parsed.customers) ? parsed.customers : [],
             sales: Array.isArray(parsed.sales) ? parsed.sales : [],
             cashSessions: Array.isArray(parsed.cashSessions) ? parsed.cashSessions : []
@@ -560,7 +642,8 @@
       }
 
       async function initializeAuth() {
-        if (new URLSearchParams(location.search).has("cardapio")) {
+        const params = new URLSearchParams(location.search);
+        if (params.has("cardapio")) {
           document.getElementById("authGate").hidden = true;
           document.querySelector(".app-shell").hidden = false;
           document.querySelector(".bottom-nav").hidden = true;
@@ -569,6 +652,7 @@
           renderPublicMenu();
           return;
         }
+        if (params.has("pdv")) document.body.classList.add("pdv-mode");
         if (!supabaseClient) {
           showAuth("Não foi possível carregar o SDK do Supabase. Confira sua conexão e recarregue a página.");
           document.getElementById("authSubmit").disabled = true;
@@ -618,6 +702,85 @@
         return [{ name: "Padrão", price: product.price, factor: 1 }];
       }
 
+      function normalizedPizzaSize(name) {
+        return String(name || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase("pt-BR");
+      }
+
+      function defaultPizzaFlavorLimit(sizeName) {
+        const size = normalizedPizzaSize(sizeName);
+        if (/\b(broto|pequena|pequeno|individual|mini|p)\b/.test(size)) return 1;
+        if (/\b(media|medio|m)\b/.test(size)) return 2;
+        if (/\b(grande|familia|gigante|g)\b/.test(size)) return 3;
+        return 1;
+      }
+
+      function pizzaFlavorLimit(option) {
+        const configuredLimit = Number(option?.flavorLimit);
+        return Number.isInteger(configuredLimit) && configuredLimit > 0 ? configuredLimit : defaultPizzaFlavorLimit(option?.name);
+      }
+
+      function pizzaFlavorsForSize(product, sizeName) {
+        const matching = activeSaleProducts()
+          .filter(item => item.category === "pizza")
+          .map(item => ({ product: item, option: productOptions(item).find(option => normalizedPizzaSize(option.name) === normalizedPizzaSize(sizeName)) }))
+          .filter(item => item.option);
+        return [
+          ...matching.filter(item => item.product.id === product.id),
+          ...matching.filter(item => item.product.id !== product.id)
+        ];
+      }
+
+      function renderPizzaFlavorPicker(product, sizeName, flavorAttribute = "data-public-flavor") {
+        const option = productOptions(product).find(item => normalizedPizzaSize(item.name) === normalizedPizzaSize(sizeName));
+        const limit = pizzaFlavorLimit(option);
+        const flavors = pizzaFlavorsForSize(product, sizeName);
+        const flavorLabel = limit === 1 ? "sabor" : "sabores";
+        return `<div class="pizza-flavor-picker" data-pizza-flavor-picker><span class="section-label">Escolha até ${limit} ${flavorLabel} para ${escapeHtml(sizeName)}</span><div class="sale-addons" role="group" aria-label="Escolha até ${limit} ${flavorLabel}">${flavors.map(({ product: flavor }) => `<label class="addon-choice"><input type="checkbox" ${flavorAttribute}="${escapeHtml(flavor.id)}" ${flavor.id === product.id ? "checked" : ""}>${escapeHtml(flavor.name)}</label>`).join("")}</div></div>`;
+      }
+
+      function renderPublicBorderPicker(product) {
+        return `<details class="border-picker"><summary data-border-summary>Borda: Sem borda · toque para escolher</summary><div class="sale-addons" role="radiogroup" aria-label="Escolha uma borda">${productBorderOptions(product).map((border, index) => `<label class="addon-choice"><input type="radio" name="publicBorder-${escapeHtml(product.id)}" data-public-border="${index}" aria-label="${escapeHtml(border.name)}" ${index === 0 ? "checked" : ""}>${escapeHtml(border.name)}${border.price ? ` + ${money(border.price)}` : ""}</label>`).join("")}</div></details>`;
+      }
+
+      function selectedPizzaOptions(container, sizeName, flavorAttribute = "data-public-flavor") {
+        return [...container.querySelectorAll(`[${flavorAttribute}]:checked`)]
+          .map(input => state.products.find(product => product.id === input.getAttribute(flavorAttribute)))
+          .filter(Boolean)
+          .map(product => ({
+            product,
+            option: productOptions(product).find(item => normalizedPizzaSize(item.name) === normalizedPizzaSize(sizeName))
+          }))
+          .filter(item => item.option);
+      }
+
+      function publicProductPrice(card, product) {
+        const options = productOptions(product);
+        const selectedOption = card.querySelector("[data-public-option]").value;
+        if (product.category === "pizza" && selectedOption === "") return null;
+        const option = options[Number(selectedOption)];
+        if (!option) return 0;
+        const flavorOptions = product.category === "pizza" ? selectedPizzaOptions(card, option.name) : [];
+        const flavorPrices = flavorOptions.map(item => number(item.option.price));
+        const price = product.category !== "pizza" || state.pizzaPricingMode !== "highest"
+          ? (flavorPrices[0] ?? number(option.price))
+          : Math.max(...flavorPrices);
+        const borderIndex = Number(card.querySelector("[data-public-border]:checked")?.dataset.publicBorder || 0);
+        const border = product.category === "pizza" ? productBorderOptions(product)[borderIndex] : null;
+        const addons = [...card.querySelectorAll("[data-public-addon]:checked")].reduce((sum, input) => {
+          const addon = product.addons[Number(input.dataset.publicAddon)];
+          return sum + number(addon?.price);
+        }, 0);
+        return roundMoney(price + number(border?.price) + addons);
+      }
+
+      function updatePublicPrice(card, product) {
+        const label = card.querySelector("[data-public-price]");
+        if (label) {
+          const price = publicProductPrice(card, product);
+          label.textContent = price === null ? "Escolha o tamanho para ver o preço." : `Valor desta pizza: ${money(price)}`;
+        }
+      }
+
       function productCost(product, option) {
         return product.category === "bebida" ? number(product.cost) : recipeCost(product, number(option?.factor) || 1);
       }
@@ -641,16 +804,31 @@
       }
 
       function render() {
-        const labels = { inicio: "Visão geral", vendas: "Vendas e pedidos", cardapio: "Cardápio digital", caixa: "Caixa", relatorios: "Relatórios", clientes: "Clientes", produtos: "Produtos e cardápio", insumos: "Insumos e custos", configuracoes: "Configurações", mais: "Mais opções" };
-        if (new URLSearchParams(location.search).has("cardapio")) {
+        const labels = { inicio: "Visão geral", vendas: "Vendas e pedidos", pedidos: "Acompanhar pedidos", cardapio: "Cardápio digital", caixa: "Caixa", relatorios: "Relatórios", clientes: "Clientes", produtos: "Produtos e cardápio", insumos: "Insumos e custos", configuracoes: "Configurações", mais: "Mais opções" };
+        const params = new URLSearchParams(location.search);
+        if (params.has("cardapio")) {
           document.body.classList.add("public-menu");
           renderPublicMenu();
           return;
         }
-        document.getElementById("crumbTitle").textContent = labels[currentPage];
+        let standalonePdv = params.has("pdv");
+        if (standalonePdv && !currentCashSession()) {
+          params.delete("pdv");
+          const deniedUrl = new URL(location.href);
+          deniedUrl.searchParams.delete("pdv");
+          history.replaceState(null, "", deniedUrl);
+          standalonePdv = false;
+          currentPage = "vendas";
+          document.body.classList.remove("pdv-mode");
+          showToast("Abra o caixa antes de acessar o PDV.");
+        }
+        document.body.classList.toggle("pdv-mode", standalonePdv);
+        if (standalonePdv) currentPage = "vendas";
+        document.getElementById("crumbTitle").textContent = standalonePdv ? "PDV" : labels[currentPage];
         document.querySelectorAll("[data-page]").forEach(button => button.classList.toggle("active", button.dataset.page === currentPage));
         if (currentPage === "inicio") renderDashboard();
         if (currentPage === "vendas") renderSales();
+        if (currentPage === "pedidos") renderOrders();
         if (currentPage === "cardapio") renderDigitalMenu();
         if (currentPage === "caixa") renderCash();
         if (currentPage === "relatorios") renderReports();
@@ -718,6 +896,7 @@
       }
 
       function renderSales() {
+        const standalonePdv = new URLSearchParams(location.search).has("pdv");
         const products = activeSaleProducts();
         const customerOptions = state.customers.map(customer => `<option value="${customer.id}">${escapeHtml(customer.name)}${customer.phone ? ` · ${escapeHtml(customer.phone)}` : ""}</option>`).join("");
         const history = [...state.sales].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -729,7 +908,7 @@
           </div>`).join("") : `<div class="empty-state">Adicione produtos para começar a venda.</div>`;
         const total = saleCart.reduce((sum, item) => sum + saleLineTotal(item), 0);
         document.getElementById("pageContent").innerHTML = `
-          <div class="page-heading"><div><div class="eyebrow">Caixa do delivery</div><h1>Vendas e pedidos</h1><p class="subtitle">Monte um pedido, escolha o cliente e registre a venda.</p></div><button class="button" data-page="clientes">♙ Cadastrar cliente</button></div>
+          <div class="page-heading"><div><div class="eyebrow">${standalonePdv ? "Ponto de venda" : "Caixa do delivery"}</div>${standalonePdv ? `<div class="pdv-title"><span class="stat-icon">＋</span><h1>PDV</h1></div>` : `<h1>Vendas e pedidos</h1>`}<p class="subtitle">${standalonePdv ? "Registre vendas rapidamente no ponto de atendimento." : "Monte um pedido, escolha o cliente e registre a venda."}</p></div>${standalonePdv ? `<span class="pill ${currentCashSession() ? "" : "orange"}">${currentCashSession() ? "Caixa aberto" : "Caixa fechado"}</span>` : `<div class="filters"><button class="button" data-action="open-pdv">Abrir PDV ↗</button><button class="button" data-page="clientes">♙ Cadastrar cliente</button></div>`}</div>
           <section class="sale-grid">
             <div class="sale-builder">
               <article class="panel"><div class="panel-heading"><h2>Adicionar produtos</h2><span>${products.length} produto${products.length === 1 ? " disponível" : "s disponíveis"}</span></div>
@@ -738,14 +917,15 @@
                   <div class="field" id="saleOptionField"><label for="saleOption">Tamanho / opção</label><select id="saleOption" name="optionIndex" required disabled><option value="">Escolha primeiro o produto</option></select></div>
                   <div class="field"><label for="saleQuantity">Qtd.</label><input id="saleQuantity" name="quantity" type="number" min="1" step="1" value="1" required></div>
                   <button type="submit" class="button primary">＋ Adicionar</button>
+                  <div id="saleFlavorChoices" class="sale-addons"></div>
                   <div id="saleBorderChoices" class="sale-addons"></div>
                   <div id="saleAddonChoices" class="sale-addons"></div>
                 </form>` : `<div class="empty-state">Não há produtos ativos no cardápio. Cadastre ou ative produtos antes de vender.</div>`}
               </article>
-              <article class="panel"><div class="panel-heading"><h2>Pedidos registrados</h2><span>${history.length} pedido${history.length === 1 ? "" : "s"}</span></div>
+              ${standalonePdv ? "" : `<article class="panel"><div class="panel-heading"><h2>Pedidos registrados</h2><span>${history.length} pedido${history.length === 1 ? "" : "s"}</span></div>
                 ${!currentCashSession() ? `<div class="callout" style="margin:0 0 12px"><span>ⓘ</span><div><b>Caixa fechado</b>Abra o caixa para registrar vendas e receber pedidos. <button class="button small" data-page="caixa">Abrir caixa</button></div></div>` : ""}
                 ${history.length ? `<div class="table-wrap"><table><thead><tr><th>Pedido</th><th>Cliente</th><th>Itens</th><th>Total</th><th>Pagamento</th><th>Recebimento</th><th>Status</th></tr></thead><tbody>${history.map(sale => `<tr><td>#${escapeHtml(sale.id.slice(-5))}<br><span class="helper">${new Date(sale.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span></td><td>${escapeHtml(sale.customerName || "Balcão")}</td><td>${sale.items.reduce((sum, item) => sum + number(item.quantity), 0)}</td><td>${money(sale.total)}</td><td>${escapeHtml(sale.payment)}</td><td>${sale.paid ? `<span class="pill">Pago</span>` : `<button class="button small" data-action="receive-sale" data-id="${sale.id}" ${currentCashSession() ? "" : "disabled"}>Receber</button>`}</td><td><select class="order-status-select" data-sale-status="${sale.id}" aria-label="Status do pedido">${["Recebido", "Em preparo", "Saiu para entrega", "Concluído", "Cancelado"].map(status => `<option ${sale.status === status ? "selected" : ""}>${status}</option>`).join("")}</select></td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">Suas vendas aparecerão aqui depois que você registrar o primeiro pedido.</div>`}
-              </article>
+              </article>`}
             </div>
             <article class="panel"><div class="panel-heading"><h2>Resumo do pedido</h2><span>${saleCart.reduce((sum, item) => sum + number(item.quantity), 0)} item(ns)</span></div>
               ${cartHtml}
@@ -754,12 +934,14 @@
                 <div class="field"><label for="saleCustomer">Cliente</label><select id="saleCustomer" name="customerId"><option value="">Venda de balcão / sem cadastro</option>${customerOptions}</select></div>
                 <div class="field"><label for="salePayment">Forma de pagamento</label><select id="salePayment" name="payment" required><option>Pix</option><option>Dinheiro</option><option>Cartão de crédito</option><option>Cartão de débito</option></select></div>
                 <button type="submit" class="button primary" ${saleCart.length && currentCashSession() ? "" : "disabled"}>Registrar venda · ${money(total)}</button>
-                ${!currentCashSession() ? `<p class="helper">Abra o caixa para registrar uma venda paga. <button type="button" class="button small" data-page="caixa">Abrir caixa</button></p>` : ""}
+                ${!currentCashSession() && !standalonePdv ? `<p class="helper">Abra o caixa para registrar uma venda paga. <button type="button" class="button small" data-page="caixa">Abrir caixa</button></p>` : ""}
               </form>
             </article>
           </section>`;
         const productSelect = document.getElementById("saleProduct");
         if (productSelect) productSelect.addEventListener("change", updateSaleProductOptions);
+        const optionSelect = document.getElementById("saleOption");
+        if (optionSelect) optionSelect.addEventListener("change", updateSalePizzaFlavorOptions);
         const addForm = document.getElementById("addSaleItemForm");
         if (addForm) addForm.addEventListener("submit", addSaleItem);
         document.getElementById("checkoutForm").addEventListener("submit", finishSale);
@@ -769,23 +951,60 @@
       function updateSaleProductOptions() {
         const product = state.products.find(item => item.id === document.getElementById("saleProduct").value);
         const optionSelect = document.getElementById("saleOption");
+        const flavorContainer = document.getElementById("saleFlavorChoices");
         const borderContainer = document.getElementById("saleBorderChoices");
         const addonContainer = document.getElementById("saleAddonChoices");
         if (!product) {
           optionSelect.innerHTML = `<option value="">Escolha primeiro o produto</option>`;
           optionSelect.disabled = true;
+          flavorContainer.innerHTML = "";
           borderContainer.innerHTML = "";
           addonContainer.innerHTML = "";
           return;
         }
         const options = productOptions(product);
-        optionSelect.innerHTML = options.map((option, index) => `<option value="${index}">${escapeHtml(option.name)} · ${money(option.price)}</option>`).join("");
-        optionSelect.disabled = options.length <= 1;
+        optionSelect.innerHTML = `${product.category === "pizza" ? `<option value="">Escolha o tamanho</option>` : ""}${options.map((option, index) => `<option value="${index}">${escapeHtml(option.name)} · ${money(option.price)}</option>`).join("")}`;
+        optionSelect.disabled = false;
         optionSelect.required = product.category === "pizza";
-        borderContainer.innerHTML = product.category === "pizza"
-          ? `<span class="section-label">Escolha a borda</span>${productBorderOptions(product).map((border, index) => `<label class="addon-choice"><input type="radio" name="saleBorder" value="${index}" ${index === 0 ? "checked" : ""}>${escapeHtml(border.name)}${border.price ? ` + ${money(border.price)}` : ""}</label>`).join("")}`
-          : "";
+        flavorContainer.innerHTML = "";
+        borderContainer.innerHTML = "";
+        flavorContainer.onchange = null;
         addonContainer.innerHTML = (product.addons || []).map((addon, index) => `<label class="addon-choice"><input type="checkbox" name="saleAddon" value="${index}">${escapeHtml(addon.name)} + ${money(addon.price)}</label>`).join("");
+      }
+
+      function updateSalePizzaFlavorOptions() {
+        const product = state.products.find(item => item.id === document.getElementById("saleProduct").value);
+        const optionIndex = document.getElementById("saleOption").value;
+        const flavorContainer = document.getElementById("saleFlavorChoices");
+        const borderContainer = document.getElementById("saleBorderChoices");
+        if (!product || product.category !== "pizza" || optionIndex === "") {
+          flavorContainer.innerHTML = "";
+          borderContainer.innerHTML = "";
+          return;
+        }
+        const option = productOptions(product)[Number(optionIndex)];
+        if (!option) {
+          flavorContainer.innerHTML = "";
+          borderContainer.innerHTML = "";
+          return;
+        }
+        flavorContainer.innerHTML = renderPizzaFlavorPicker(product, option.name, "data-sale-flavor");
+        borderContainer.innerHTML = `<span class="section-label">Escolha a borda</span>${productBorderOptions(product).map((border, index) => `<label class="addon-choice"><input type="radio" name="saleBorder" value="${index}" ${index === 0 ? "checked" : ""}>${escapeHtml(border.name)}${border.price ? ` + ${money(border.price)}` : ""}</label>`).join("")}`;
+        flavorContainer.onchange = event => enforcePizzaFlavorLimit(event, flavorContainer, product, option, "data-sale-flavor");
+      }
+
+      function enforcePizzaFlavorLimit(event, container, product, option, flavorAttribute) {
+        const input = event.target.closest(`[${flavorAttribute}]`);
+        if (!input) return;
+        const selected = [...container.querySelectorAll(`[${flavorAttribute}]:checked`)];
+        const limit = pizzaFlavorLimit(option);
+        if (selected.length > limit) {
+          input.checked = false;
+          showToast(`Esse tamanho permite até ${limit} sabor${limit === 1 ? "" : "es"}.`);
+        } else if (!selected.length) {
+          input.checked = true;
+          showToast("Escolha pelo menos um sabor.");
+        }
       }
 
       function addSaleItem(event) {
@@ -804,19 +1023,31 @@
           showToast("Escolha um tamanho ou opção para o produto.");
           return;
         }
+        const flavorOptions = product.category === "pizza"
+          ? selectedPizzaOptions(form, option.name, "data-sale-flavor")
+          : [{ product, option }];
+        const flavorLimit = product.category === "pizza" ? pizzaFlavorLimit(option) : 1;
+        if (product.category === "pizza" && (!flavorOptions.length || flavorOptions.length > flavorLimit)) {
+          showToast(`Escolha de 1 a ${flavorLimit} sabor${flavorLimit === 1 ? "" : "es"} para o tamanho ${option.name}.`);
+          return;
+        }
         const addons = [...form.querySelectorAll("input[name='saleAddon']:checked")].map(input => {
           const addon = product.addons[Number(input.value)];
           return { name: addon.name, price: number(addon.price), cost: number(addon.cost) };
         });
         const borderIndex = Number(form.querySelector("input[name='saleBorder']:checked")?.value || 0);
         const border = product.category === "pizza" ? productBorderOptions(product)[borderIndex] : null;
+        const prices = flavorOptions.map(item => number(item.option.price));
+        const price = product.category !== "pizza" || state.pizzaPricingMode !== "highest" ? prices[0] : Math.max(...prices);
+        const cost = flavorOptions.reduce((sum, item) => sum + productCost(item.product, item.option), 0) / flavorOptions.length;
         saleCart.push({
           productId: product.id,
-          name: product.name,
+          name: flavorOptions.map(item => item.product.name).join(" / "),
+          flavors: flavorOptions.map(item => item.product.name),
           category: product.category,
           optionName: option.name,
-          price: number(option.price),
-          cost: productCost(product, option),
+          price: roundMoney(price),
+          cost: roundMoney(cost),
           quantity: Math.max(1, Math.floor(number(data.get("quantity")))),
           border: border ? { ...border } : null,
           addons
@@ -865,15 +1096,72 @@
       function updateSaleStatus(event) {
         const sale = state.sales.find(item => item.id === event.currentTarget.dataset.saleStatus);
         if (!sale) return;
+        changeSaleStatus(sale, event.currentTarget.value);
+      }
+
+      function changeSaleStatus(sale, status) {
         const previousStatus = sale.status;
-        sale.status = event.currentTarget.value;
+        sale.status = status;
         if (!saveState()) {
           sale.status = previousStatus;
-          renderSales();
+          render();
           return;
         }
-        renderSales();
+        render();
         showToast("Status do pedido atualizado.");
+      }
+
+      function renderOrders() {
+        const statusColumns = [
+          { status: "Recebido", label: "Novos" },
+          { status: "Em preparo", label: "Preparando" },
+          { status: "Saiu para entrega", label: "Na entrega" },
+          { status: "Concluído", label: "Finalizados" }
+        ];
+        const activeStatuses = statusColumns.slice(0, 3).map(column => column.status);
+        const activeOrders = state.sales.filter(sale => activeStatuses.includes(sale.status || "Recebido"));
+        const newOrders = state.sales.filter(sale => (sale.status || "Recebido") === "Recebido");
+        const completedOrders = state.sales.filter(sale => sale.status === "Concluído");
+        const cancelledOrders = [...state.sales].filter(sale => sale.status === "Cancelado").sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        const statuses = ["Recebido", "Em preparo", "Saiu para entrega", "Concluído", "Cancelado"];
+        const statusOptions = selected => statuses.map(status => `<option ${selected === status ? "selected" : ""}>${status}</option>`).join("");
+        const card = sale => {
+          const createdAt = new Date(sale.createdAt);
+          const elapsedMinutes = Math.max(0, Math.floor((Date.now() - createdAt.getTime()) / 60000));
+          const elapsed = Number.isFinite(elapsedMinutes)
+            ? elapsedMinutes < 60 ? `${elapsedMinutes} min` : `${Math.floor(elapsedMinutes / 60)}h ${elapsedMinutes % 60}min`
+            : "Horário indisponível";
+          const items = (sale.items || []).map(item => {
+            const details = [item.optionName, item.border?.name, ...(item.addons || []).map(addon => addon.name)].filter(Boolean);
+            return `<div class="order-card-item"><strong>${number(item.quantity)}×</strong> ${escapeHtml(item.name || "Produto")}${details.length ? `<small>${escapeHtml(details.join(" · "))}</small>` : ""}</div>`;
+          }).join("");
+          const nextStatus = { "Recebido": "Em preparo", "Em preparo": "Saiu para entrega", "Saiu para entrega": "Concluído" }[sale.status || "Recebido"];
+          const nextLabel = { "Recebido": "Iniciar preparo", "Em preparo": "Saiu para entrega", "Saiu para entrega": "Finalizar pedido" }[sale.status || "Recebido"];
+          return `<article class="order-card">
+            <div class="order-card-top"><span class="order-card-id">Pedido #${escapeHtml(String(sale.id || "").slice(-5))}</span><span class="order-card-age">${elapsed}</span></div>
+            <div class="order-card-customer">${escapeHtml(sale.customerName || "Balcão")}</div>
+            ${sale.customerPhone ? `<div class="order-card-contact">${escapeHtml(sale.customerPhone)}</div>` : ""}
+            <div class="order-card-items">${items || `<div class="order-card-item">Itens não informados</div>`}</div>
+            <div class="order-card-total"><span>${(sale.items || []).reduce((sum, item) => sum + number(item.quantity), 0)} item(ns)</span><strong>${money(sale.total)}</strong></div>
+            <div class="order-card-meta"><span>${escapeHtml(sale.payment || "Pagamento pendente")}</span><span>${sale.paid ? "Pago" : "Pendente"}</span></div>
+            <div class="order-card-actions">${nextStatus ? `<button type="button" class="button primary" data-action="advance-order" data-id="${escapeHtml(sale.id)}" data-status="${nextStatus}">${nextLabel} →</button>` : ""}<select class="order-status-select" data-sale-status="${escapeHtml(sale.id)}" aria-label="Alterar status do pedido">${statusOptions(sale.status || "Recebido")}</select></div>
+          </article>`;
+        };
+        const columns = statusColumns.map(column => {
+          const orders = [...state.sales].filter(sale => (sale.status || "Recebido") === column.status).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+          return `<section class="orders-column"><div class="orders-column-head"><h2>${column.label}</h2><span class="orders-column-count">${orders.length}</span></div><div class="orders-column-list">${orders.map(card).join("") || `<div class="orders-empty">Nenhum pedido nesta etapa.</div>`}</div></section>`;
+        }).join("");
+        document.getElementById("pageContent").innerHTML = `
+          <div class="page-heading"><div><div class="eyebrow">Acompanhe a operação</div><h1>Pedidos</h1><p class="subtitle">Veja cada pedido por etapa e atualize o andamento com um toque.</p></div><button class="button" data-page="vendas">＋ Nova venda</button></div>
+          <section class="orders-summary">
+            <article class="orders-summary-card"><span>Em andamento</span><strong>${activeOrders.length}</strong></article>
+            <article class="orders-summary-card"><span>Novos</span><strong>${newOrders.length}</strong></article>
+            <article class="orders-summary-card"><span>Finalizados</span><strong>${completedOrders.length}</strong></article>
+            <article class="orders-summary-card"><span>Cancelados</span><strong>${cancelledOrders.length}</strong></article>
+          </section>
+          <div class="orders-board">${columns}</div>
+          ${cancelledOrders.length ? `<details class="orders-cancelled"><summary class="button">Pedidos cancelados (${cancelledOrders.length})</summary><div class="orders-board" style="grid-template-columns:minmax(230px, 1fr);margin-top:10px"><section class="orders-column"><div class="orders-column-list">${cancelledOrders.map(card).join("")}</div></section></div></details>` : ""}`;
+        document.querySelectorAll("[data-sale-status]").forEach(select => select.addEventListener("change", updateSaleStatus));
       }
 
       function receiveSale(sale) {
@@ -984,13 +1272,20 @@
         const groups = ["pizza", "lanche", "bebida"].filter(category => products.some(product => product.category === category));
         if (!groups.includes(digitalCategory)) digitalCategory = groups[0] || null;
         const shownProducts = products.filter(product => product.category === digitalCategory);
-        const items = shownProducts.map(product => `<article class="digital-product-card" data-public-product="${product.id}">
-            <div><h3>${categoryIcon(product.category)} ${escapeHtml(product.name)}</h3><p>${product.category === "pizza" ? `${productOptions(product).length} tamanho(s) disponível(is)` : product.category === "bebida" ? "Bebida gelada" : "Feito na hora"}</p>
-              <div class="field"><label>Opção / tamanho</label><select data-public-option>${productOptions(product).map((option, index) => `<option value="${index}">${escapeHtml(option.name)} · ${money(option.price)}</option>`).join("")}</select></div>
-              ${product.category === "pizza" ? `<details class="border-picker"><summary data-border-summary>Borda: Sem borda · toque para escolher</summary><div class="sale-addons" role="radiogroup" aria-label="Escolha uma borda">${productBorderOptions(product).map((border, index) => `<label class="addon-choice"><input type="radio" name="publicBorder-${product.id}" data-public-border="${index}" aria-label="${escapeHtml(border.name)}" ${index === 0 ? "checked" : ""}>${escapeHtml(border.name)}${border.price ? ` + ${money(border.price)}` : ""}</label>`).join("")}</div></details>` : ""}
+        const items = shownProducts.map(product => {
+          const options = productOptions(product);
+          const prices = options.map(option => number(option.price));
+          const priceLabel = prices.length > 1 ? `A partir de ${money(Math.min(...prices))}` : money(prices[0]);
+          return `<details class="digital-product-card" data-public-product="${escapeHtml(product.id)}">
+            <summary class="digital-product-summary"><div><h3>${categoryIcon(product.category)} ${escapeHtml(product.name)}</h3><p>${product.category === "pizza" ? `${options.length} tamanho(s) · escolha o tamanho e depois os sabores` : product.category === "bebida" ? "Bebida gelada" : "Feito na hora"}</p></div><strong>${priceLabel}</strong></summary>
+            <div class="digital-product-options"><div class="field"><label>Opção / tamanho</label><select data-public-option>${product.category === "pizza" ? `<option value="">Escolha o tamanho</option>` : ""}${options.map((option, index) => `<option value="${index}">${escapeHtml(option.name)} · ${money(option.price)}</option>`).join("")}</select></div>
+              ${product.category === "pizza" ? `<div data-pizza-flavor-container></div><div data-pizza-border-container></div>` : ""}
               ${(product.addons || []).length ? `<div class="option-group"><span class="section-label">Adicionais deste produto (opcional)</span><div class="sale-addons">${product.addons.map((addon, index) => `<label class="addon-choice"><input type="checkbox" data-public-addon="${index}">${escapeHtml(addon.name)} + ${money(addon.price)}</label>`).join("")}</div></div>` : ""}
-            </div><button type="button" class="button primary" data-action="public-add" data-id="${product.id}">Adicionar</button>
-          </article>`).join("");
+              ${product.category === "pizza" ? `<p class="helper" data-public-price></p>` : ""}
+              <button type="button" class="button primary" data-action="public-add" data-id="${escapeHtml(product.id)}">Adicionar ao pedido</button>
+            </div>
+          </details>`;
+        }).join("");
         const categoryButtons = groups.map(category => `<button class="filter-btn ${digitalCategory === category ? "active" : ""}" data-public-category="${category}">${categoryIcon(category)} ${categoryName(category)}s</button>`).join("");
         document.getElementById("pageContent").innerHTML = `
           <header class="digital-hero"><div><div class="eyebrow" style="color:var(--lime)">BORA! DELIVERY</div><h1>Peça algo gostoso.</h1><p>Escolha seus favoritos e receba em casa.</p></div><button class="button" data-action="return-to-system">Voltar ao sistema</button></header>
@@ -1007,10 +1302,31 @@
             <button type="submit" class="button primary" ${digitalCart.length ? "" : "disabled"}>Enviar pedido · ${money(digitalCart.reduce((sum, item) => sum + saleLineTotal(item), 0))}</button></form>
           </section>`;
         document.querySelectorAll("[data-public-product]").forEach(card => {
-          card.querySelectorAll("[data-public-border]").forEach(input => input.addEventListener("change", () => {
-            const border = productBorderOptions(state.products.find(product => product.id === card.dataset.publicProduct))[Number(input.dataset.publicBorder)];
-            card.querySelector("[data-border-summary]").textContent = `Borda: ${border.name}${border.price ? ` · + ${money(border.price)}` : ""} · toque para alterar`;
-          }));
+          const product = state.products.find(item => item.id === card.dataset.publicProduct);
+          if (product.category === "pizza") {
+            updatePublicPrice(card, product);
+            const optionSelect = card.querySelector("[data-public-option]");
+            optionSelect.addEventListener("change", () => {
+              const option = productOptions(product)[Number(optionSelect.value)];
+              const flavorContainer = card.querySelector("[data-pizza-flavor-container]");
+              flavorContainer.innerHTML = option ? renderPizzaFlavorPicker(product, option.name) : "";
+              card.querySelector("[data-pizza-border-container]").innerHTML = option ? renderPublicBorderPicker(product) : "";
+              updatePublicPrice(card, product);
+            });
+            card.addEventListener("change", event => {
+              const input = event.target.closest("[data-public-flavor]");
+              if (input) {
+                const option = productOptions(product)[Number(optionSelect.value)];
+                if (option) enforcePizzaFlavorLimit(event, card.querySelector("[data-pizza-flavor-container]"), product, option, "data-public-flavor");
+              }
+              const borderInput = event.target.closest("[data-public-border]");
+              if (borderInput) {
+                const border = productBorderOptions(product)[Number(borderInput.dataset.publicBorder)];
+                card.querySelector("[data-border-summary]").textContent = `Borda: ${border.name}${border.price ? ` · + ${money(border.price)}` : ""} · toque para alterar`;
+              }
+              updatePublicPrice(card, product);
+            });
+          }
         });
         document.getElementById("digitalCheckout").addEventListener("submit", submitDigitalOrder);
       }
@@ -1023,20 +1339,41 @@
         }
         const card = document.querySelector(`[data-public-product="${productId}"]`);
         const options = productOptions(product);
-        const option = options[Number(card.querySelector("[data-public-option]").value)] || options[0];
+        const selectedOption = card.querySelector("[data-public-option]").value;
+        if (product.category === "pizza" && selectedOption === "") {
+          showToast("Escolha o tamanho da pizza antes de selecionar os sabores.");
+          return;
+        }
+        const option = options[Number(selectedOption)] || options[0];
+        const flavorOptions = product.category === "pizza"
+          ? selectedPizzaOptions(card, option.name)
+          : [{ product, option }];
+        if (product.category === "pizza") {
+          const limit = pizzaFlavorLimit(option);
+          if (!flavorOptions.length || flavorOptions.length > limit) {
+            showToast(`Escolha de 1 a ${limit} sabor${limit === 1 ? "" : "es"} para o tamanho ${option.name}.`);
+            return;
+          }
+        }
         const addons = [...card.querySelectorAll("[data-public-addon]:checked")].map(input => {
           const addon = product.addons[Number(input.dataset.publicAddon)];
           return { name: addon.name, price: number(addon.price), cost: number(addon.cost) };
         });
         const borderIndex = Number(card.querySelector("[data-public-border]:checked")?.dataset.publicBorder || 0);
         const border = product.category === "pizza" ? productBorderOptions(product)[borderIndex] : null;
+        const prices = flavorOptions.map(item => number(item.option.price));
+        const price = product.category !== "pizza" || state.pizzaPricingMode !== "highest"
+          ? prices[0]
+          : Math.max(...prices);
+        const cost = flavorOptions.reduce((sum, item) => sum + productCost(item.product, item.option), 0) / flavorOptions.length;
         digitalCart.push({
           productId: product.id,
-          name: product.name,
+          name: flavorOptions.map(item => item.product.name).join(" / "),
+          flavors: flavorOptions.map(item => item.product.name),
           category: product.category,
           optionName: option.name,
-          price: number(option.price),
-          cost: productCost(product, option),
+          price: roundMoney(price),
+          cost: roundMoney(cost),
           quantity: 1,
           border: border ? { ...border } : null,
           addons
@@ -1052,6 +1389,7 @@
 
       function renderMore() {
         const links = [
+          ["relatorios", "▥", "Relatórios"],
           ["clientes", "♙", "Clientes"],
           ["produtos", "▦", "Produtos e cardápio"],
           ["insumos", "◈", "Insumos e custos"],
@@ -1109,7 +1447,8 @@
           }
         }
         closeModal();
-        renderCash();
+        if (new URLSearchParams(location.search).has("pdv")) renderSales();
+        else renderCash();
         showToast(closeSession ? "Caixa fechado." : "Caixa aberto.");
       }
 
@@ -1208,11 +1547,11 @@
           const extras = (product.addons || []).length;
           const detail = product.category === "pizza" ? `${options.length} tamanho${options.length === 1 ? "" : "s"}` : product.category === "bebida" ? "Custo de compra" : `${(product.recipe || []).length} ingrediente${(product.recipe || []).length === 1 ? "" : "s"}`;
           return `<article class="product-card" data-product-card="${escapeHtml(product.name.toLocaleLowerCase("pt-BR"))}">
-            <div class="product-card-top"><div class="product-card-title"><span class="food-thumb">${categoryIcon(product.category)}</span><div><h3>${escapeHtml(product.name)}</h3><div class="category-label">${categoryName(product.category)} · ${detail}</div></div></div>
-            <button class="icon-button" data-action="edit-product" data-id="${product.id}" aria-label="Editar ${escapeHtml(product.name)}">✎</button></div>
-            <div class="product-pricing"><div><span>Custo base</span><strong>${money(startingCost)}</strong></div><div><span>Preço${product.category === "pizza" ? " inicial" : ""}</span><strong>${money(startingPrice)}</strong></div><div><span>Margem</span><strong class="${margin < 30 ? "margin-cell low" : "margin-cell"}">${margin.toFixed(0)}%</strong></div></div>
-            <div class="product-pricing" style="margin-top:0;padding-top:10px;border-top:0"><div><span>Adicionais</span><strong>${extras}</strong></div><div><span>Status</span><strong>${product.active ? "Ativo" : "Pausado"}</strong></div><div><button class="button small danger" data-action="delete-product" data-id="${product.id}">Excluir</button></div></div>
-            ${extras ? `<div class="helper">${product.addons.map(addon => `${escapeHtml(addon.name)}: vende por ${money(addon.price)}, custa ${money(addon.cost)} · margem ${addon.price ? ((addon.price - addon.cost) / addon.price * 100).toFixed(0) : 0}%`).join("<br>")}</div>` : ""}
+            <div class="product-card-top"><details class="product-details"><summary><div class="product-card-title"><span class="food-thumb">${categoryIcon(product.category)}</span><div><h3>${escapeHtml(product.name)}</h3><div class="category-label">${categoryName(product.category)} · ${detail}</div></div></div></summary>
+              <div class="product-detail-content"><div class="product-pricing" style="margin-top:0"><div><span>Custo base</span><strong>${money(startingCost)}</strong></div><div><span>Preço${product.category === "pizza" ? " inicial" : ""}</span><strong>${money(startingPrice)}</strong></div><div><span>Margem</span><strong class="${margin < 30 ? "margin-cell low" : "margin-cell"}">${margin.toFixed(0)}%</strong></div></div>
+                <div class="product-pricing" style="margin-top:0;padding-top:9px;border-top:0"><div><span>Adicionais</span><strong>${extras}</strong></div><div><span>Status</span><strong>${product.active ? "Ativo" : "Pausado"}</strong></div><div><button class="button small danger" data-action="delete-product" data-id="${escapeHtml(product.id)}">Excluir</button></div></div>
+                ${extras ? `<div class="helper">${product.addons.map(addon => `${escapeHtml(addon.name)}: vende por ${money(addon.price)}, custa ${money(addon.cost)} · margem ${addon.price ? ((addon.price - addon.cost) / addon.price * 100).toFixed(0) : 0}%`).join("<br>")}</div>` : ""}
+              </div></details><button class="icon-button" data-action="edit-product" data-id="${escapeHtml(product.id)}" aria-label="Editar ${escapeHtml(product.name)}">✎</button></div>
           </article>`;
         }).join("");
       }
@@ -1232,6 +1571,7 @@
           <div class="page-heading"><div><div class="eyebrow">Personalize seu sistema</div><h1>Configurações</h1><p class="subtitle">Ative apenas as categorias que fazem parte do seu delivery.</p></div></div>
           <div class="settings-list">
             <div class="setting-item"><div><strong>Trabalho com pizzas</strong><p>Mostra a categoria de pizzas no cardápio e permite cadastrar tamanhos, ficha técnica e adicionais.</p></div><label class="switch" aria-label="Ativar categoria de pizzas"><input id="pizzaToggle" type="checkbox" ${state.pizzaEnabled ? "checked" : ""}><span></span></label></div>
+            ${state.pizzaEnabled ? `<div class="setting-item"><div><strong>Preço de pizzas com mais de um sabor</strong><p>Por tamanho: usa o preço do primeiro sabor na lista; mantenha os sabores com o mesmo preço nesse tamanho. Pelo sabor: cobra o maior preço entre os sabores.</p></div><div class="field pizza-price-control"><label for="pizzaPricingMode">Forma de cobrança</label><select id="pizzaPricingMode"><option value="size" ${state.pizzaPricingMode !== "highest" ? "selected" : ""}>Preço por tamanho</option><option value="highest" ${state.pizzaPricingMode === "highest" ? "selected" : ""}>Preço do sabor mais caro</option></select></div></div>` : ""}
             <div class="setting-item"><div><strong>Categoria de lanches</strong><p>Fichas técnicas com ingredientes, custo de produção e adicionais opcionais.</p></div><span class="pill">Sempre disponível</span></div>
             <div class="setting-item"><div><strong>Categoria de bebidas</strong><p>Informe o custo de compra de cada bebida para acompanhar sua margem.</p></div><span class="pill">Sempre disponível</span></div>
           </div>
@@ -1247,6 +1587,18 @@
           }
           render();
           showToast(state.pizzaEnabled ? "Categoria de pizzas ativada." : "Categoria de pizzas desativada.");
+        });
+        const pizzaPricingMode = document.getElementById("pizzaPricingMode");
+        if (pizzaPricingMode) pizzaPricingMode.addEventListener("change", event => {
+          const previousMode = state.pizzaPricingMode;
+          state.pizzaPricingMode = event.target.value === "highest" ? "highest" : "size";
+          if (!saveState()) {
+            state.pizzaPricingMode = previousMode;
+            render();
+            return;
+          }
+          render();
+          showToast("Forma de cobrança das pizzas atualizada.");
         });
       }
 
@@ -1287,7 +1639,8 @@
       }
 
       function sizeRow(item = {}) {
-        return `<div class="size-row"><input name="sizeName" required maxlength="30" value="${escapeHtml(item.name || "")}" placeholder="Tamanho"><input name="sizePrice" type="number" min="0.01" step="0.01" required value="${item.price === "" ? "" : number(item.price) || ""}" placeholder="Preço R$"><input name="sizeFactor" type="number" min="0.01" step="0.01" required value="${number(item.factor) || 1}" placeholder="Fator"><button type="button" class="row-remove" data-remove-row aria-label="Remover tamanho">×</button></div>`;
+        const flavorLimit = item.flavorLimit == null ? defaultPizzaFlavorLimit(item.name) : number(item.flavorLimit);
+        return `<div class="size-row"><input name="sizeName" required maxlength="30" value="${escapeHtml(item.name || "")}" placeholder="Tamanho" aria-label="Nome do tamanho"><input name="sizePrice" type="number" min="0.01" step="0.01" required value="${item.price === "" ? "" : number(item.price) || ""}" placeholder="Preço R$" aria-label="Preço"><input name="sizeFactor" type="number" min="0.01" step="0.01" required value="${number(item.factor) || 1}" placeholder="Fator" aria-label="Fator do custo"><input name="sizeFlavorLimit" type="number" min="1" max="20" step="1" required value="${flavorLimit}" placeholder="Sabores" aria-label="Limite de sabores"><button type="button" class="row-remove" data-remove-row aria-label="Remover tamanho">×</button></div>`;
       }
 
       function addonRow(item = {}) {
@@ -1312,7 +1665,7 @@
         if (category === "bebida") {
           specific.innerHTML = `<div class="form-grid" style="margin-top:14px"><div class="field"><label for="drinkCost">Custo de compra (R$)</label><input id="drinkCost" name="drinkCost" type="number" min="0" step="0.01" required value="${product ? number(product.cost) : ""}" placeholder="Ex.: 4,50"></div><div class="field"><label for="productPrice">Preço de venda (R$)</label><input id="productPrice" name="price" type="number" min="0" step="0.01" required value="${product ? number(product.price) : ""}" placeholder="Ex.: 7,50"></div></div>${addonsSection}`;
         } else if (category === "pizza") {
-          specific.innerHTML = `${recipeSection}<div class="form-section"><div class="form-section-head"><div><strong>Tamanhos e preços</strong><div class="helper">O fator multiplica as quantidades da ficha técnica (média = 1).</div></div><button type="button" class="button small" data-add-row="size">＋ Tamanho</button></div><div class="dynamic-rows" id="sizeRows">${sizeRows}</div></div><div class="form-section"><div class="form-section-head"><div><strong>Opções de borda</strong><div class="helper">“Sem borda” será incluída automaticamente. Cadastre aqui as bordas pagas para o cliente escolher.</div></div><button type="button" class="button small" data-add-row="border">＋ Cadastrar borda</button></div><div class="dynamic-rows" id="borderRows">${borderRows}</div></div>${addonsSection}`;
+          specific.innerHTML = `${recipeSection}<div class="form-section"><div class="form-section-head"><div><strong>Tamanhos, preços e sabores</strong><div class="helper">Defina o preço, fator da receita e quantos sabores o cliente pode escolher em cada tamanho.</div></div><button type="button" class="button small" data-add-row="size">＋ Tamanho</button></div><div class="dynamic-rows" id="sizeRows">${sizeRows}</div></div><div class="form-section"><div class="form-section-head"><div><strong>Opções de borda</strong><div class="helper">“Sem borda” será incluída automaticamente. Cadastre aqui as bordas pagas para o cliente escolher.</div></div><button type="button" class="button small" data-add-row="border">＋ Cadastrar borda</button></div><div class="dynamic-rows" id="borderRows">${borderRows}</div></div>${addonsSection}`;
         } else {
           specific.innerHTML = `${recipeSection}<div class="field" style="margin-top:13px"><label for="productPrice">Preço de venda (R$)</label><input id="productPrice" name="price" type="number" min="0" step="0.01" required value="${product ? number(product.price) : ""}" placeholder="Ex.: 27,90"></div>${addonsSection}`;
         }
@@ -1342,7 +1695,7 @@
           row.querySelectorAll("input,select").forEach(input => input.addEventListener(input.tagName === "SELECT" ? "change" : "input", updateRecipeTotal));
         }
         if (type === "size") {
-          rows.insertAdjacentHTML("beforeend", sizeRow({ name: "", price: "", factor: 1 }));
+          rows.insertAdjacentHTML("beforeend", sizeRow({ name: "", price: "", factor: 1, flavorLimit: 1 }));
           rows.lastElementChild.querySelector("[data-remove-row]").addEventListener("click", event => event.currentTarget.parentElement.remove());
         }
         if (type === "border") {
@@ -1407,7 +1760,8 @@
             product.sizes = [...document.querySelectorAll("#sizeRows .size-row")].map(row => ({
               name: row.querySelector("[name='sizeName']").value.trim(),
               price: number(row.querySelector("[name='sizePrice']").value),
-              factor: number(row.querySelector("[name='sizeFactor']").value) || 1
+              factor: number(row.querySelector("[name='sizeFactor']").value) || 1,
+              flavorLimit: Math.min(20, Math.max(1, Math.floor(number(row.querySelector("[name='sizeFlavorLimit']").value) || 1)))
             })).filter(item => item.name);
             product.borderOptions = [...document.querySelectorAll("#borderRows .addon-row")].map(row => ({
               name: row.querySelector("[name='borderName']").value.trim(),
@@ -1541,6 +1895,16 @@
         }
         if (action.dataset.action === "public-add") addDigitalItem(id);
         if (action.dataset.action === "return-to-system") location.href = location.pathname;
+        if (action.dataset.action === "open-pdv") {
+          if (!currentCashSession()) {
+            showToast("Abra o caixa antes de acessar o PDV.");
+            return;
+          }
+          const pdvUrl = new URL(location.href);
+          pdvUrl.searchParams.delete("cardapio");
+          pdvUrl.searchParams.set("pdv", "1");
+          window.open(pdvUrl.toString(), "_blank", "noopener,noreferrer");
+        }
         if (action.dataset.action === "open-public-menu") window.open(`${location.pathname}?cardapio=1`, "_blank", "noopener,noreferrer");
         if (action.dataset.action === "copy-menu-link") {
           const shareUrl = document.getElementById("menuShareUrl")?.value;
@@ -1560,6 +1924,10 @@
         if (action.dataset.action === "open-cash") openCashForm();
         if (action.dataset.action === "close-cash") openCashForm(true);
         if (action.dataset.action === "receive-sale") receiveSale(state.sales.find(sale => sale.id === id));
+        if (action.dataset.action === "advance-order") {
+          const sale = state.sales.find(item => item.id === id);
+          if (sale) changeSaleStatus(sale, action.dataset.status);
+        }
         if (action.dataset.action === "print-report") window.print();
         if (action.dataset.action === "new-product") productForm();
         if (action.dataset.action === "edit-product") productForm(state.products.find(item => item.id === id));
@@ -1601,7 +1969,7 @@
           renderPublicMenu();
           return;
         }
-        if (["vendas", "caixa", "relatorios", "inicio", "clientes"].includes(currentPage)) render();
+        if (["vendas", "pedidos", "caixa", "relatorios", "inicio", "clientes"].includes(currentPage)) render();
       });
       initializeAuth();
     })();
