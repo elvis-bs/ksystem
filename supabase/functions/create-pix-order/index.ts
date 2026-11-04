@@ -55,7 +55,7 @@ Deno.serve(async request => {
     );
     return jsonResponse({
       configured,
-      paymentMethods: ["pix", "cash_on_delivery", "card_on_delivery", "cash_on_pickup", "card_on_pickup"]
+      paymentMethods: ["cash_on_delivery", "cash_on_pickup"]
     });
   }
   if (request.method !== "POST") return jsonResponse({ error: "Method not allowed." }, 405);
@@ -74,9 +74,7 @@ Deno.serve(async request => {
     const address = text(customer.address, 180);
     const notes = text(customer.notes, 300);
     if (!["delivery", "pickup"].includes(fulfillment)) return jsonResponse({ error: "Invalid order fulfillment." }, 400);
-    const allowedPaymentMethods = fulfillment === "pickup"
-      ? ["pix", "cash_on_pickup", "card_on_pickup"]
-      : ["pix", "cash_on_delivery", "card_on_delivery"];
+    const allowedPaymentMethods = fulfillment === "pickup" ? ["cash_on_pickup"] : ["cash_on_delivery"];
     if (!allowedPaymentMethods.includes(paymentMethod)) return jsonResponse({ error: "Invalid payment method for this fulfillment option." }, 400);
     if (customerName.length < 2 || customerPhone.length < 8
       || (paymentMethod === "pix" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail))
