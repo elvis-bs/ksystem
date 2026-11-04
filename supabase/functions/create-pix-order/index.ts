@@ -53,7 +53,10 @@ Deno.serve(async request => {
       Deno.env.get("MP_WEBHOOK_SECRET") &&
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
     );
-    return jsonResponse({ configured });
+    return jsonResponse({
+      configured,
+      paymentMethods: ["pix", "cash_on_delivery", "card_on_delivery", "cash_on_pickup", "card_on_pickup"]
+    });
   }
   if (request.method !== "POST") return jsonResponse({ error: "Method not allowed." }, 405);
 
@@ -62,6 +65,7 @@ Deno.serve(async request => {
     const businessId = text(body.businessId, 50);
     const customer = body.customer as JsonRecord;
     const fulfillment = text(body.fulfillment, 20);
+    const paymentMethod = text(body.paymentMethod, 40);
     if (!/^[0-9a-f-]{36}$/i.test(businessId)) return jsonResponse({ error: "Invalid store." }, 400);
     if (!customer || typeof customer !== "object") return jsonResponse({ error: "Customer information is required." }, 400);
     const customerName = text(customer.name, 70);
@@ -69,10 +73,20 @@ Deno.serve(async request => {
     const customerEmail = text(customer.email, 254).toLowerCase();
     const address = text(customer.address, 180);
     const notes = text(customer.notes, 300);
-    if (customerName.length < 2 || customerPhone.length < 8 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)) {
-      return jsonResponse({ error: "Enter a valid name, phone, and email." }, 400);
-    }
     if (!["delivery", "pickup"].includes(fulfillment)) return jsonResponse({ error: "Invalid order fulfillment." }, 400);
+    const allowedPaymentMethods = fulfillment === "pickup"
+      ? ["pix", "cash_on_pickup", "card_on_pickup"]
+      : ["pix", "cash_on_delivery", "card_on_delivery"];
+    if (!allowedPaymentMethods.includes(paymentMethod)) return jsonResponse({ error: "Invalid payment method for this fulfillment option." }, 400);
+    if (customerName.length < 2 || customerPhone.length < 8
+      || (paymentMethod === "pix" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail))
+      || (customerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail))) {
+      return jsonResponse({
+        error: paymentMethod === "pix"
+          ? "Enter a valid name, phone, and email for Pix payment."
+          : "Enter a valid name and phone number."
+      }, 400);
+    }
     if (fulfillment === "delivery" && address.length < 6) return jsonResponse({ error: "Enter a delivery address." }, 400);
     if (!Array.isArray(body.items) || body.items.length < 1 || body.items.length > 20) {
       return jsonResponse({ error: "The order must contain between 1 and 20 items." }, 400);
@@ -188,15 +202,13 @@ Deno.serve(async request => {
     if (rateLimitError) throw rateLimitError;
     if (!allowed) return jsonResponse({ error: "Muitas tentativas de pedido. Aguarde um minuto e tente novamente." }, 429);
 
-    const projectUrl = Deno.env.get("SUPABASE_URL");
-    if (!projectUrl) throw new Error("Supabase URL is not configured.");
-    const accessToken = await getMercadoPagoAccessToken(client, businessId);
+    const accessToken = paymentMethod === "pix" ? await getMercadoPagoAccessToken(client, businessId) : "";
     const { data: order, error: insertError } = await client
       .from("online_orders")
       .insert({
         business_id: businessId,
         payment_status: "pending",
-        status: "Aguardando Pix",
+        status: paymentMethod === "pix" ? "Aguardando Pix" : "Recebido",
         total: totalCents / 100,
         order_data: {
           customerName,
@@ -206,6 +218,7 @@ Deno.serve(async request => {
           pickupAddress: fulfillment === "pickup" ? text(menu.pickupAddress, 180) : "",
           notes,
           fulfillment,
+          paymentMethod,
           deliveryFee: deliveryFeeCents / 100,
           items: orderItems
         }
@@ -214,6 +227,16 @@ Deno.serve(async request => {
       .single();
     if (insertError) throw insertError;
 
+    if (paymentMethod !== "pix") {
+      return jsonResponse({
+        orderId: order.id,
+        total: totalCents / 100,
+        paymentMethod
+      }, 201);
+    }
+
+    const projectUrl = Deno.env.get("SUPABASE_URL");
+    if (!projectUrl) throw new Error("Supabase URL is not configured.");
     const notificationUrl = new URL(`${projectUrl}/functions/v1/mercadopago-webhook`);
     notificationUrl.searchParams.set("business_id", businessId);
     const paymentResponse = await fetch("https://api.mercadopago.com/v1/payments", {
@@ -264,13 +287,13 @@ Deno.serve(async request => {
       ticketUrl: text(transactionData?.ticket_url, 1000)
     }, 201);
   } catch (error) {
-    console.error("Could not create Pix order:", error);
+    console.error("Could not create online order:", error);
     const message = error instanceof Error ? error.message : "Unexpected error.";
     if (message.includes("not configured")) {
-      return jsonResponse({ error: "O pagamento ainda não está configurado. Fale com a loja." }, 500);
+      return jsonResponse({ error: "O pagamento Pix ainda não está configurado. Fale com a loja ou escolha pagar no recebimento." }, 500);
     }
     if (message.includes("not connected")) {
-      return jsonResponse({ error: "A loja ainda não conectou a conta Mercado Pago." }, 503);
+      return jsonResponse({ error: "A loja ainda não conectou o Mercado Pago. Escolha pagar no recebimento." }, 503);
     }
     return jsonResponse({ error: "Não foi possível criar o pedido. Tente novamente." }, 500);
   }
