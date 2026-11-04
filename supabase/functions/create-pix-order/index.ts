@@ -87,6 +87,9 @@ Deno.serve(async request => {
       .maybeSingle();
     if (menuError) throw menuError;
     if (!publication) return jsonResponse({ error: "This store is not accepting online orders." }, 404);
+    if ((publication.menu as JsonRecord).acceptingOrders !== true) {
+      return jsonResponse({ error: "This store is not accepting online orders." }, 404);
+    }
     if (fulfillment === "pickup" && !publication.pickup_enabled) {
       return jsonResponse({ error: "Pickup is not available for this store." }, 400);
     }

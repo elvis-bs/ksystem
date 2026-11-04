@@ -490,7 +490,7 @@
       let onlineOrders = [];
       let onlineOrderRefreshTimer = null;
       let publicBusinessId = "";
-      let publicOrdering = { deliveryFee: 0, pickupEnabled: false, pickupAddress: "" };
+      let publicOrdering = { deliveryFee: 0, pickupEnabled: false, pickupAddress: "", acceptingOrders: false };
       let publicMenuLoadError = "";
       let digitalFulfillment = "delivery";
       let currentPixOrder = null;
@@ -498,7 +498,7 @@
       const seedData = {
         pizzaEnabled: true,
         pizzaPricingMode: "size",
-        onlineOrdering: { enabled: false, deliveryFee: 0, pickupEnabled: false, pickupAddress: "" },
+        onlineOrdering: { published: false, enabled: false, deliveryFee: 0, pickupEnabled: false, pickupAddress: "" },
         customers: [],
         sales: [],
         cashSessions: [],
@@ -558,6 +558,7 @@
             ...parsed,
             pizzaPricingMode: parsed.pizzaPricingMode === "highest" ? "highest" : "size",
             onlineOrdering: {
+              published: parsed.onlineOrdering?.published === true || parsed.onlineOrdering?.enabled === true,
               enabled: parsed.onlineOrdering?.enabled === true,
               deliveryFee: Math.max(0, Number(parsed.onlineOrdering?.deliveryFee) || 0),
               pickupEnabled: parsed.onlineOrdering?.pickupEnabled === true,
@@ -609,6 +610,7 @@
         return {
           pizzaEnabled: sourceState.pizzaEnabled === true,
           pizzaPricingMode: sourceState.pizzaPricingMode === "highest" ? "highest" : "size",
+          acceptingOrders: onlineOrdering.enabled === true,
           pickupAddress: onlineOrdering.pickupAddress || "",
           products: sourceState.products.filter(product => product.active && (product.category !== "pizza" || sourceState.pizzaEnabled)).map(product => ({
             id: product.id,
@@ -634,7 +636,7 @@
           menu: publicMenuSnapshot(sourceState),
           delivery_fee: Math.max(0, number(onlineOrdering.deliveryFee)),
           pickup_enabled: onlineOrdering.pickupEnabled === true,
-          published: onlineOrdering.enabled === true,
+          published: onlineOrdering.published === true || onlineOrdering.enabled === true,
           updated_at: new Date().toISOString()
         }, { onConflict: "user_id" });
         if (error) throw error;
@@ -731,6 +733,7 @@
             ...parsed,
             pizzaPricingMode: parsed.pizzaPricingMode === "highest" ? "highest" : "size",
             onlineOrdering: {
+              published: parsed.onlineOrdering?.published === true || parsed.onlineOrdering?.enabled === true,
               enabled: parsed.onlineOrdering?.enabled === true,
               deliveryFee: Math.max(0, Number(parsed.onlineOrdering?.deliveryFee) || 0),
               pickupEnabled: parsed.onlineOrdering?.pickupEnabled === true,
@@ -860,7 +863,8 @@
             publicOrdering = {
               deliveryFee: Math.max(0, Number(publication.delivery_fee) || 0),
               pickupEnabled: publication.pickup_enabled === true,
-              pickupAddress: typeof publication.menu.pickupAddress === "string" ? publication.menu.pickupAddress : ""
+              pickupAddress: typeof publication.menu.pickupAddress === "string" ? publication.menu.pickupAddress : "",
+              acceptingOrders: publication.menu.acceptingOrders === true
             };
             digitalFulfillment = "delivery";
           }
@@ -1527,17 +1531,18 @@
         const shareUrl = currentUser ? `${location.href.split("?")[0]}?cardapio=1&loja=${encodeURIComponent(currentUser.id)}` : "";
         document.getElementById("pageContent").innerHTML = `
           <div class="page-heading"><div><div class="eyebrow">Vendas online</div><h1>Cardápio digital</h1><p class="subtitle">Configure produtos, entrega e pagamento Pix para seu cardápio.</p></div></div>
-          <article class="panel" style="margin-bottom:15px"><div class="panel-heading"><h2>Publicação e entrega</h2><span>${onlineOrdering.enabled ? "Ativado" : "Desativado"}</span></div>
-            ${onlineMenuReady && onlinePaymentsReady ? "" : `<div class="callout" style="margin:0 0 13px"><span>ⓘ</span><div><b>Configure os pagamentos antes de publicar</b>Conclua a conexão e a configuração do servidor na aba Pagamentos online.</div><button class="button small" type="button" data-page="pagamentos-online">Abrir configuração</button></div>`}
+          <article class="panel" style="margin-bottom:15px"><div class="panel-heading"><h2>Publicação e entrega</h2><span>${onlineOrdering.published ? "Publicado" : "Não publicado"}</span></div>
+            ${onlineOrdering.enabled && !onlinePaymentsReady ? `<div class="callout" style="margin:0 0 13px"><span>ⓘ</span><div><b>Configure os pagamentos para aceitar pedidos</b>Conclua a conexão e a configuração do servidor na aba Pagamentos online.</div><button class="button small" type="button" data-page="pagamentos-online">Abrir configuração</button></div>` : ""}
             <form class="form-grid" id="onlineOrderingForm">
-              <label class="setting-item full" style="margin:0"><span><strong>Aceitar pedidos online com Pix</strong><p>O pedido só entra na fila de preparo depois que o pagamento for confirmado.</p></span><span class="switch"><input name="enabled" type="checkbox" ${onlineOrdering.enabled ? "checked" : ""}><span></span></span></label>
+              <label class="setting-item full" style="margin:0"><span><strong>Publicar cardápio para visualização</strong><p>Disponibiliza seus produtos pelo link público, mesmo antes de configurar o Pix.</p></span><span class="switch"><input name="published" type="checkbox" ${onlineOrdering.published ? "checked" : ""}><span></span></span></label>
+              <label class="setting-item full" style="margin:0"><span><strong>Aceitar pedidos online com Pix</strong><p>O pedido só entra na fila de preparo depois que o pagamento for confirmado. Requer a configuração do Mercado Pago.</p></span><span class="switch"><input name="enabled" type="checkbox" ${onlineOrdering.enabled ? "checked" : ""}><span></span></span></label>
               <div class="field"><label for="deliveryFee">Taxa de entrega (R$)</label><input id="deliveryFee" name="deliveryFee" type="number" min="0" max="1000" step="0.01" value="${number(onlineOrdering.deliveryFee).toFixed(2)}" required></div>
               <label class="setting-item" style="margin:0"><span><strong>Permitir retirada no local</strong><p>O cliente poderá escolher retirada em vez de entrega.</p></span><span class="switch"><input name="pickupEnabled" type="checkbox" ${onlineOrdering.pickupEnabled ? "checked" : ""}><span></span></span></label>
               <div class="field full"><label for="pickupAddress">Endereço para retirada</label><input id="pickupAddress" name="pickupAddress" maxlength="180" value="${escapeHtml(onlineOrdering.pickupAddress)}" placeholder="Endereço da loja" ${onlineOrdering.pickupEnabled ? "required" : ""}></div>
               <div class="field full"><button class="button primary" type="submit" ${onlineMenuReady ? "" : "disabled"}>Salvar configurações</button></div>
             </form>
-            ${onlineOrdering.enabled && onlineMenuReady && onlinePaymentsReady ? `<div class="toolbar" style="margin-top:14px"><div class="field" style="flex:1"><label for="menuShareUrl">Link público do cardápio</label><input class="search" id="menuShareUrl" style="width:100%" readonly value="${escapeHtml(shareUrl)}"></div><button class="button" type="button" data-action="copy-menu-link">Copiar link</button></div>` : ""}
-            <div class="callout" style="margin:13px 0 0"><span>ⓘ</span><div><b>Pagamento Pix</b>Conecte a conta Mercado Pago em Pagamentos online. O Pix será liberado quando a configuração do servidor e a conexão da conta estiverem concluídas.</div></div>
+            ${onlineOrdering.published && onlineMenuReady ? `<div class="toolbar" style="margin-top:14px"><div class="field" style="flex:1"><label for="menuShareUrl">Link público do cardápio</label><input class="search" id="menuShareUrl" style="width:100%" readonly value="${escapeHtml(shareUrl)}"></div><button class="button" type="button" data-action="copy-menu-link">Copiar link</button></div>` : ""}
+            ${!onlinePaymentsReady ? `<div class="callout" style="margin:13px 0 0"><span>ⓘ</span><div><b>Pedidos com Pix ainda desativados</b>Você pode publicar o cardápio para visualização. Para receber pedidos online, configure a conta Mercado Pago em Pagamentos online.</div></div>` : ""}
           </article>
           ${groups.length ? `<div class="filters" style="margin-bottom:13px">${groups.map(category => `<button class="filter-btn ${digitalCategory === category ? "active" : ""}" data-digital-category="${category}">${categoryIcon(category)} ${categoryName(category)}s</button>`).join("")}</div><article class="panel" style="margin-bottom:13px"><div class="panel-heading"><h2>${categoryIcon(digitalCategory)} ${categoryName(digitalCategory)}s</h2><span>${shownProducts.length} produto(s)</span></div><div class="digital-menu-list">${shownProducts.map(product => {
             const prices = productOptions(product).map(option => number(option.price));
@@ -1553,6 +1558,7 @@
         event.preventDefault();
         const form = event.currentTarget;
         const data = new FormData(form);
+        const published = form.elements.published.checked;
         const enabled = form.elements.enabled.checked;
         const pickupEnabled = form.elements.pickupEnabled.checked;
         const deliveryFee = Number(data.get("deliveryFee"));
@@ -1570,7 +1576,7 @@
           return;
         }
         const previous = state.onlineOrdering;
-        state.onlineOrdering = { enabled, deliveryFee: roundMoney(deliveryFee), pickupEnabled, pickupAddress };
+        state.onlineOrdering = { published: published || enabled, enabled, deliveryFee: roundMoney(deliveryFee), pickupEnabled, pickupAddress };
         if (!saveState()) {
           state.onlineOrdering = previous;
           return;
@@ -1588,7 +1594,7 @@
           }
         }
         renderDigitalMenu();
-        showToast(enabled ? "Cardápio publicado. Compartilhe o link público." : "Configurações do cardápio salvas.");
+        showToast(published || enabled ? "Cardápio publicado. Compartilhe o link público." : "Configurações do cardápio salvas.");
       }
 
       function renderPublicMenu() {
@@ -1610,7 +1616,7 @@
               ${product.category === "pizza" ? `<div data-pizza-flavor-container></div><div data-pizza-border-container></div>` : ""}
               ${(product.addons || []).length ? `<div class="option-group"><span class="section-label">Adicionais deste produto (opcional)</span><div class="sale-addons">${product.addons.map((addon, index) => `<label class="addon-choice"><input type="checkbox" data-public-addon="${index}">${escapeHtml(addon.name)} + ${money(addon.price)}</label>`).join("")}</div></div>` : ""}
               ${product.category === "pizza" ? `<p class="helper" data-public-price></p>` : ""}
-              <button type="button" class="button primary" data-action="public-add" data-id="${escapeHtml(product.id)}">Adicionar ao pedido</button>
+              ${publicOrdering.acceptingOrders ? `<button type="button" class="button primary" data-action="public-add" data-id="${escapeHtml(product.id)}">Adicionar ao pedido</button>` : ""}
             </div>
           </details>`;
         }).join("");
@@ -1619,9 +1625,10 @@
         const deliveryFee = digitalFulfillment === "delivery" ? publicOrdering.deliveryFee : 0;
         const total = roundMoney(subtotal + deliveryFee);
         document.getElementById("pageContent").innerHTML = `
-          <header class="digital-hero"><div><div class="eyebrow" style="color:var(--lime)">BORA! DELIVERY</div><h1>Peça algo gostoso.</h1><p>Escolha seus favoritos e pague com Pix.</p></div></header>
+          <header class="digital-hero"><div><div class="eyebrow" style="color:var(--lime)">BORA! DELIVERY</div><h1>${publicOrdering.acceptingOrders ? "Peça algo gostoso." : "Confira nosso cardápio."}</h1><p>${publicOrdering.acceptingOrders ? "Escolha seus favoritos e pague com Pix." : "Veja nossos produtos e preços."}</p></div></header>
+          ${publicOrdering.acceptingOrders ? "" : `<div class="callout" style="margin-top:14px"><span>ⓘ</span><div>Cardápio disponível para consulta. A loja ainda não está aceitando pedidos online.</div></div>`}
           ${groups.length ? `<nav class="filters category-tabs" aria-label="Categorias do cardápio">${categoryButtons}</nav><section><div class="panel-heading" style="margin:16px 0 10px"><h2>${categoryIcon(digitalCategory)} ${categoryName(digitalCategory)}s</h2><span>${shownProducts.length} produto(s)</span></div><div class="digital-menu-list">${items}</div></section>` : `<div class="empty-state" style="margin-top:13px">O cardápio está temporariamente sem produtos disponíveis.</div>`}
-          <section class="panel" style="margin-top:18px"><div class="panel-heading"><h2>Seu pedido</h2><span id="digitalCartCount">${digitalCart.length} item(ns)</span></div><div id="digitalCartSummary">${digitalCart.length ? digitalCart.map((item, index) => `<div class="sale-cart-row"><div><strong>${escapeHtml(item.name)}${item.optionName !== "Padrão" ? ` · ${escapeHtml(item.optionName)}` : ""} × ${item.quantity}</strong><small>${[item.border?.name, ...item.addons.map(addon => addon.name)].filter(Boolean).join(" · ") || "Sem adicionais"}</small></div><span>${money(saleLineTotal(item))}</span><span></span><button type="button" class="icon-button" data-action="remove-digital-item" data-index="${index}">×</button></div>`).join("") : `<div class="empty-state">Adicione um produto ao pedido.</div>`}</div>
+          ${publicOrdering.acceptingOrders ? `<section class="panel" style="margin-top:18px"><div class="panel-heading"><h2>Seu pedido</h2><span id="digitalCartCount">${digitalCart.length} item(ns)</span></div><div id="digitalCartSummary">${digitalCart.length ? digitalCart.map((item, index) => `<div class="sale-cart-row"><div><strong>${escapeHtml(item.name)}${item.optionName !== "Padrão" ? ` · ${escapeHtml(item.optionName)}` : ""} × ${item.quantity}</strong><small>${[item.border?.name, ...item.addons.map(addon => addon.name)].filter(Boolean).join(" · ") || "Sem adicionais"}</small></div><span>${money(saleLineTotal(item))}</span><span></span><button type="button" class="icon-button" data-action="remove-digital-item" data-index="${index}">×</button></div>`).join("") : `<div class="empty-state">Adicione um produto ao pedido.</div>`}</div>
             <div class="field" style="margin-top:13px"><label for="digitalFulfillment">Como prefere receber?</label><select id="digitalFulfillment"><option value="delivery">Entrega · ${money(publicOrdering.deliveryFee)}</option>${publicOrdering.pickupEnabled ? `<option value="pickup">Retirada no local · grátis</option>` : ""}</select></div>
             ${publicOrdering.pickupEnabled && publicOrdering.pickupAddress ? `<p class="helper" id="pickupAddressNote" ${digitalFulfillment === "pickup" ? "" : "hidden"}>Endereço para retirada: ${escapeHtml(publicOrdering.pickupAddress)}</p>` : ""}
             <div class="sale-total"><span id="digitalOrderBreakdown">Itens ${money(subtotal)}${deliveryFee ? ` + entrega ${money(deliveryFee)}` : ""}</span><strong id="digitalOrderTotal">${money(total)}</strong></div>
@@ -1635,7 +1642,7 @@
             <button type="submit" class="button primary" ${digitalCart.length && !currentPixOrder ? "" : "disabled"}>Gerar Pix · ${money(total)}</button>
             <div id="pixPaymentResult">${renderPixPaymentResult()}</div>
             </form>
-          </section>`;
+          </section>` : ""}`;
         document.querySelectorAll("[data-public-product]").forEach(card => {
           const product = state.products.find(item => item.id === card.dataset.publicProduct);
           if (product.category === "pizza") {
@@ -1664,8 +1671,9 @@
           }
         });
         const fulfillmentSelect = document.getElementById("digitalFulfillment");
-        fulfillmentSelect.value = digitalFulfillment;
-        fulfillmentSelect.addEventListener("change", () => {
+        if (fulfillmentSelect) {
+          fulfillmentSelect.value = digitalFulfillment;
+          fulfillmentSelect.addEventListener("change", () => {
           digitalFulfillment = fulfillmentSelect.value;
           const pickup = digitalFulfillment === "pickup";
           const addressField = document.getElementById("digitalAddressField");
@@ -1678,8 +1686,9 @@
           document.getElementById("digitalOrderBreakdown").textContent = `Itens ${money(subtotal)}${!pickup && publicOrdering.deliveryFee ? ` + entrega ${money(publicOrdering.deliveryFee)}` : ""}`;
           document.getElementById("digitalOrderTotal").textContent = money(total);
           document.querySelector("#digitalCheckout button[type='submit']").textContent = `Gerar Pix · ${money(total)}`;
-        });
-        document.getElementById("digitalCheckout").addEventListener("submit", submitDigitalOrder);
+          });
+          document.getElementById("digitalCheckout").addEventListener("submit", submitDigitalOrder);
+        }
       }
 
       function renderPixPaymentResult() {

@@ -33,7 +33,7 @@ Cada loja conecta a própria conta Mercado Pago pela aba **Pagamentos online**. 
 
 6. Publique a versão atualizada do site no GitHub Pages e entre no sistema.
 7. Abra **Pagamentos online → Conectar Mercado Pago**. Em teste, entre com a conta vendedora de teste e autorize o Bora! Gestão. A tela deve indicar **Conectado · Teste**.
-8. Em **Cardápio digital**, configure taxa de entrega e retirada, depois habilite os pedidos. Faça um pedido como a conta compradora de teste e confirme o Pix com os meios de teste disponíveis na conta.
+8. Em **Cardápio digital**, publique o catálogo para gerar e copiar o link, mesmo antes de concluir o Pix. Para receber pedidos online, conecte o Mercado Pago, configure taxa de entrega e retirada e habilite **Aceitar pedidos online com Pix**. Faça um pedido como a conta compradora de teste e confirme o Pix com os meios de teste disponíveis na conta.
 9. Para produção, remova `MP_TEST_MODE` (ou defina `false`), confirme que o webhook de produção está configurado e reconecte a conta vendedora real em **Pagamentos online**. A tela deve indicar **Conectado · Produção** antes de aceitar pedidos reais.
 
 ## Segurança e funcionamento
@@ -41,6 +41,7 @@ Cada loja conecta a própria conta Mercado Pago pela aba **Pagamentos online**. 
 - As chaves da aplicação e do webhook permanecem nos Secrets do Supabase. O token de cada vendedor é obtido por OAuth e mantido no banco numa tabela sem acesso para `anon` ou `authenticated`; apenas funções de servidor podem ler ou renovar esses tokens.
 - O fluxo OAuth valida `state`, usa PKCE, expira tentativas pendentes após 10 minutos e troca tokens no servidor. Os tokens de renovação são atualizados automaticamente.
 - O preço e a taxa de entrega são recalculados no servidor; o total enviado pelo navegador não é confiável.
+- A publicação do catálogo é independente da opção de aceitar pedidos. Enquanto Pix não estiver configurado, o link exibe produtos e preços, mas não permite enviar pedidos; a Edge Function também rejeita pedidos quando `acceptingOrders` está desativado no menu publicado.
 - O pedido fica como **Aguardando Pix** e só entra na fila de preparo após confirmação do pagamento. O webhook assinado é a confirmação principal; enquanto aberta, a tela do cliente também consulta o status.
 - Pedidos online pagos aparecem em **Vendas e pedidos** e **Acompanhar pedidos**. Eles não alteram o saldo em dinheiro do caixa.
 
