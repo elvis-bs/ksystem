@@ -32,7 +32,7 @@
     .app-shell { display: flex; min-height: 100vh; }
     .sidebar {
       width: 244px; flex: 0 0 244px; background: var(--green-dark); color: #fff;
-      padding: 28px 17px 20px; display: flex; flex-direction: column;
+      padding: 28px 17px 20px; display: flex; flex-direction: column; overflow-y: auto;
     }
     .brand { display: flex; align-items: center; gap: 11px; padding: 0 11px 33px; }
     .brand-mark {
@@ -208,6 +208,13 @@
     .customer-detail { margin-top: 3px; color: var(--muted); font-size: 9px; }
     .order-status-select { min-width: 120px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: #fff; font-size: 10px; }
     .customer-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+    .customer-autocomplete { position: relative; }
+    .customer-suggestions { position: absolute; z-index: 5; top: calc(100% + 4px); right: 0; left: 0; max-height: 240px; overflow-y: auto; padding: 5px; border: 1px solid var(--line); border-radius: 9px; background: #fff; box-shadow: var(--shadow); }
+    .customer-suggestion { display: grid; width: 100%; gap: 3px; padding: 9px 10px; border: 0; border-radius: 6px; color: var(--ink); background: transparent; text-align: left; }
+    .customer-suggestion:hover, .customer-suggestion:focus { background: var(--green-soft); outline: none; }
+    .customer-suggestion strong { font-size: 11px; }
+    .customer-suggestion small { color: var(--muted); font-size: 9px; }
+    .customer-suggestion-empty { padding: 10px; color: var(--muted); font-size: 10px; }
     .orders-summary { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; margin-bottom: 15px; }
     .orders-summary-card { padding: 13px 15px; border: 1px solid var(--line); border-radius: 11px; background: #fff; }
     .orders-summary-card span { display: block; color: var(--muted); font-size: 10px; }
@@ -235,13 +242,15 @@
     .order-card-actions .order-status-select { min-width: 0; width: 100%; }
     .orders-empty { padding: 18px 8px; border: 1px dashed #d6dbd2; border-radius: 9px; color: var(--muted); background: rgba(255,255,255,.55); text-align: center; font-size: 10px; }
     .orders-cancelled { margin-top: 15px; }
-    .customer-item { border: 1px solid var(--line); border-radius: 12px; background: #fff; padding: 15px; }
-    .customer-item-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-    .customer-avatar { width: 36px; height: 36px; display: grid; place-items: center; flex: 0 0 36px; border-radius: 50%; color: var(--green); background: var(--green-soft); font-size: 13px; font-weight: 800; }
-    .customer-info { display: flex; align-items: center; gap: 10px; min-width: 0; }
-    .customer-info strong { display: block; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-    .customer-info span { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; }
-    .customer-address { margin-top: 13px; padding-top: 11px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; line-height: 1.45; }
+    .customer-item { overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+    .customer-item-top { display: flex; align-items: center; gap: 8px; padding: 5px 7px 5px 13px; }
+    .customer-summary { display: flex; min-width: 0; flex: 1; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 3px; border: 0; color: var(--ink); background: transparent; text-align: left; }
+    .customer-summary strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+    .customer-summary::after { flex: 0 0 auto; color: var(--muted); content: "＋"; font-size: 13px; }
+    .customer-item.expanded .customer-summary::after { content: "−"; }
+    .customer-item-top .icon-button { flex: 0 0 29px; }
+    .customer-address { padding: 11px 13px 13px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; line-height: 1.55; }
+    .customer-address[hidden] { display: none; }
     .cash-hero { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 16px; padding: 22px; border-radius: 13px; color: #fff; background: var(--green-dark); }
     .cash-hero span { color: #c1d5c8; font-size: 11px; }
     .cash-hero strong { display: block; margin-top: 6px; font-size: 30px; letter-spacing: -.8px; }
@@ -418,8 +427,16 @@
         <button data-page="vendas"><span class="nav-icon">＋</span>Vendas e pedidos</button>
         <button data-page="pedidos"><span class="nav-icon">▣</span>Acompanhar pedidos</button>
         <button data-page="cardapio"><span class="nav-icon">▤</span>Cardápio digital</button>
+      </nav>
+      <div class="nav-label" style="margin-top:20px">Financeiro</div>
+      <nav class="nav" aria-label="Financeiro">
         <button data-page="caixa"><span class="nav-icon">▣</span>Caixa</button>
+        <button data-page="pagamentos-online"><span class="nav-icon">◇</span>Pagamentos online</button>
+        <button data-page="relatorio-caixa"><span class="nav-icon">▥</span>Relatório de caixa</button>
         <button data-page="relatorios"><span class="nav-icon">▥</span>Relatórios</button>
+      </nav>
+      <div class="nav-label" style="margin-top:20px">Cadastros</div>
+      <nav class="nav" aria-label="Cadastros">
         <button data-page="clientes"><span class="nav-icon">♙</span>Clientes</button>
         <button data-page="produtos"><span class="nav-icon">▦</span>Produtos e cardápio</button>
         <button data-page="insumos"><span class="nav-icon">◈</span>Insumos e custos</button>
@@ -466,9 +483,22 @@
       let currentUser = null;
       let syncQueue = Promise.resolve();
       let authMode = "signin";
+      let onlineMenuReady = false;
+      let onlinePaymentsReady = false;
+      let onlinePaymentFunctionsReady = false;
+      let mercadoPagoConnection = { configured: false, environment: "production", connected: false, sellerId: null, expiresAt: null, connectedAt: null };
+      let onlineOrders = [];
+      let onlineOrderRefreshTimer = null;
+      let publicBusinessId = "";
+      let publicOrdering = { deliveryFee: 0, pickupEnabled: false, pickupAddress: "" };
+      let publicMenuLoadError = "";
+      let digitalFulfillment = "delivery";
+      let currentPixOrder = null;
+      let digitalPaymentPoll = null;
       const seedData = {
         pizzaEnabled: true,
         pizzaPricingMode: "size",
+        onlineOrdering: { enabled: false, deliveryFee: 0, pickupEnabled: false, pickupAddress: "" },
         customers: [],
         sales: [],
         cashSessions: [],
@@ -527,6 +557,12 @@
             ...JSON.parse(JSON.stringify(seedData)),
             ...parsed,
             pizzaPricingMode: parsed.pizzaPricingMode === "highest" ? "highest" : "size",
+            onlineOrdering: {
+              enabled: parsed.onlineOrdering?.enabled === true,
+              deliveryFee: Math.max(0, Number(parsed.onlineOrdering?.deliveryFee) || 0),
+              pickupEnabled: parsed.onlineOrdering?.pickupEnabled === true,
+              pickupAddress: typeof parsed.onlineOrdering?.pickupAddress === "string" ? parsed.onlineOrdering.pickupAddress : ""
+            },
             products,
             customers: Array.isArray(parsed.customers) ? parsed.customers : [],
             sales: Array.isArray(parsed.sales) ? parsed.sales : [],
@@ -557,6 +593,7 @@
               updated_at: new Date().toISOString()
             }, { onConflict: "user_id" });
             if (error) throw error;
+            if (onlineMenuReady) await syncPublicMenu(userId, snapshot);
             setSyncStatus("Sincronizado");
           }).catch(error => {
             console.error("Não foi possível sincronizar os dados com o Supabase:", error);
@@ -565,6 +602,84 @@
           });
         }
         return true;
+      }
+
+      function publicMenuSnapshot(sourceState) {
+        const onlineOrdering = sourceState.onlineOrdering || seedData.onlineOrdering;
+        return {
+          pizzaEnabled: sourceState.pizzaEnabled === true,
+          pizzaPricingMode: sourceState.pizzaPricingMode === "highest" ? "highest" : "size",
+          pickupAddress: onlineOrdering.pickupAddress || "",
+          products: sourceState.products.filter(product => product.active && (product.category !== "pizza" || sourceState.pizzaEnabled)).map(product => ({
+            id: product.id,
+            name: product.name,
+            category: product.category,
+            active: true,
+            price: number(product.price),
+            sizes: (product.sizes || []).map(option => ({
+              name: option.name,
+              price: number(option.price),
+              flavorLimit: pizzaFlavorLimit(option)
+            })),
+            borderOptions: (product.borderOptions || []).map(border => ({ name: border.name, price: number(border.price) })),
+            addons: (product.addons || []).map(addon => ({ name: addon.name, price: number(addon.price) }))
+          }))
+        };
+      }
+
+      async function syncPublicMenu(userId, sourceState) {
+        const onlineOrdering = sourceState.onlineOrdering || seedData.onlineOrdering;
+        const { error } = await supabaseClient.from("public_menus").upsert({
+          user_id: userId,
+          menu: publicMenuSnapshot(sourceState),
+          delivery_fee: Math.max(0, number(onlineOrdering.deliveryFee)),
+          pickup_enabled: onlineOrdering.pickupEnabled === true,
+          published: onlineOrdering.enabled === true,
+          updated_at: new Date().toISOString()
+        }, { onConflict: "user_id" });
+        if (error) throw error;
+      }
+
+      function onlineOrderSale(order) {
+        const data = order.order_data || {};
+        return {
+          id: `online-${order.id}`,
+          onlineOrderId: order.id,
+          createdAt: order.created_at,
+          customerName: data.customerName || "Cliente online",
+          customerPhone: data.customerPhone || "",
+          customerEmail: data.customerEmail || "",
+          address: data.address || "",
+          pickupAddress: data.pickupAddress || "",
+          fulfillment: data.fulfillment || "delivery",
+          deliveryFee: number(data.deliveryFee),
+          notes: data.notes || "",
+          payment: "Pix online",
+          paid: order.payment_status === "approved",
+          paymentStatus: order.payment_status,
+          cashSessionId: null,
+          status: order.status || "Aguardando Pix",
+          items: Array.isArray(data.items) ? data.items : [],
+          total: number(order.total)
+        };
+      }
+
+      function allSales() {
+        return [...state.sales, ...onlineOrders.map(onlineOrderSale)];
+      }
+
+      async function refreshOnlineOrders() {
+        if (!currentUser || !onlineMenuReady) return;
+        const { data, error } = await supabaseClient
+          .from("online_orders")
+          .select("id,payment_status,status,order_data,total,created_at")
+          .order("created_at", { ascending: false });
+        if (error) {
+          console.error("Não foi possível carregar pedidos online:", error);
+          showToast("Não foi possível atualizar os pedidos online.");
+          return;
+        }
+        onlineOrders = data || [];
       }
 
       function setSyncStatus(message) {
@@ -594,6 +709,11 @@
 
       async function openBusinessSession(user) {
         currentUser = user;
+        onlineOrders = [];
+        onlineMenuReady = false;
+        onlinePaymentsReady = false;
+        onlinePaymentFunctionsReady = false;
+        mercadoPagoConnection = { configured: false, environment: "production", connected: false, sellerId: null, expiresAt: null, connectedAt: null };
         setSyncStatus("Carregando…");
         const { data: record, error } = await supabaseClient
           .from("business_data")
@@ -610,6 +730,12 @@
             ...JSON.parse(JSON.stringify(seedData)),
             ...parsed,
             pizzaPricingMode: parsed.pizzaPricingMode === "highest" ? "highest" : "size",
+            onlineOrdering: {
+              enabled: parsed.onlineOrdering?.enabled === true,
+              deliveryFee: Math.max(0, Number(parsed.onlineOrdering?.deliveryFee) || 0),
+              pickupEnabled: parsed.onlineOrdering?.pickupEnabled === true,
+              pickupAddress: typeof parsed.onlineOrdering?.pickupAddress === "string" ? parsed.onlineOrdering.pickupAddress : ""
+            },
             customers: Array.isArray(parsed.customers) ? parsed.customers : [],
             sales: Array.isArray(parsed.sales) ? parsed.sales : [],
             cashSessions: Array.isArray(parsed.cashSessions) ? parsed.cashSessions : []
@@ -632,6 +758,44 @@
           localStorage.setItem(LEGACY_IMPORT_KEY, "true");
         }
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        const { error: publicMenuError } = await supabaseClient
+          .from("public_menus")
+          .select("user_id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        onlineMenuReady = !publicMenuError;
+        if (onlineMenuReady) {
+          const healthChecks = await Promise.all([
+            "create-pix-order",
+            "check-pix-order",
+            "mercadopago-webhook"
+          ].map(async functionName => {
+            const { data, error } = await supabaseClient.functions.invoke(functionName, { method: "GET" });
+            if (error) console.warn(`A função ${functionName} ainda não está configurada:`, error);
+            return !error && data?.configured === true;
+          }));
+          const { data: connection, error: connectionError } = await supabaseClient.functions.invoke("mercadopago-settings", {
+            body: { action: "status" }
+          });
+          if (connectionError) console.warn("Não foi possível verificar a conexão do Mercado Pago:", connectionError);
+          if (!connectionError && connection) mercadoPagoConnection = connection;
+          onlinePaymentFunctionsReady = healthChecks.every(Boolean);
+          onlinePaymentsReady = onlinePaymentFunctionsReady && mercadoPagoConnection.configured && mercadoPagoConnection.connected;
+        } else {
+          onlinePaymentFunctionsReady = false;
+          onlinePaymentsReady = false;
+        }
+        if (publicMenuError) {
+          console.warn("Pedidos online ainda não estão configurados no Supabase:", publicMenuError);
+        } else {
+          try {
+            await syncPublicMenu(user.id, state);
+            await refreshOnlineOrders();
+            startOnlineOrderRefresh();
+          } catch (syncError) {
+            console.error("Não foi possível preparar o cardápio ou carregar pedidos online:", syncError);
+          }
+        }
         document.getElementById("authGate").hidden = true;
         document.querySelector(".app-shell").hidden = false;
         document.querySelector(".bottom-nav").hidden = false;
@@ -639,6 +803,24 @@
         document.getElementById("userAvatar").textContent = (user.email || "B").charAt(0).toUpperCase();
         setSyncStatus("Sincronizado");
         render();
+        const oauthResult = new URLSearchParams(location.search).get("mp_oauth");
+        if (oauthResult) {
+          const callbackUrl = new URL(location.href);
+          callbackUrl.searchParams.delete("mp_oauth");
+          history.replaceState(null, "", callbackUrl);
+          if (oauthResult === "connected") showToast("Conta Mercado Pago conectada.");
+          else if (oauthResult === "denied") showToast("A autorização do Mercado Pago foi cancelada.");
+          else showToast("Não foi possível conectar. Confira a configuração e tente novamente.");
+        }
+      }
+
+      function startOnlineOrderRefresh() {
+        if (onlineOrderRefreshTimer) clearInterval(onlineOrderRefreshTimer);
+        onlineOrderRefreshTimer = setInterval(async () => {
+          if (!currentUser || !onlineMenuReady || document.hidden || !["pedidos", "vendas"].includes(currentPage)) return;
+          await refreshOnlineOrders();
+          render();
+        }, 15000);
       }
 
       async function initializeAuth() {
@@ -649,6 +831,39 @@
           document.querySelector(".bottom-nav").hidden = true;
           document.getElementById("signOutButton").hidden = true;
           document.body.classList.add("public-menu");
+          publicBusinessId = params.get("loja") || "";
+          if (!supabaseClient || !/^[0-9a-f-]{36}$/i.test(publicBusinessId)) {
+            publicMenuLoadError = "Use o link do cardápio gerado pela loja para fazer um pedido.";
+            renderPublicMenu();
+            return;
+          }
+          const { data: publication, error: menuError } = await supabaseClient
+            .from("public_menus")
+            .select("menu,delivery_fee,pickup_enabled,published")
+            .eq("user_id", publicBusinessId)
+            .eq("published", true)
+            .maybeSingle();
+          if (menuError) {
+            console.error("Não foi possível carregar o cardápio público:", menuError);
+            publicMenuLoadError = "Não foi possível carregar o cardápio agora. Tente novamente mais tarde.";
+          } else if (!publication) {
+            publicMenuLoadError = "Este cardápio está temporariamente fechado.";
+          } else {
+            state = {
+              ...JSON.parse(JSON.stringify(seedData)),
+              ...publication.menu,
+              ingredients: [],
+              customers: [],
+              sales: [],
+              cashSessions: []
+            };
+            publicOrdering = {
+              deliveryFee: Math.max(0, Number(publication.delivery_fee) || 0),
+              pickupEnabled: publication.pickup_enabled === true,
+              pickupAddress: typeof publication.menu.pickupAddress === "string" ? publication.menu.pickupAddress : ""
+            };
+            digitalFulfillment = "delivery";
+          }
           renderPublicMenu();
           return;
         }
@@ -661,6 +876,13 @@
         supabaseClient.auth.onAuthStateChange(event => {
           if (event === "SIGNED_OUT") {
             currentUser = null;
+            onlineOrders = [];
+            onlineMenuReady = false;
+            onlinePaymentsReady = false;
+            onlinePaymentFunctionsReady = false;
+            mercadoPagoConnection = { configured: false, environment: "production", connected: false, sellerId: null, expiresAt: null, connectedAt: null };
+            if (onlineOrderRefreshTimer) clearInterval(onlineOrderRefreshTimer);
+            onlineOrderRefreshTimer = null;
             showAuth();
           }
         });
@@ -790,7 +1012,7 @@
       }
 
       function paidSales(sessionId = null) {
-        return state.sales.filter(sale => sale.paid && sale.status !== "Cancelado" && (!sessionId || sale.cashSessionId === sessionId));
+        return allSales().filter(sale => sale.paid && sale.status !== "Cancelado" && (!sessionId || sale.cashSessionId === sessionId));
       }
 
       function overallStats() {
@@ -804,7 +1026,7 @@
       }
 
       function render() {
-        const labels = { inicio: "Visão geral", vendas: "Vendas e pedidos", pedidos: "Acompanhar pedidos", cardapio: "Cardápio digital", caixa: "Caixa", relatorios: "Relatórios", clientes: "Clientes", produtos: "Produtos e cardápio", insumos: "Insumos e custos", configuracoes: "Configurações", mais: "Mais opções" };
+        const labels = { inicio: "Visão geral", vendas: "Vendas e pedidos", pedidos: "Acompanhar pedidos", cardapio: "Cardápio digital", caixa: "Caixa", "pagamentos-online": "Pagamentos online", "relatorio-caixa": "Relatório de caixa", relatorios: "Relatórios", clientes: "Clientes", produtos: "Produtos e cardápio", insumos: "Insumos e custos", configuracoes: "Configurações", mais: "Mais opções" };
         const params = new URLSearchParams(location.search);
         if (params.has("cardapio")) {
           document.body.classList.add("public-menu");
@@ -831,6 +1053,8 @@
         if (currentPage === "pedidos") renderOrders();
         if (currentPage === "cardapio") renderDigitalMenu();
         if (currentPage === "caixa") renderCash();
+        if (currentPage === "pagamentos-online") renderOnlinePaymentSettings();
+        if (currentPage === "relatorio-caixa") renderCashReports();
         if (currentPage === "relatorios") renderReports();
         if (currentPage === "mais") renderMore();
         if (currentPage === "clientes") renderCustomers();
@@ -898,8 +1122,10 @@
       function renderSales() {
         const standalonePdv = new URLSearchParams(location.search).has("pdv");
         const products = activeSaleProducts();
-        const customerOptions = state.customers.map(customer => `<option value="${customer.id}">${escapeHtml(customer.name)}${customer.phone ? ` · ${escapeHtml(customer.phone)}` : ""}</option>`).join("");
-        const history = [...state.sales].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        const today = localDateKey(new Date());
+        const history = allSales()
+          .filter(sale => localDateKey(sale.createdAt) === today)
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         const cartHtml = saleCart.length ? saleCart.map((item, index) => `
           <div class="sale-cart-row">
             <div><strong>${escapeHtml(item.name)}${item.optionName && item.optionName !== "Padrão" ? ` · ${escapeHtml(item.optionName)}` : ""} × ${item.quantity}</strong><small>${[item.border?.name, ...item.addons.map(addon => addon.name), item.category !== "bebida" ? categoryName(item.category) : "Bebida"].filter(Boolean).join(" · ")}</small></div>
@@ -922,16 +1148,16 @@
                   <div id="saleAddonChoices" class="sale-addons"></div>
                 </form>` : `<div class="empty-state">Não há produtos ativos no cardápio. Cadastre ou ative produtos antes de vender.</div>`}
               </article>
-              ${standalonePdv ? "" : `<article class="panel"><div class="panel-heading"><h2>Pedidos registrados</h2><span>${history.length} pedido${history.length === 1 ? "" : "s"}</span></div>
+              ${standalonePdv ? "" : `<article class="panel"><div class="panel-heading"><h2>Pedidos de hoje</h2><span>${history.length} pedido${history.length === 1 ? "" : "s"}</span></div>
                 ${!currentCashSession() ? `<div class="callout" style="margin:0 0 12px"><span>ⓘ</span><div><b>Caixa fechado</b>Abra o caixa para registrar vendas e receber pedidos. <button class="button small" data-page="caixa">Abrir caixa</button></div></div>` : ""}
-                ${history.length ? `<div class="table-wrap"><table><thead><tr><th>Pedido</th><th>Cliente</th><th>Itens</th><th>Total</th><th>Pagamento</th><th>Recebimento</th><th>Status</th></tr></thead><tbody>${history.map(sale => `<tr><td>#${escapeHtml(sale.id.slice(-5))}<br><span class="helper">${new Date(sale.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span></td><td>${escapeHtml(sale.customerName || "Balcão")}</td><td>${sale.items.reduce((sum, item) => sum + number(item.quantity), 0)}</td><td>${money(sale.total)}</td><td>${escapeHtml(sale.payment)}</td><td>${sale.paid ? `<span class="pill">Pago</span>` : `<button class="button small" data-action="receive-sale" data-id="${sale.id}" ${currentCashSession() ? "" : "disabled"}>Receber</button>`}</td><td><select class="order-status-select" data-sale-status="${sale.id}" aria-label="Status do pedido">${["Recebido", "Em preparo", "Saiu para entrega", "Concluído", "Cancelado"].map(status => `<option ${sale.status === status ? "selected" : ""}>${status}</option>`).join("")}</select></td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">Suas vendas aparecerão aqui depois que você registrar o primeiro pedido.</div>`}
+                ${history.length ? `<div class="table-wrap"><table><thead><tr><th>Pedido</th><th>Cliente</th><th>Itens</th><th>Total</th><th>Pagamento</th><th>Recebimento</th><th>Status</th></tr></thead><tbody>${history.map(sale => `<tr><td>#${escapeHtml(sale.id.slice(-5))}<br><span class="helper">${new Date(sale.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span></td><td>${escapeHtml(sale.customerName || "Balcão")}</td><td>${sale.items.reduce((sum, item) => sum + number(item.quantity), 0)}</td><td>${money(sale.total)}</td><td>${escapeHtml(sale.payment)}</td><td>${sale.paid ? `<span class="pill">Pago</span>` : sale.onlineOrderId ? `<span class="pill orange">${sale.paymentStatus === "pending" ? "Aguardando Pix" : "Pix não aprovado"}</span>` : `<button class="button small" data-action="receive-sale" data-id="${sale.id}" ${currentCashSession() ? "" : "disabled"}>Receber</button>`}</td><td>${sale.onlineOrderId && !sale.paid ? `<span class="pill orange">${sale.paymentStatus === "pending" ? "Aguardando Pix" : "Cancelado"}</span>` : `<select class="order-status-select" data-sale-status="${escapeHtml(sale.id)}" aria-label="Status do pedido">${["Recebido", "Em preparo", "Saiu para entrega", "Concluído", "Cancelado"].map(status => `<option ${sale.status === status ? "selected" : ""}>${status}</option>`).join("")}</select>`}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">Nenhum pedido registrado hoje. Consulte vendas de outros dias em Relatórios.</div>`}
               </article>`}
             </div>
             <article class="panel"><div class="panel-heading"><h2>Resumo do pedido</h2><span>${saleCart.reduce((sum, item) => sum + number(item.quantity), 0)} item(ns)</span></div>
               ${cartHtml}
               <div class="sale-total"><span>Total da venda</span><strong>${money(total)}</strong></div>
               <form class="sale-checkout" id="checkoutForm">
-                <div class="field"><label for="saleCustomer">Cliente</label><select id="saleCustomer" name="customerId"><option value="">Venda de balcão / sem cadastro</option>${customerOptions}</select></div>
+                <div class="field"><label for="saleCustomerSearch">Cliente</label><div class="customer-autocomplete"><input id="saleCustomerSearch" type="search" autocomplete="off" placeholder="Venda de balcão ou digite um nome/telefone" aria-label="Buscar cliente cadastrado"><input id="saleCustomerId" name="customerId" type="hidden"><div class="customer-suggestions" id="saleCustomerSuggestions" role="listbox" hidden></div></div><p class="helper">Digite para localizar um cliente cadastrado.</p></div>
                 <div class="field"><label for="salePayment">Forma de pagamento</label><select id="salePayment" name="payment" required><option>Pix</option><option>Dinheiro</option><option>Cartão de crédito</option><option>Cartão de débito</option></select></div>
                 <button type="submit" class="button primary" ${saleCart.length && currentCashSession() ? "" : "disabled"}>Registrar venda · ${money(total)}</button>
                 ${!currentCashSession() && !standalonePdv ? `<p class="helper">Abra o caixa para registrar uma venda paga. <button type="button" class="button small" data-page="caixa">Abrir caixa</button></p>` : ""}
@@ -945,7 +1171,29 @@
         const addForm = document.getElementById("addSaleItemForm");
         if (addForm) addForm.addEventListener("submit", addSaleItem);
         document.getElementById("checkoutForm").addEventListener("submit", finishSale);
+        const customerSearch = document.getElementById("saleCustomerSearch");
+        customerSearch.addEventListener("input", updateSaleCustomerSuggestions);
+        customerSearch.addEventListener("focus", updateSaleCustomerSuggestions);
         document.querySelectorAll("[data-sale-status]").forEach(select => select.addEventListener("change", updateSaleStatus));
+      }
+
+      function updateSaleCustomerSuggestions() {
+        const input = document.getElementById("saleCustomerSearch");
+        const customerId = document.getElementById("saleCustomerId");
+        const list = document.getElementById("saleCustomerSuggestions");
+        if (!input || !customerId || !list) return;
+        if (input.value !== input.dataset.selectedName) {
+          customerId.value = "";
+          input.dataset.selectedName = "";
+        }
+        const term = input.value.trim().toLocaleLowerCase("pt-BR");
+        const matches = state.customers
+          .filter(customer => !term || `${customer.name} ${customer.phone || ""}`.toLocaleLowerCase("pt-BR").includes(term))
+          .slice(0, 8);
+        list.innerHTML = matches.length
+          ? matches.map(customer => `<button type="button" class="customer-suggestion" role="option" data-action="select-sale-customer" data-id="${escapeHtml(customer.id)}"><strong>${escapeHtml(customer.name)}</strong>${customer.phone ? `<small>${escapeHtml(customer.phone)}</small>` : ""}</button>`).join("")
+          : `<div class="customer-suggestion-empty">${term ? "Nenhum cliente encontrado." : "Nenhum cliente cadastrado."}</div>`;
+        list.hidden = false;
       }
 
       function updateSaleProductOptions() {
@@ -1094,7 +1342,7 @@
       }
 
       function updateSaleStatus(event) {
-        const sale = state.sales.find(item => item.id === event.currentTarget.dataset.saleStatus);
+        const sale = allSales().find(item => item.id === event.currentTarget.dataset.saleStatus);
         if (!sale) return;
         changeSaleStatus(sale, event.currentTarget.value);
       }
@@ -1102,6 +1350,23 @@
       function changeSaleStatus(sale, status) {
         const previousStatus = sale.status;
         sale.status = status;
+        if (sale.onlineOrderId) {
+          render();
+          (async () => {
+            try {
+              const { error } = await supabaseClient.from("online_orders").update({ status }).eq("id", sale.onlineOrderId);
+              if (error) throw error;
+              showToast("Status do pedido atualizado.");
+            } catch (error) {
+              console.error("Não foi possível atualizar o status do pedido online:", error);
+              sale.status = previousStatus;
+              showToast("Não foi possível atualizar o pedido online.");
+            }
+            await refreshOnlineOrders();
+            render();
+          })();
+          return;
+        }
         if (!saveState()) {
           sale.status = previousStatus;
           render();
@@ -1119,10 +1384,12 @@
           { status: "Concluído", label: "Finalizados" }
         ];
         const activeStatuses = statusColumns.slice(0, 3).map(column => column.status);
-        const activeOrders = state.sales.filter(sale => activeStatuses.includes(sale.status || "Recebido"));
-        const newOrders = state.sales.filter(sale => (sale.status || "Recebido") === "Recebido");
-        const completedOrders = state.sales.filter(sale => sale.status === "Concluído");
-        const cancelledOrders = [...state.sales].filter(sale => sale.status === "Cancelado").sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        const sales = allSales();
+        const activeOrders = sales.filter(sale => activeStatuses.includes(sale.status || "Recebido"));
+        const newOrders = sales.filter(sale => (sale.status || "Recebido") === "Recebido");
+        const completedOrders = sales.filter(sale => sale.status === "Concluído");
+        const pendingOrders = sales.filter(sale => sale.onlineOrderId && sale.paymentStatus === "pending");
+        const cancelledOrders = [...sales].filter(sale => sale.status === "Cancelado").sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         const statuses = ["Recebido", "Em preparo", "Saiu para entrega", "Concluído", "Cancelado"];
         const statusOptions = selected => statuses.map(status => `<option ${selected === status ? "selected" : ""}>${status}</option>`).join("");
         const card = sale => {
@@ -1143,12 +1410,14 @@
             ${sale.customerPhone ? `<div class="order-card-contact">${escapeHtml(sale.customerPhone)}</div>` : ""}
             <div class="order-card-items">${items || `<div class="order-card-item">Itens não informados</div>`}</div>
             <div class="order-card-total"><span>${(sale.items || []).reduce((sum, item) => sum + number(item.quantity), 0)} item(ns)</span><strong>${money(sale.total)}</strong></div>
-            <div class="order-card-meta"><span>${escapeHtml(sale.payment || "Pagamento pendente")}</span><span>${sale.paid ? "Pago" : "Pendente"}</span></div>
-            <div class="order-card-actions">${nextStatus ? `<button type="button" class="button primary" data-action="advance-order" data-id="${escapeHtml(sale.id)}" data-status="${nextStatus}">${nextLabel} →</button>` : ""}<select class="order-status-select" data-sale-status="${escapeHtml(sale.id)}" aria-label="Alterar status do pedido">${statusOptions(sale.status || "Recebido")}</select></div>
+            ${sale.fulfillment ? `<div class="order-card-meta"><span>${sale.fulfillment === "pickup" ? "Retirada no local" : "Entrega"}${sale.deliveryFee ? ` · taxa ${money(sale.deliveryFee)}` : ""}</span><span>${sale.paid ? "Pix pago" : "Aguardando Pix"}</span></div>` : `<div class="order-card-meta"><span>${escapeHtml(sale.payment || "Pagamento pendente")}</span><span>${sale.paid ? "Pago" : "Pendente"}</span></div>`}
+            ${sale.address ? `<div class="order-card-contact">${sale.fulfillment === "pickup" ? "Retirada em" : "Endereço"}: ${escapeHtml(sale.address)}</div>` : sale.pickupAddress ? `<div class="order-card-contact">Retirada em: ${escapeHtml(sale.pickupAddress)}</div>` : ""}
+            ${sale.notes ? `<div class="order-card-contact">Obs.: ${escapeHtml(sale.notes)}</div>` : ""}
+            ${sale.onlineOrderId && !sale.paid ? `<div class="order-card-actions"><span class="pill orange">${sale.paymentStatus === "pending" ? "Aguardando confirmação do Pix" : "Pagamento não aprovado"}</span></div>` : `<div class="order-card-actions">${nextStatus ? `<button type="button" class="button primary" data-action="advance-order" data-id="${escapeHtml(sale.id)}" data-status="${nextStatus}">${nextLabel} →</button>` : ""}<select class="order-status-select" data-sale-status="${escapeHtml(sale.id)}" aria-label="Alterar status do pedido">${statusOptions(sale.status || "Recebido")}</select></div>`}
           </article>`;
         };
         const columns = statusColumns.map(column => {
-          const orders = [...state.sales].filter(sale => (sale.status || "Recebido") === column.status).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+          const orders = [...sales].filter(sale => (sale.status || "Recebido") === column.status).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
           return `<section class="orders-column"><div class="orders-column-head"><h2>${column.label}</h2><span class="orders-column-count">${orders.length}</span></div><div class="orders-column-list">${orders.map(card).join("") || `<div class="orders-empty">Nenhum pedido nesta etapa.</div>`}</div></section>`;
         }).join("");
         document.getElementById("pageContent").innerHTML = `
@@ -1159,6 +1428,7 @@
             <article class="orders-summary-card"><span>Finalizados</span><strong>${completedOrders.length}</strong></article>
             <article class="orders-summary-card"><span>Cancelados</span><strong>${cancelledOrders.length}</strong></article>
           </section>
+          ${pendingOrders.length ? `<div class="callout" style="margin-bottom:14px"><span>ⓘ</span><div><b>${pendingOrders.length} pedido(s) aguardando Pix</b>Esses pedidos só entram na fila de preparo após confirmação do pagamento.</div></div>` : ""}
           <div class="orders-board">${columns}</div>
           ${cancelledOrders.length ? `<details class="orders-cancelled"><summary class="button">Pedidos cancelados (${cancelledOrders.length})</summary><div class="orders-board" style="grid-template-columns:minmax(230px, 1fr);margin-top:10px"><section class="orders-column"><div class="orders-column-list">${cancelledOrders.map(card).join("")}</div></section></div></details>` : ""}`;
         document.querySelectorAll("[data-sale-status]").forEach(select => select.addEventListener("change", updateSaleStatus));
@@ -1199,11 +1469,11 @@
           const orders = state.sales.filter(sale => sale.customerId === customer.id && sale.status !== "Cancelado");
           const total = paidSales().filter(sale => sale.customerId === customer.id).reduce((sum, sale) => sum + number(sale.total), 0);
           const address = [customer.address, customer.neighborhood].filter(Boolean).join(" · ");
-          return `<article class="customer-item"><div class="customer-item-top"><div class="customer-info"><span class="customer-avatar">${escapeHtml(customer.name.trim().charAt(0).toUpperCase())}</span><div><strong>${escapeHtml(customer.name)}</strong><span>${escapeHtml(customer.phone || "Sem telefone")} · ${orders.length} pedido${orders.length === 1 ? "" : "s"}</span></div></div><button class="icon-button" data-action="edit-customer" data-id="${customer.id}" aria-label="Editar ${escapeHtml(customer.name)}">✎</button></div><div class="customer-address">${escapeHtml(address || "Endereço não informado")}<br>Total recebido: <strong>${money(total)}</strong>${customer.notes ? `<br>${escapeHtml(customer.notes)}` : ""}</div></article>`;
+          return `<article class="customer-item"><div class="customer-item-top"><button type="button" class="customer-summary" data-action="toggle-customer-details" data-id="${escapeHtml(customer.id)}" aria-expanded="false"><strong>${escapeHtml(customer.name)}</strong></button><button type="button" class="icon-button" data-action="edit-customer" data-id="${escapeHtml(customer.id)}" aria-label="Editar ${escapeHtml(customer.name)}">✎</button></div><div class="customer-address" id="customerDetails-${escapeHtml(customer.id)}" hidden><strong>Telefone:</strong> ${escapeHtml(customer.phone || "Não informado")}<br><strong>Endereço:</strong> ${escapeHtml(address || "Não informado")}<br><strong>Pedidos:</strong> ${orders.length}<br><strong>Total recebido:</strong> ${money(total)}${customer.notes ? `<br><strong>Observações:</strong> ${escapeHtml(customer.notes)}` : ""}</div></article>`;
         }).join("");
         document.getElementById("pageContent").innerHTML = `
           <div class="page-heading"><div><div class="eyebrow">Sua base de clientes</div><h1>Clientes</h1><p class="subtitle">Salve contatos e endereços para agilizar os próximos pedidos.</p></div><button class="button primary" data-action="new-customer">＋ Novo cliente</button></div>
-          <div class="toolbar"><div class="panel-heading" style="margin:0"><h2>${customers.length} cliente${customers.length === 1 ? "" : "s"} cadastrado${customers.length === 1 ? "" : "s"}</h2></div><input class="search" id="customerSearch" type="search" placeholder="⌕  Buscar cliente..."></div>
+          <div class="toolbar"><div class="panel-heading" style="margin:0"><h2>${customers.length} cliente${customers.length === 1 ? "" : "s"} cadastrado${customers.length === 1 ? "" : "s"}</h2></div><input class="search" id="customerSearch" type="search" list="customerNameSuggestions" placeholder="⌕  Buscar cliente..." autocomplete="off"><datalist id="customerNameSuggestions">${customers.map(customer => `<option value="${escapeHtml(customer.name)}">${escapeHtml(customer.phone || "")}</option>`).join("")}</datalist></div>
           <div class="customer-grid" id="customerGrid">${cards || `<div class="empty-state">Ainda não há clientes cadastrados. Adicione um cliente ou registre uma venda de balcão.</div>`}</div>`;
         document.getElementById("customerSearch").addEventListener("input", event => {
           const term = event.target.value.trim().toLocaleLowerCase("pt-BR");
@@ -1253,21 +1523,79 @@
         const groups = ["pizza", "lanche", "bebida"].filter(category => products.some(product => product.category === category));
         if (!groups.includes(digitalCategory)) digitalCategory = groups[0] || null;
         const shownProducts = products.filter(product => product.category === digitalCategory);
-        const shareUrl = `${location.href.split("?")[0]}?cardapio=1`;
+        const onlineOrdering = state.onlineOrdering || seedData.onlineOrdering;
+        const shareUrl = currentUser ? `${location.href.split("?")[0]}?cardapio=1&loja=${encodeURIComponent(currentUser.id)}` : "";
         document.getElementById("pageContent").innerHTML = `
-          <div class="page-heading"><div><div class="eyebrow">Vendas online</div><h1>Cardápio digital</h1><p class="subtitle">Configure produtos e preços para seu cardápio.</p></div><button class="button primary" disabled>Cardápio público em configuração</button></div>
-          <div class="toolbar"><div class="field" style="flex:1"><label for="menuShareUrl">Link de prévia (não compartilhar ainda)</label><input class="search" id="menuShareUrl" style="width:100%" readonly value="${escapeHtml(shareUrl)}"></div><button class="button" disabled>Indisponível</button></div>
-          <div class="callout" style="margin:0 0 15px"><span>ⓘ</span><div><b>Pedidos online ainda não estão conectados</b>Esta tela é apenas uma prévia local. Os pedidos de outros celulares ainda não chegam ao seu painel.</div></div>
+          <div class="page-heading"><div><div class="eyebrow">Vendas online</div><h1>Cardápio digital</h1><p class="subtitle">Configure produtos, entrega e pagamento Pix para seu cardápio.</p></div></div>
+          <article class="panel" style="margin-bottom:15px"><div class="panel-heading"><h2>Publicação e entrega</h2><span>${onlineOrdering.enabled ? "Ativado" : "Desativado"}</span></div>
+            ${onlineMenuReady && onlinePaymentsReady ? "" : `<div class="callout" style="margin:0 0 13px"><span>ⓘ</span><div><b>Configure os pagamentos antes de publicar</b>Conclua a conexão e a configuração do servidor na aba Pagamentos online.</div><button class="button small" type="button" data-page="pagamentos-online">Abrir configuração</button></div>`}
+            <form class="form-grid" id="onlineOrderingForm">
+              <label class="setting-item full" style="margin:0"><span><strong>Aceitar pedidos online com Pix</strong><p>O pedido só entra na fila de preparo depois que o pagamento for confirmado.</p></span><span class="switch"><input name="enabled" type="checkbox" ${onlineOrdering.enabled ? "checked" : ""}><span></span></span></label>
+              <div class="field"><label for="deliveryFee">Taxa de entrega (R$)</label><input id="deliveryFee" name="deliveryFee" type="number" min="0" max="1000" step="0.01" value="${number(onlineOrdering.deliveryFee).toFixed(2)}" required></div>
+              <label class="setting-item" style="margin:0"><span><strong>Permitir retirada no local</strong><p>O cliente poderá escolher retirada em vez de entrega.</p></span><span class="switch"><input name="pickupEnabled" type="checkbox" ${onlineOrdering.pickupEnabled ? "checked" : ""}><span></span></span></label>
+              <div class="field full"><label for="pickupAddress">Endereço para retirada</label><input id="pickupAddress" name="pickupAddress" maxlength="180" value="${escapeHtml(onlineOrdering.pickupAddress)}" placeholder="Endereço da loja" ${onlineOrdering.pickupEnabled ? "required" : ""}></div>
+              <div class="field full"><button class="button primary" type="submit" ${onlineMenuReady ? "" : "disabled"}>Salvar configurações</button></div>
+            </form>
+            ${onlineOrdering.enabled && onlineMenuReady && onlinePaymentsReady ? `<div class="toolbar" style="margin-top:14px"><div class="field" style="flex:1"><label for="menuShareUrl">Link público do cardápio</label><input class="search" id="menuShareUrl" style="width:100%" readonly value="${escapeHtml(shareUrl)}"></div><button class="button" type="button" data-action="copy-menu-link">Copiar link</button></div>` : ""}
+            <div class="callout" style="margin:13px 0 0"><span>ⓘ</span><div><b>Pagamento Pix</b>Conecte a conta Mercado Pago em Pagamentos online. O Pix será liberado quando a configuração do servidor e a conexão da conta estiverem concluídas.</div></div>
+          </article>
           ${groups.length ? `<div class="filters" style="margin-bottom:13px">${groups.map(category => `<button class="filter-btn ${digitalCategory === category ? "active" : ""}" data-digital-category="${category}">${categoryIcon(category)} ${categoryName(category)}s</button>`).join("")}</div><article class="panel" style="margin-bottom:13px"><div class="panel-heading"><h2>${categoryIcon(digitalCategory)} ${categoryName(digitalCategory)}s</h2><span>${shownProducts.length} produto(s)</span></div><div class="digital-menu-list">${shownProducts.map(product => {
             const prices = productOptions(product).map(option => number(option.price));
             const priceLabel = prices.length > 1 ? `A partir de ${money(Math.min(...prices))}` : money(prices[0]);
             const borderCount = product.category === "pizza" ? productBorderOptions(product).length : 0;
             return `<div class="product-card-title"><span class="food-thumb">${categoryIcon(product.category)}</span><div><strong style="font-size:12px">${escapeHtml(product.name)}</strong><div class="category-label">${priceLabel} · ${borderCount ? `${borderCount} opções de borda · ` : ""}${product.addons?.length || 0} adicional(is) disponível(is)</div></div></div>`;
           }).join("")}</div></article>` : `<div class="empty-state">Ative ou cadastre produtos para montar seu cardápio digital.</div>`}
-          <p class="helper public-note">Prévia local: pedidos online ainda não estão conectados.</p>`;
+          <p class="helper public-note">Configure publicação e entrega antes de compartilhar o cardápio.</p>`;
+        document.getElementById("onlineOrderingForm").addEventListener("submit", saveOnlineOrdering);
+      }
+
+      async function saveOnlineOrdering(event) {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const data = new FormData(form);
+        const enabled = form.elements.enabled.checked;
+        const pickupEnabled = form.elements.pickupEnabled.checked;
+        const deliveryFee = Number(data.get("deliveryFee"));
+        const pickupAddress = String(data.get("pickupAddress") || "").trim();
+        if (!Number.isFinite(deliveryFee) || deliveryFee < 0 || deliveryFee > 1000) {
+          showToast("Informe uma taxa de entrega entre R$ 0 e R$ 1.000.");
+          return;
+        }
+        if (pickupEnabled && pickupAddress.length < 6) {
+          showToast("Informe o endereço da loja para habilitar a retirada.");
+          return;
+        }
+        if ((!onlineMenuReady || !onlinePaymentsReady) && enabled) {
+          showToast("Conecte o Mercado Pago e configure o servidor na aba Pagamentos online antes de publicar.");
+          return;
+        }
+        const previous = state.onlineOrdering;
+        state.onlineOrdering = { enabled, deliveryFee: roundMoney(deliveryFee), pickupEnabled, pickupAddress };
+        if (!saveState()) {
+          state.onlineOrdering = previous;
+          return;
+        }
+        if (currentUser && onlineMenuReady) {
+          try {
+            await syncPublicMenu(currentUser.id, state);
+          } catch (error) {
+            console.error("Não foi possível publicar as configurações do cardápio:", error);
+            state.onlineOrdering = previous;
+            saveState();
+            showToast("Não foi possível publicar. Confira a conexão e o SQL do Supabase.");
+            renderDigitalMenu();
+            return;
+          }
+        }
+        renderDigitalMenu();
+        showToast(enabled ? "Cardápio publicado. Compartilhe o link público." : "Configurações do cardápio salvas.");
       }
 
       function renderPublicMenu() {
+        if (publicMenuLoadError) {
+          document.getElementById("pageContent").innerHTML = `<section class="panel" style="margin-top:24px;text-align:center"><div class="stat-icon" style="margin:0 auto 13px;width:44px;height:44px">ⓘ</div><h1 style="font-size:22px">Cardápio indisponível</h1><p class="subtitle">${escapeHtml(publicMenuLoadError)}</p></section>`;
+          return;
+        }
         const products = activeSaleProducts();
         const groups = ["pizza", "lanche", "bebida"].filter(category => products.some(product => product.category === category));
         if (!groups.includes(digitalCategory)) digitalCategory = groups[0] || null;
@@ -1287,19 +1615,26 @@
           </details>`;
         }).join("");
         const categoryButtons = groups.map(category => `<button class="filter-btn ${digitalCategory === category ? "active" : ""}" data-public-category="${category}">${categoryIcon(category)} ${categoryName(category)}s</button>`).join("");
+        const subtotal = digitalCart.reduce((sum, item) => sum + saleLineTotal(item), 0);
+        const deliveryFee = digitalFulfillment === "delivery" ? publicOrdering.deliveryFee : 0;
+        const total = roundMoney(subtotal + deliveryFee);
         document.getElementById("pageContent").innerHTML = `
-          <header class="digital-hero"><div><div class="eyebrow" style="color:var(--lime)">BORA! DELIVERY</div><h1>Peça algo gostoso.</h1><p>Escolha seus favoritos e receba em casa.</p></div><button class="button" data-action="return-to-system">Voltar ao sistema</button></header>
-          <p class="callout public-note"><span>ⓘ</span><span>Este é apenas um cardápio de demonstração. Não é possível enviar pedidos ainda.</span></p>
+          <header class="digital-hero"><div><div class="eyebrow" style="color:var(--lime)">BORA! DELIVERY</div><h1>Peça algo gostoso.</h1><p>Escolha seus favoritos e pague com Pix.</p></div></header>
           ${groups.length ? `<nav class="filters category-tabs" aria-label="Categorias do cardápio">${categoryButtons}</nav><section><div class="panel-heading" style="margin:16px 0 10px"><h2>${categoryIcon(digitalCategory)} ${categoryName(digitalCategory)}s</h2><span>${shownProducts.length} produto(s)</span></div><div class="digital-menu-list">${items}</div></section>` : `<div class="empty-state" style="margin-top:13px">O cardápio está temporariamente sem produtos disponíveis.</div>`}
           <section class="panel" style="margin-top:18px"><div class="panel-heading"><h2>Seu pedido</h2><span id="digitalCartCount">${digitalCart.length} item(ns)</span></div><div id="digitalCartSummary">${digitalCart.length ? digitalCart.map((item, index) => `<div class="sale-cart-row"><div><strong>${escapeHtml(item.name)}${item.optionName !== "Padrão" ? ` · ${escapeHtml(item.optionName)}` : ""} × ${item.quantity}</strong><small>${[item.border?.name, ...item.addons.map(addon => addon.name)].filter(Boolean).join(" · ") || "Sem adicionais"}</small></div><span>${money(saleLineTotal(item))}</span><span></span><button type="button" class="icon-button" data-action="remove-digital-item" data-index="${index}">×</button></div>`).join("") : `<div class="empty-state">Adicione um produto ao pedido.</div>`}</div>
-            <div class="sale-total"><span>Total</span><strong>${money(digitalCart.reduce((sum, item) => sum + saleLineTotal(item), 0))}</strong></div>
+            <div class="field" style="margin-top:13px"><label for="digitalFulfillment">Como prefere receber?</label><select id="digitalFulfillment"><option value="delivery">Entrega · ${money(publicOrdering.deliveryFee)}</option>${publicOrdering.pickupEnabled ? `<option value="pickup">Retirada no local · grátis</option>` : ""}</select></div>
+            ${publicOrdering.pickupEnabled && publicOrdering.pickupAddress ? `<p class="helper" id="pickupAddressNote" ${digitalFulfillment === "pickup" ? "" : "hidden"}>Endereço para retirada: ${escapeHtml(publicOrdering.pickupAddress)}</p>` : ""}
+            <div class="sale-total"><span id="digitalOrderBreakdown">Itens ${money(subtotal)}${deliveryFee ? ` + entrega ${money(deliveryFee)}` : ""}</span><strong id="digitalOrderTotal">${money(total)}</strong></div>
             <form class="sale-checkout" id="digitalCheckout"><div class="form-grid">
               <div class="field"><label for="digitalName">Seu nome</label><input id="digitalName" name="name" required maxlength="70"></div>
               <div class="field"><label for="digitalPhone">WhatsApp / telefone</label><input id="digitalPhone" name="phone" type="tel" required maxlength="25"></div>
-              <div class="field full"><label for="digitalAddress">Endereço de entrega</label><input id="digitalAddress" name="address" required maxlength="140" placeholder="Rua, número, bairro e complemento"></div>
+              <div class="field full"><label for="digitalEmail">E-mail para o pagamento</label><input id="digitalEmail" name="email" type="email" required maxlength="254" autocomplete="email"></div>
+              <div class="field full" id="digitalAddressField" ${digitalFulfillment === "pickup" ? "hidden" : ""}><label for="digitalAddress">Endereço de entrega</label><input id="digitalAddress" name="address" ${digitalFulfillment === "pickup" ? "" : "required"} maxlength="180" placeholder="Rua, número, bairro e complemento"></div>
               <div class="field full"><label for="digitalNotes">Observações do pedido</label><input id="digitalNotes" name="notes" maxlength="160" placeholder="Ponto de referência, sem cebola..."></div>
             </div>
-            <button type="submit" class="button primary" ${digitalCart.length ? "" : "disabled"}>Enviar pedido · ${money(digitalCart.reduce((sum, item) => sum + saleLineTotal(item), 0))}</button></form>
+            <button type="submit" class="button primary" ${digitalCart.length && !currentPixOrder ? "" : "disabled"}>Gerar Pix · ${money(total)}</button>
+            <div id="pixPaymentResult">${renderPixPaymentResult()}</div>
+            </form>
           </section>`;
         document.querySelectorAll("[data-public-product]").forEach(card => {
           const product = state.products.find(item => item.id === card.dataset.publicProduct);
@@ -1328,7 +1663,31 @@
             });
           }
         });
+        const fulfillmentSelect = document.getElementById("digitalFulfillment");
+        fulfillmentSelect.value = digitalFulfillment;
+        fulfillmentSelect.addEventListener("change", () => {
+          digitalFulfillment = fulfillmentSelect.value;
+          const pickup = digitalFulfillment === "pickup";
+          const addressField = document.getElementById("digitalAddressField");
+          const addressInput = document.getElementById("digitalAddress");
+          if (addressField) addressField.hidden = pickup;
+          if (addressInput) addressInput.required = !pickup;
+          const pickupNote = document.getElementById("pickupAddressNote");
+          if (pickupNote) pickupNote.hidden = !pickup;
+          const total = roundMoney(subtotal + (pickup ? 0 : publicOrdering.deliveryFee));
+          document.getElementById("digitalOrderBreakdown").textContent = `Itens ${money(subtotal)}${!pickup && publicOrdering.deliveryFee ? ` + entrega ${money(publicOrdering.deliveryFee)}` : ""}`;
+          document.getElementById("digitalOrderTotal").textContent = money(total);
+          document.querySelector("#digitalCheckout button[type='submit']").textContent = `Gerar Pix · ${money(total)}`;
+        });
         document.getElementById("digitalCheckout").addEventListener("submit", submitDigitalOrder);
+      }
+
+      function renderPixPaymentResult() {
+        if (!currentPixOrder) return "";
+        const qrImage = currentPixOrder.pixQrBase64
+          ? `<img src="data:image/png;base64,${escapeHtml(currentPixOrder.pixQrBase64)}" alt="QR Code Pix" style="display:block;width:min(240px,100%);margin:12px auto">`
+          : "";
+        return `<div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b id="pixPaymentStatus">Pedido #${escapeHtml(currentPixOrder.orderId.slice(0, 8))} · aguardando Pix</b><p class="helper">Abra o app do seu banco, escaneie o QR Code ou copie o código Pix. O pedido só será enviado à loja após a confirmação.</p></div></div>${qrImage}<div class="field"><label for="pixCopyPaste">Pix copia e cola</label><textarea id="pixCopyPaste" readonly rows="3" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;resize:vertical">${escapeHtml(currentPixOrder.pixCopyPaste)}</textarea></div><button type="button" class="button" data-action="copy-pix">Copiar código Pix</button>${currentPixOrder.ticketUrl ? `<a class="button" href="${escapeHtml(currentPixOrder.ticketUrl)}" target="_blank" rel="noopener noreferrer">Abrir pagamento</a>` : ""}`;
       }
 
       function addDigitalItem(productId) {
@@ -1359,6 +1718,7 @@
           const addon = product.addons[Number(input.dataset.publicAddon)];
           return { name: addon.name, price: number(addon.price), cost: number(addon.cost) };
         });
+        const addonIndexes = [...card.querySelectorAll("[data-public-addon]:checked")].map(input => Number(input.dataset.publicAddon));
         const borderIndex = Number(card.querySelector("[data-public-border]:checked")?.dataset.publicBorder || 0);
         const border = product.category === "pizza" ? productBorderOptions(product)[borderIndex] : null;
         const prices = flavorOptions.map(item => number(item.option.price));
@@ -1370,12 +1730,15 @@
           productId: product.id,
           name: flavorOptions.map(item => item.product.name).join(" / "),
           flavors: flavorOptions.map(item => item.product.name),
+          flavorIds: flavorOptions.map(item => item.product.id),
           category: product.category,
           optionName: option.name,
           price: roundMoney(price),
           cost: roundMoney(cost),
           quantity: 1,
           border: border ? { ...border } : null,
+          borderName: border?.name || "Sem borda",
+          addonIndexes,
           addons
         });
         renderPublicMenu();
@@ -1384,11 +1747,169 @@
 
       function submitDigitalOrder(event) {
         event.preventDefault();
-        showToast("Pedidos online ainda não estão ativados. Nenhum pedido foi enviado.");
+        if (currentPixOrder || !digitalCart.length) return;
+        const form = event.currentTarget;
+        if (!form.reportValidity()) return;
+        const submitButton = form.querySelector("button[type='submit']");
+        submitButton.disabled = true;
+        submitButton.textContent = "Gerando Pix…";
+        const data = new FormData(form);
+        supabaseClient.functions.invoke("create-pix-order", {
+          body: {
+            businessId: publicBusinessId,
+            fulfillment: digitalFulfillment,
+            customer: {
+              name: data.get("name"),
+              phone: data.get("phone"),
+              email: data.get("email"),
+              address: data.get("address"),
+              notes: data.get("notes")
+            },
+            items: digitalCart.map(item => ({
+              productId: item.productId,
+              optionName: item.optionName,
+              flavorIds: item.flavorIds || [],
+              borderName: item.borderName || "Sem borda",
+              addonIndexes: item.addonIndexes || [],
+              quantity: item.quantity
+            }))
+          }
+        }).then(({ data: result, error }) => {
+          if (error || !result?.orderId) {
+            console.error("Não foi possível gerar o pagamento Pix:", error || result?.error);
+            showToast(result?.error || "Não foi possível gerar o Pix. Tente novamente.");
+            submitButton.disabled = false;
+            submitButton.textContent = `Gerar Pix · ${money(roundMoney(digitalCart.reduce((sum, item) => sum + saleLineTotal(item), 0) + (digitalFulfillment === "delivery" ? publicOrdering.deliveryFee : 0)))}`;
+            return;
+          }
+          currentPixOrder = {
+            orderId: String(result.orderId),
+            total: number(result.total),
+            pixCopyPaste: String(result.pixCopyPaste || ""),
+            pixQrBase64: String(result.pixQrBase64 || ""),
+            ticketUrl: String(result.ticketUrl || "")
+          };
+          document.getElementById("digitalOrderTotal").textContent = money(currentPixOrder.total);
+          document.getElementById("pixPaymentResult").innerHTML = renderPixPaymentResult();
+          document.querySelectorAll("[data-action='public-add'], [data-action='remove-digital-item']").forEach(button => { button.disabled = true; });
+          submitButton.textContent = "Pix gerado";
+          startDigitalPaymentPolling();
+        }).catch(error => {
+          console.error("Não foi possível enviar o pedido:", error);
+          showToast("Não foi possível gerar o Pix. Verifique sua conexão e tente novamente.");
+          submitButton.disabled = false;
+          submitButton.textContent = "Tentar novamente";
+        });
+      }
+
+      function startDigitalPaymentPolling() {
+        if (digitalPaymentPoll) clearInterval(digitalPaymentPoll);
+        digitalPaymentPoll = setInterval(async () => {
+          if (!currentPixOrder) return;
+          const { data, error } = await supabaseClient.functions.invoke("check-pix-order", {
+            body: { orderId: currentPixOrder.orderId }
+          });
+          if (error) {
+            console.error("Não foi possível verificar o status do Pix:", error);
+            return;
+          }
+          if (data?.status === "approved") {
+            const status = document.getElementById("pixPaymentStatus");
+            if (status) status.textContent = `Pedido #${currentPixOrder.orderId.slice(0, 8)} · Pix confirmado`;
+            clearInterval(digitalPaymentPoll);
+            digitalPaymentPoll = null;
+            showToast("Pagamento confirmado. A loja recebeu seu pedido.");
+          } else if (["rejected", "cancelled", "refunded", "failed"].includes(data?.status)) {
+            const status = document.getElementById("pixPaymentStatus");
+            if (status) status.textContent = "Pagamento não aprovado. Entre em contato com a loja.";
+            clearInterval(digitalPaymentPoll);
+            digitalPaymentPoll = null;
+          }
+        }, 10000);
+      }
+
+      function renderOnlinePaymentSettings() {
+        document.getElementById("pageContent").innerHTML = `
+          <div class="page-heading"><div><div class="eyebrow">Recebimentos</div><h1>Pagamentos online</h1><p class="subtitle">Conecte a conta Mercado Pago da sua loja para receber pedidos online via Pix.</p></div></div>
+          <article class="panel">
+            <div class="panel-heading"><h2>Conta Mercado Pago</h2><span id="mercadoPagoConnectionLabel">Verificando…</span></div>
+            <div id="mercadoPagoConnectionCard" class="callout"><span>ⓘ</span><div>Consultando o status da conexão…</div></div>
+            <div class="toolbar" style="margin-top:14px">
+              <button class="button primary" type="button" data-action="connect-mercadopago" ${mercadoPagoConnection.configured ? "" : "disabled"}>${mercadoPagoConnection.connected ? "Reconectar conta" : "Conectar Mercado Pago"}</button>
+              <button class="button" type="button" data-action="refresh-mercadopago">Atualizar status</button>
+            </div>
+            <div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b>Seus dados ficam protegidos</b>A autorização é feita no site do Mercado Pago. O token de acesso e a renovação ficam restritos ao servidor e não são exibidos nem gravados no navegador.</div></div>
+          </article>
+          ${mercadoPagoConnection.configured ? "" : `<article class="panel" style="margin-top:14px"><div class="panel-heading"><h2>Ativação inicial</h2></div><p class="helper">Antes da primeira conexão, o administrador precisa cadastrar uma aplicação no Mercado Pago e configurar uma única vez o ID e o segredo da aplicação, a URL de retorno OAuth e o segredo do webhook nos Secrets do Supabase. Depois disso, cada loja conecta sua própria conta nesta tela.</p></article>`}`;
+        renderMercadoPagoConnectionCard();
+        refreshMercadoPagoConnection();
+      }
+
+      function renderMercadoPagoConnectionCard(errorMessage = "") {
+        const card = document.getElementById("mercadoPagoConnectionCard");
+        const label = document.getElementById("mercadoPagoConnectionLabel");
+        const connectButton = document.querySelector("[data-action='connect-mercadopago']");
+        if (!card || !label) return;
+        if (connectButton) {
+          connectButton.disabled = !mercadoPagoConnection.configured;
+          connectButton.textContent = mercadoPagoConnection.connected ? "Reconectar conta" : "Conectar Mercado Pago";
+        }
+        if (errorMessage) {
+          label.textContent = "Indisponível";
+          card.innerHTML = `<span>!</span><div>${escapeHtml(errorMessage)}</div>`;
+        } else if (mercadoPagoConnection.connected) {
+          label.textContent = mercadoPagoConnection.environment === "test" ? "Conectado · Teste" : "Conectado · Produção";
+          card.innerHTML = `<span>✓</span><div><b>Conta conectada · ${mercadoPagoConnection.environment === "test" ? "ambiente de teste" : "produção"}</b>Vendedor Mercado Pago: ${escapeHtml(mercadoPagoConnection.sellerId || "—")}${mercadoPagoConnection.connectedAt ? `<br>Conectada em ${new Date(mercadoPagoConnection.connectedAt).toLocaleString("pt-BR")}` : ""}</div>`;
+        } else if (mercadoPagoConnection.configured) {
+          label.textContent = mercadoPagoConnection.environment === "test" ? "Teste · Não conectado" : "Produção · Não conectado";
+          card.innerHTML = `<span>ⓘ</span><div><b>Conecte a conta da loja</b>Ambiente ${mercadoPagoConnection.environment === "test" ? "de teste" : "de produção"}. Você será direcionado ao Mercado Pago para autorizar o recebimento.</div>`;
+        } else {
+          label.textContent = "Configuração pendente";
+          card.innerHTML = `<span>ⓘ</span><div>A configuração inicial da aplicação ainda não foi concluída no servidor.</div>`;
+        }
+      }
+
+      async function refreshMercadoPagoConnection() {
+        try {
+          const { data, error } = await supabaseClient.functions.invoke("mercadopago-settings", {
+            body: { action: "status" }
+          });
+          if (error) throw error;
+          if (!data || typeof data.configured !== "boolean" || typeof data.connected !== "boolean") {
+            throw new Error("O servidor retornou um status de conexão inválido.");
+          }
+          mercadoPagoConnection = data;
+          onlinePaymentsReady = onlinePaymentFunctionsReady && onlineMenuReady && data.configured && data.connected;
+          renderMercadoPagoConnectionCard();
+        } catch (error) {
+          console.error("Não foi possível consultar a conexão Mercado Pago:", error);
+          renderMercadoPagoConnectionCard("Não foi possível verificar a conexão. Confirme se as funções e o schema foram publicados.");
+        }
+      }
+
+      async function startMercadoPagoConnection(button) {
+        button.disabled = true;
+        button.textContent = "Abrindo Mercado Pago…";
+        try {
+          const { data, error } = await supabaseClient.functions.invoke("mercadopago-settings", {
+            body: { action: "connect" }
+          });
+          if (error) throw error;
+          if (!data?.authorizationUrl) throw new Error("O servidor não retornou o endereço de autorização.");
+          location.assign(data.authorizationUrl);
+        } catch (error) {
+          console.error("Não foi possível iniciar a conexão Mercado Pago:", error);
+          showToast("Não foi possível iniciar a conexão. Confira a configuração do servidor.");
+          button.disabled = false;
+          button.textContent = mercadoPagoConnection.connected ? "Reconectar conta" : "Conectar Mercado Pago";
+        }
       }
 
       function renderMore() {
         const links = [
+          ["caixa", "▣", "Caixa"],
+          ["pagamentos-online", "◇", "Pagamentos online"],
+          ["relatorio-caixa", "▥", "Relatório de caixa"],
           ["relatorios", "▥", "Relatórios"],
           ["clientes", "♙", "Clientes"],
           ["produtos", "▦", "Produtos e cardápio"],
@@ -1473,6 +1994,84 @@
           </article>`;
       }
 
+      function renderCashReports() {
+        const today = localDateKey(new Date());
+        const start = cashReportStart || today;
+        const end = cashReportEnd || today;
+        const validRange = start <= end;
+        const sessions = validRange
+          ? [...state.cashSessions]
+            .filter(session => {
+              const openedDay = localDateKey(session.openedAt);
+              return openedDay >= start && openedDay <= end;
+            })
+            .sort((a, b) => new Date(b.openedAt) - new Date(a.openedAt))
+          : [];
+        const rows = sessions.map(session => {
+          const sales = paidSales(session.id);
+          const cashSales = sales.filter(sale => sale.payment === "Dinheiro").reduce((sum, sale) => sum + number(sale.total), 0);
+          const expected = roundMoney(number(session.openingAmount) + cashSales);
+          return {
+            session,
+            sales,
+            cashSales,
+            expected: session.closedAt ? number(session.expectedCash) : expected,
+            counted: session.closedAt ? number(session.countedCash) : null,
+            difference: session.closedAt ? number(session.difference) : null
+          };
+        });
+        const allSales = rows.flatMap(row => row.sales);
+        const totalSales = allSales.reduce((sum, sale) => sum + number(sale.total), 0);
+        const totalExpected = rows.reduce((sum, row) => sum + row.expected, 0);
+        const closedRows = rows.filter(row => row.session.closedAt);
+        const totalCounted = closedRows.reduce((sum, row) => sum + number(row.counted), 0);
+        const totalDifference = closedRows.reduce((sum, row) => sum + number(row.difference), 0);
+        const payments = ["Dinheiro", "Pix", "Cartão de crédito", "Cartão de débito", "A combinar"].map(payment => ({
+          payment,
+          total: allSales.filter(sale => sale.payment === payment).reduce((sum, sale) => sum + number(sale.total), 0)
+        }));
+        const sessionRows = rows.map(({ session, sales, cashSales, expected, counted, difference }) => `
+          <tr>
+            <td>${new Date(session.openedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</td>
+            <td>${session.closedAt ? new Date(session.closedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—"}</td>
+            <td>${money(session.openingAmount)}</td>
+            <td>${money(cashSales)}</td>
+            <td>${money(expected)}</td>
+            <td>${counted === null ? "—" : money(counted)}</td>
+            <td class="${difference !== null && difference < 0 ? "margin-cell low" : "margin-cell"}">${difference === null ? "—" : money(difference)}</td>
+            <td><span class="pill ${session.closedAt ? "orange" : ""}">${session.closedAt ? "Fechado" : "Aberto"}</span></td>
+          </tr>`).join("");
+        document.getElementById("pageContent").innerHTML = `
+          <div class="page-heading"><div><div class="eyebrow">Financeiro</div><h1>Relatório de caixa</h1><p class="subtitle">Confira vendas por turno, dinheiro esperado e diferenças de fechamento.</p></div><button class="button" data-action="print-report">Imprimir relatório</button></div>
+          <form class="report-filters" id="cashReportFilters"><div class="field"><label for="cashReportStart">De</label><input id="cashReportStart" name="start" type="date" value="${start}" required></div><div class="field"><label for="cashReportEnd">Até</label><input id="cashReportEnd" name="end" type="date" value="${end}" required></div><button class="button primary" type="submit">Aplicar período</button></form>
+          ${!validRange ? `<div class="callout"><span>!</span><div><b>Período inválido</b>A data inicial precisa ser anterior à data final.</div></div>` : ""}
+          <p class="helper" style="margin:12px 0">Os turnos são agrupados pela data de abertura. Vendas canceladas não entram nos totais.</p>
+          <section class="stats" style="margin-top:15px">
+            <article class="stat-card"><div class="stat-top"><span>Vendas nos turnos</span><span class="stat-icon">↗</span></div><div class="stat-value">${money(totalSales)}</div><div class="stat-note">${allSales.length} recebimento(s) pago(s)</div></article>
+            <article class="stat-card"><div class="stat-top"><span>Dinheiro esperado</span><span class="stat-icon">▣</span></div><div class="stat-value">${money(totalExpected)}</div><div class="stat-note">inclui fundo inicial e vendas em dinheiro</div></article>
+            <article class="stat-card"><div class="stat-top"><span>Dinheiro contado</span><span class="stat-icon">＋</span></div><div class="stat-value">${money(totalCounted)}</div><div class="stat-note">${closedRows.length} turno(s) fechado(s)</div></article>
+            <article class="stat-card"><div class="stat-top"><span>Diferença dos fechamentos</span><span class="stat-icon">↕</span></div><div class="stat-value">${money(totalDifference)}</div><div class="stat-note">soma das diferenças registradas</div></article>
+          </section>
+          <section class="dashboard-grid">
+            <article class="panel"><div class="panel-heading"><h2>Vendas por forma de pagamento</h2><span>${rows.length} turno(s)</span></div>
+              ${payments.some(item => item.total > 0) ? `<div class="cost-summary">${payments.map(item => `<div class="cost-row"><span>${escapeHtml(item.payment)}</span><strong>${money(item.total)}</strong></div>`).join("")}</div>` : `<div class="empty-state">Não há vendas pagas nos turnos deste período.</div>`}
+            </article>
+            <article class="panel"><div class="panel-heading"><h2>Fechamento de caixa</h2></div>
+              <div class="cost-summary"><div class="cost-row"><span>Turnos no período</span><strong>${rows.length}</strong></div><div class="cost-row"><span>Turnos fechados</span><strong>${closedRows.length}</strong></div><div class="cost-row"><span>Turnos ainda abertos</span><strong>${rows.length - closedRows.length}</strong></div></div>
+            </article>
+          </section>
+          <article class="panel" style="margin-top:14px"><div class="panel-heading"><h2>Detalhamento por turno</h2><span>${rows.length} turno(s)</span></div>
+            ${rows.length ? `<div class="table-wrap"><table><thead><tr><th>Abertura</th><th>Fechamento</th><th>Fundo inicial</th><th>Vendas em dinheiro</th><th>Esperado</th><th>Contado</th><th>Diferença</th><th>Status</th></tr></thead><tbody>${sessionRows}</tbody></table></div>` : `<div class="empty-state">Nenhum turno de caixa no período selecionado.</div>`}
+          </article>`;
+        document.getElementById("cashReportFilters").addEventListener("submit", event => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          cashReportStart = String(data.get("start"));
+          cashReportEnd = String(data.get("end"));
+          renderCashReports();
+        });
+      }
+
       function localDateKey(value) {
         const date = new Date(value);
         return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -1497,7 +2096,7 @@
           itemTotals.set(item.name, current);
         }));
         const topItems = [...itemTotals.entries()].sort((a, b) => b[1].quantity - a[1].quantity).slice(0, 5);
-        const payments = ["Dinheiro", "Pix", "Cartão de crédito", "Cartão de débito", "A combinar"].map(payment => ({ payment, total: sales.filter(sale => sale.payment === payment).reduce((sum, sale) => sum + number(sale.total), 0) })).filter(item => item.total > 0);
+        const payments = ["Dinheiro", "Pix", "Pix online", "Cartão de crédito", "Cartão de débito", "A combinar"].map(payment => ({ payment, total: sales.filter(sale => sale.payment === payment).reduce((sum, sale) => sum + number(sale.total), 0) })).filter(item => item.total > 0);
         document.getElementById("pageContent").innerHTML = `
           <div class="page-heading"><div><div class="eyebrow">Desempenho do delivery</div><h1>Relatórios</h1><p class="subtitle">Consulte vendas recebidas, custos e produtos mais vendidos por período.</p></div><button class="button" data-action="print-report">Imprimir relatório</button></div>
           <form class="report-filters" id="reportFilters"><div class="field"><label for="reportStart">De</label><input id="reportStart" name="start" type="date" value="${start}" required></div><div class="field"><label for="reportEnd">Até</label><input id="reportEnd" name="end" type="date" value="${end}" required></div><button class="button primary" type="submit">Aplicar período</button></form>
@@ -1517,6 +2116,8 @@
 
       let reportStart = "";
       let reportEnd = "";
+      let cashReportStart = "";
+      let cashReportEnd = "";
 
       function renderProducts() {
         const selected = productFilter === "todos" ? state.products : state.products.filter(item => item.category === productFilter);
@@ -1862,6 +2463,10 @@
       });
 
       document.addEventListener("click", event => {
+        if (!event.target.closest(".customer-autocomplete")) {
+          const suggestions = document.getElementById("saleCustomerSuggestions");
+          if (suggestions) suggestions.hidden = true;
+        }
         const pageButton = event.target.closest("[data-page]");
         if (pageButton) {
           currentPage = pageButton.dataset.page;
@@ -1894,6 +2499,8 @@
           renderPublicMenu();
         }
         if (action.dataset.action === "public-add") addDigitalItem(id);
+        if (action.dataset.action === "connect-mercadopago") startMercadoPagoConnection(action);
+        if (action.dataset.action === "refresh-mercadopago") refreshMercadoPagoConnection();
         if (action.dataset.action === "return-to-system") location.href = location.pathname;
         if (action.dataset.action === "open-pdv") {
           if (!currentCashSession()) {
@@ -1924,8 +2531,31 @@
         if (action.dataset.action === "open-cash") openCashForm();
         if (action.dataset.action === "close-cash") openCashForm(true);
         if (action.dataset.action === "receive-sale") receiveSale(state.sales.find(sale => sale.id === id));
+        if (action.dataset.action === "select-sale-customer") {
+          const customer = state.customers.find(item => item.id === id);
+          if (!customer) return;
+          const input = document.getElementById("saleCustomerSearch");
+          const customerId = document.getElementById("saleCustomerId");
+          const suggestions = document.getElementById("saleCustomerSuggestions");
+          if (input && customerId && suggestions) {
+            input.value = customer.name;
+            input.dataset.selectedName = customer.name;
+            customerId.value = customer.id;
+            suggestions.hidden = true;
+          }
+        }
+        if (action.dataset.action === "toggle-customer-details") {
+          const card = action.closest(".customer-item");
+          const details = document.getElementById(`customerDetails-${id}`);
+          if (card && details) {
+            const expanded = action.getAttribute("aria-expanded") !== "true";
+            action.setAttribute("aria-expanded", String(expanded));
+            card.classList.toggle("expanded", expanded);
+            details.hidden = !expanded;
+          }
+        }
         if (action.dataset.action === "advance-order") {
-          const sale = state.sales.find(item => item.id === id);
+          const sale = allSales().find(item => item.id === id);
           if (sale) changeSaleStatus(sale, action.dataset.status);
         }
         if (action.dataset.action === "print-report") window.print();
@@ -1969,7 +2599,7 @@
           renderPublicMenu();
           return;
         }
-        if (["vendas", "pedidos", "caixa", "relatorios", "inicio", "clientes"].includes(currentPage)) render();
+        if (["vendas", "pedidos", "caixa", "relatorio-caixa", "relatorios", "inicio", "clientes"].includes(currentPage)) render();
       });
       initializeAuth();
     })();

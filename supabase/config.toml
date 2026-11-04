@@ -1,0 +1,14 @@
+[functions.create-pix-order]
+verify_jwt = false
+
+[functions.check-pix-order]
+verify_jwt = false
+
+[functions.mercadopago-webhook]
+verify_jwt = false
+
+[functions.mercadopago-settings]
+verify_jwt = true
+
+[functions.mercadopago-oauth-callback]
+verify_jwt = false
