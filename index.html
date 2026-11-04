@@ -1638,8 +1638,8 @@
           showToast("Informe o endereço da loja para habilitar a retirada.");
           return;
         }
-        if (!onlineMenuReady && enabled) {
-          showToast("Configure a conexão com o cardápio online antes de aceitar pedidos.");
+        if ((!onlineMenuReady || !onlinePaymentsReady) && enabled) {
+          showToast("Conecte o Mercado Pago e configure o servidor na aba Pagamentos online antes de aceitar pedidos.");
           return;
         }
         const previous = state.onlineOrdering;
