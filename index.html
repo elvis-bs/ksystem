@@ -433,6 +433,7 @@
       <div class="nav-label" style="margin-top:20px">Financeiro</div>
       <nav class="nav" aria-label="Financeiro">
         <button data-page="caixa"><span class="nav-icon">▣</span>Caixa</button>
+        <button data-page="financeiro"><span class="nav-icon">↕</span>Fluxo financeiro</button>
         <button data-page="relatorio-caixa"><span class="nav-icon">▥</span>Relatório de caixa</button>
         <button data-page="relatorios"><span class="nav-icon">▥</span>Relatórios</button>
       </nav>
@@ -506,6 +507,7 @@
         customers: [],
         sales: [],
         cashSessions: [],
+        financeEntries: [],
         ingredients: [
           { id: "ing-massa", name: "Massa de pizza", unit: "g", cost: 0.018 },
           { id: "ing-mozzarella", name: "Muçarela", unit: "g", cost: 0.045 },
@@ -538,6 +540,9 @@
       let state = loadState();
       let currentPage = "inicio";
       let productFilter = "todos";
+      let financeDateFilter = localDateKey(new Date());
+      let financeSearch = "";
+      let financeKindFilter = "all";
       let editingId = null;
       let editingType = null;
 
@@ -572,7 +577,8 @@
             products,
             customers: Array.isArray(parsed.customers) ? parsed.customers : [],
             sales: Array.isArray(parsed.sales) ? parsed.sales : [],
-            cashSessions: Array.isArray(parsed.cashSessions) ? parsed.cashSessions : []
+            cashSessions: Array.isArray(parsed.cashSessions) ? parsed.cashSessions : [],
+            financeEntries: Array.isArray(parsed.financeEntries) ? parsed.financeEntries : []
           };
         } catch (error) {
           console.error("Não foi possível carregar os dados salvos:", error);
@@ -757,7 +763,8 @@
             },
             customers: Array.isArray(parsed.customers) ? parsed.customers : [],
             sales: Array.isArray(parsed.sales) ? parsed.sales : [],
-            cashSessions: Array.isArray(parsed.cashSessions) ? parsed.cashSessions : []
+            cashSessions: Array.isArray(parsed.cashSessions) ? parsed.cashSessions : [],
+            financeEntries: Array.isArray(parsed.financeEntries) ? parsed.financeEntries : []
           };
           localStorage.setItem(LEGACY_IMPORT_KEY, "true");
         } else {
@@ -1055,6 +1062,23 @@
         return allSales().filter(sale => sale.paid && sale.status !== "Cancelado" && (!sessionId || sale.cashSessionId === sessionId));
       }
 
+      function financeBalance(entry) {
+        return Math.max(0, roundMoney(number(entry.amount) - number(entry.paidAmount)));
+      }
+
+      function cashFinanceMovement(sessionId) {
+        return state.financeEntries.reduce((total, entry) => total + (entry.payments || []).reduce((entryTotal, payment) => {
+          if (payment.cashSessionId !== sessionId || payment.method !== "Dinheiro") return entryTotal;
+          return entryTotal + (entry.kind === "receivable" ? number(payment.amount) : -number(payment.amount));
+        }, 0), 0);
+      }
+
+      function customerReceivables(customerId) {
+        return state.financeEntries
+          .filter(entry => entry.kind === "receivable" && entry.customerId === customerId)
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      }
+
       function overallStats() {
         const products = state.products.filter(item => item.active && (item.category !== "pizza" || state.pizzaEnabled));
         const entries = products.flatMap(product => productOptions(product).map(option => ({
@@ -1066,7 +1090,7 @@
       }
 
       function render() {
-        const labels = { inicio: "Visão geral", vendas: "Vendas e pedidos", pedidos: "Acompanhar pedidos", cardapio: "Cardápio digital", caixa: "Caixa", "relatorio-caixa": "Relatório de caixa", relatorios: "Relatórios", clientes: "Clientes", produtos: "Produtos e cardápio", insumos: "Insumos e custos", configuracoes: "Configurações", mais: "Mais opções" };
+        const labels = { inicio: "Visão geral", vendas: "Vendas e pedidos", pedidos: "Acompanhar pedidos", cardapio: "Cardápio digital", caixa: "Caixa", financeiro: "Fluxo financeiro", "relatorio-caixa": "Relatório de caixa", relatorios: "Relatórios", clientes: "Clientes", produtos: "Produtos e cardápio", insumos: "Insumos e custos", configuracoes: "Configurações", mais: "Mais opções" };
         const params = new URLSearchParams(location.search);
         if (params.has("cardapio")) {
           document.body.classList.add("public-menu");
@@ -1093,6 +1117,7 @@
         if (currentPage === "pedidos") renderOrders();
         if (currentPage === "cardapio") renderDigitalMenu();
         if (currentPage === "caixa") renderCash();
+        if (currentPage === "financeiro") renderFinance();
         if (currentPage === "relatorio-caixa") renderCashReports();
         if (currentPage === "relatorios") renderReports();
         if (currentPage === "mais") renderMore();
@@ -1189,7 +1214,7 @@
               </article>
               ${standalonePdv ? "" : `<article class="panel"><div class="panel-heading"><h2>Pedidos de hoje</h2><span>${history.length} pedido${history.length === 1 ? "" : "s"}</span></div>
                 ${!currentCashSession() ? `<div class="callout" style="margin:0 0 12px"><span>ⓘ</span><div><b>Caixa fechado</b>Abra o caixa para registrar vendas e receber pedidos. <button class="button small" data-page="caixa">Abrir caixa</button></div></div>` : ""}
-                ${history.length ? `<div class="table-wrap"><table><thead><tr><th>Pedido</th><th>Cliente</th><th>Itens</th><th>Total</th><th>Pagamento</th><th>Recebimento</th><th>Status</th></tr></thead><tbody>${history.map(sale => `<tr><td>#${escapeHtml(sale.id.slice(-5))}<br><span class="helper">${new Date(sale.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span></td><td>${escapeHtml(sale.customerName || "Balcão")}</td><td>${sale.items.reduce((sum, item) => sum + number(item.quantity), 0)}</td><td>${money(sale.total)}</td><td>${escapeHtml(sale.payment)}</td><td>${sale.paid ? `<span class="pill">Pago</span>` : sale.onlineOrderId ? `<span class="pill orange">${sale.paymentStatus === "pending" ? "Aguardando Pix" : "Pix não aprovado"}</span>` : `<button class="button small" data-action="receive-sale" data-id="${sale.id}" ${currentCashSession() ? "" : "disabled"}>Receber</button>`}</td><td>${sale.onlineOrderId && !sale.paid ? `<span class="pill orange">${sale.paymentStatus === "pending" ? "Aguardando Pix" : "Cancelado"}</span>` : `<select class="order-status-select" data-sale-status="${escapeHtml(sale.id)}" aria-label="Status do pedido">${["Recebido", "Em preparo", "Saiu para entrega", "Concluído", "Cancelado"].map(status => `<option ${sale.status === status ? "selected" : ""}>${status}</option>`).join("")}</select>`}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">Nenhum pedido registrado hoje. Consulte vendas de outros dias em Relatórios.</div>`}
+                ${history.length ? `<div class="table-wrap"><table><thead><tr><th>Pedido</th><th>Cliente</th><th>Itens</th><th>Total</th><th>Pagamento</th><th>Recebimento</th><th>Status</th></tr></thead><tbody>${history.map(sale => `<tr><td>#${escapeHtml(sale.id.slice(-5))}<br><span class="helper">${new Date(sale.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span></td><td>${escapeHtml(sale.customerName || "Balcão")}</td><td>${sale.items.reduce((sum, item) => sum + number(item.quantity), 0)}</td><td>${money(sale.total)}</td><td>${escapeHtml(sale.payment)}</td><td>${sale.paid ? `<span class="pill">Pago</span>` : sale.payment === "Crediário" ? `<button class="button small" data-page="financeiro">Em aberto</button>` : sale.onlineOrderId ? `<span class="pill orange">${sale.paymentStatus === "pending" ? "Aguardando Pix" : "Pix não aprovado"}</span>` : `<button class="button small" data-action="receive-sale" data-id="${sale.id}" ${currentCashSession() ? "" : "disabled"}>Receber</button>`}</td><td>${sale.onlineOrderId && !sale.paid ? `<span class="pill orange">${sale.paymentStatus === "pending" ? "Aguardando Pix" : "Cancelado"}</span>` : `<select class="order-status-select" data-sale-status="${escapeHtml(sale.id)}" aria-label="Status do pedido">${["Recebido", "Em preparo", "Saiu para entrega", "Concluído", "Cancelado"].map(status => `<option ${sale.status === status ? "selected" : ""}>${status}</option>`).join("")}</select>`}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">Nenhum pedido registrado hoje. Consulte vendas de outros dias em Relatórios.</div>`}
               </article>`}
             </div>
             <article class="panel"><div class="panel-heading"><h2>Resumo do pedido</h2><span>${saleCart.reduce((sum, item) => sum + number(item.quantity), 0)} item(ns)</span></div>
@@ -1197,9 +1222,10 @@
               <div class="sale-total"><span>Total da venda</span><strong>${money(total)}</strong></div>
               <form class="sale-checkout" id="checkoutForm">
                 <div class="field"><label for="saleCustomerSearch">Cliente</label><div class="customer-autocomplete"><input id="saleCustomerSearch" type="search" autocomplete="off" placeholder="Venda de balcão ou digite um nome/telefone" aria-label="Buscar cliente cadastrado"><input id="saleCustomerId" name="customerId" type="hidden"><div class="customer-suggestions" id="saleCustomerSuggestions" role="listbox" hidden></div></div><p class="helper">Digite para localizar um cliente cadastrado.</p></div>
-                <div class="field"><label for="salePayment">Forma de pagamento</label><select id="salePayment" name="payment" required><option>Pix</option><option>Dinheiro</option><option>Cartão de crédito</option><option>Cartão de débito</option></select></div>
-                <button type="submit" class="button primary" ${saleCart.length && currentCashSession() ? "" : "disabled"}>Registrar venda · ${money(total)}</button>
-                ${!currentCashSession() && !standalonePdv ? `<p class="helper">Abra o caixa para registrar uma venda paga. <button type="button" class="button small" data-page="caixa">Abrir caixa</button></p>` : ""}
+                <div class="field"><label for="salePayment">Forma de pagamento</label><select id="salePayment" name="payment" required><option>Pix</option><option>Dinheiro</option><option>Cartão de crédito</option><option>Cartão de débito</option><option value="Crediário">Crediário (fiado)</option></select></div>
+                <div class="field" id="saleDueDateField" hidden><label for="saleDueDate">Vencimento da nota (opcional)</label><input id="saleDueDate" name="dueDate" type="date"></div>
+                <button type="submit" id="finishSaleButton" class="button primary" ${saleCart.length && currentCashSession() ? "" : "disabled"}>Registrar venda · ${money(total)}</button>
+                ${!currentCashSession() && !standalonePdv ? `<p class="helper">Abra o caixa para registrar vendas pagas. Vendas no crediário podem ser registradas sem caixa aberto. <button type="button" class="button small" data-page="caixa">Abrir caixa</button></p>` : ""}
               </form>
             </article>
           </section>`;
@@ -1210,6 +1236,8 @@
         const addForm = document.getElementById("addSaleItemForm");
         if (addForm) addForm.addEventListener("submit", addSaleItem);
         document.getElementById("checkoutForm").addEventListener("submit", finishSale);
+        document.getElementById("salePayment").addEventListener("change", updateSaleCheckoutAvailability);
+        document.getElementById("saleCustomerSearch").addEventListener("input", updateSaleCheckoutAvailability);
         const customerSearch = document.getElementById("saleCustomerSearch");
         customerSearch.addEventListener("input", updateSaleCustomerSuggestions);
         customerSearch.addEventListener("focus", updateSaleCustomerSuggestions);
@@ -1233,6 +1261,16 @@
           ? matches.map(customer => `<button type="button" class="customer-suggestion" role="option" data-action="select-sale-customer" data-id="${escapeHtml(customer.id)}"><strong>${escapeHtml(customer.name)}</strong>${customer.phone ? `<small>${escapeHtml(customer.phone)}</small>` : ""}</button>`).join("")
           : `<div class="customer-suggestion-empty">${term ? "Nenhum cliente encontrado." : "Nenhum cliente cadastrado."}</div>`;
         list.hidden = false;
+      }
+
+      function updateSaleCheckoutAvailability() {
+        const payment = document.getElementById("salePayment")?.value;
+        const credit = payment === "Crediário";
+        const dueDateField = document.getElementById("saleDueDateField");
+        const submitButton = document.getElementById("finishSaleButton");
+        const customerId = document.getElementById("saleCustomerId")?.value;
+        if (dueDateField) dueDateField.hidden = !credit;
+        if (submitButton) submitButton.disabled = !saleCart.length || (credit ? !customerId : !currentCashSession());
       }
 
       function updateSaleProductOptions() {
@@ -1353,31 +1391,54 @@
         const data = new FormData(form);
         const customer = state.customers.find(item => item.id === data.get("customerId"));
         const session = currentCashSession();
-        if (!session) {
+        const payment = String(data.get("payment") || "");
+        const isCredit = payment === "Crediário";
+        if (isCredit && !customer) {
+          showToast("Selecione um cliente cadastrado para vender no crediário.");
+          return;
+        }
+        if (!session && !isCredit) {
           showToast("Abra o caixa antes de registrar uma venda paga.");
           return;
         }
+        const dueDate = String(data.get("dueDate") || "");
         const sale = {
           id: `sale-${Date.now()}`,
           createdAt: new Date().toISOString(),
           customerId: customer?.id || null,
           customerName: customer?.name || "Balcão",
           customerPhone: customer?.phone || "",
-          payment: data.get("payment"),
-          paid: true,
-          cashSessionId: session.id,
+          payment,
+          paid: !isCredit,
+          cashSessionId: isCredit ? null : session.id,
           status: "Recebido",
           items: saleCart.map(item => ({ ...item, addons: item.addons.map(addon => ({ ...addon })) })),
           total: saleCart.reduce((sum, item) => sum + saleLineTotal(item), 0)
         };
         state.sales.push(sale);
+        if (isCredit) {
+          state.financeEntries.push({
+            id: `receivable-${sale.id}`,
+            kind: "receivable",
+            description: `Venda #${sale.id.slice(-5)}`,
+            customerId: customer.id,
+            partyName: customer.name,
+            saleId: sale.id,
+            amount: sale.total,
+            paidAmount: 0,
+            dueDate,
+            createdAt: sale.createdAt,
+            payments: []
+          });
+        }
         if (!saveState()) {
           state.sales.pop();
+          if (isCredit) state.financeEntries.pop();
           return;
         }
         saleCart = [];
         renderSales();
-        showToast("Venda registrada com sucesso.");
+        showToast(isCredit ? "Nota fiada registrada no contas a receber." : "Venda registrada com sucesso.");
       }
 
       function updateSaleStatus(event) {
@@ -1534,13 +1595,186 @@
         showToast("Pagamento registrado no caixa.");
       }
 
+      function financeEntryStatus(entry) {
+        if (financeBalance(entry) <= 0) return "Quitado";
+        if (entry.dueDate && entry.dueDate < localDateKey(new Date())) return "Atrasado";
+        return "Em aberto";
+      }
+
+      function renderFinance() {
+        const entries = [...state.financeEntries].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        const receivables = entries.filter(entry => entry.kind === "receivable");
+        const payables = entries.filter(entry => entry.kind === "payable");
+        const receivableBalance = receivables.reduce((sum, entry) => sum + financeBalance(entry), 0);
+        const payableBalance = payables.reduce((sum, entry) => sum + financeBalance(entry), 0);
+        const overdueCount = entries.filter(entry => financeEntryStatus(entry) === "Atrasado").length;
+        const searchTerm = financeSearch.trim().toLocaleLowerCase("pt-BR");
+        const filteredEntries = entries.filter(entry => {
+          const entryDate = localDateKey(entry.createdAt);
+          const matchesDate = !financeDateFilter || entryDate === financeDateFilter;
+          const matchesKind = financeKindFilter === "all" || entry.kind === financeKindFilter;
+          const matchesSearch = !searchTerm || `${entry.description} ${entry.partyName || ""}`.toLocaleLowerCase("pt-BR").includes(searchTerm);
+          return matchesDate && matchesKind && matchesSearch;
+        });
+        const dailyExpenses = filteredEntries.filter(entry => entry.kind === "expense").reduce((sum, entry) => sum + number(entry.amount), 0);
+        const rows = filteredEntries.map(entry => {
+          const balance = financeBalance(entry);
+          const status = financeEntryStatus(entry);
+          const paymentHistory = (entry.payments || []).map(payment => `<div class="cost-row"><span>${new Date(payment.date).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} · ${escapeHtml(payment.method)}</span><strong>${money(payment.amount)}</strong></div>`).join("");
+          const kindLabel = entry.kind === "receivable" ? "A receber" : entry.kind === "payable" ? "A pagar" : "Despesa";
+          const statusLabel = entry.kind === "expense" ? "Lançada" : status;
+          return `<tr>
+            <td><span class="pill ${entry.kind !== "receivable" ? "orange" : ""}">${kindLabel}</span></td>
+            <td><strong>${escapeHtml(entry.description)}</strong><br><span class="helper">${escapeHtml(entry.partyName || "")}</span>${paymentHistory ? `<details style="margin-top:7px"><summary class="helper">Ver ${entry.payments.length} pagamento(s)</summary><div class="cost-summary" style="margin-top:7px">${paymentHistory}</div></details>` : ""}</td>
+            <td>${money(entry.amount)}</td><td>${money(entry.paidAmount)}</td><td><strong>${money(balance)}</strong></td>
+            <td>${entry.dueDate ? new Date(`${entry.dueDate}T00:00:00`).toLocaleDateString("pt-BR") : "—"}</td>
+            <td><span class="pill ${status === "Atrasado" || entry.kind === "expense" ? "orange" : ""}">${statusLabel}</span></td>
+            <td>${entry.kind !== "expense" && balance > 0 ? `<button type="button" class="button small" data-action="settle-finance-entry" data-id="${escapeHtml(entry.id)}">Baixar pagamento</button>` : `<span class="helper">Histórico registrado</span>`}</td>
+          </tr>`;
+        }).join("");
+        document.getElementById("pageContent").innerHTML = `
+          <div class="page-heading"><div><div class="eyebrow">Controle financeiro</div><h1>Fluxo financeiro</h1><p class="subtitle">Acompanhe despesas, contas a pagar, valores a receber e notas fiadas.</p></div><div class="filters"><button class="button" data-action="new-finance-receivable">＋ Conta a receber</button><button class="button" data-action="new-finance-payable">− Conta a pagar</button><button class="button primary" data-action="new-finance-expense">− Lançar despesa</button></div></div>
+          <section class="stats">
+            <article class="stat-card"><div class="stat-top"><span>Contas a receber</span><span class="stat-icon">↗</span></div><div class="stat-value">${money(receivableBalance)}</div><div class="stat-note">${receivables.filter(entry => financeBalance(entry) > 0).length} em aberto</div></article>
+            <article class="stat-card"><div class="stat-top"><span>Contas a pagar</span><span class="stat-icon">↙</span></div><div class="stat-value">${money(payableBalance)}</div><div class="stat-note">${payables.filter(entry => financeBalance(entry) > 0).length} em aberto</div></article>
+            <article class="stat-card"><div class="stat-top"><span>Saldo previsto</span><span class="stat-icon">↕</span></div><div class="stat-value">${money(receivableBalance - payableBalance)}</div><div class="stat-note">a receber menos a pagar</div></article>
+            <article class="stat-card"><div class="stat-top"><span>Contas atrasadas</span><span class="stat-icon">!</span></div><div class="stat-value">${overdueCount}</div><div class="stat-note">com vencimento anterior a hoje</div></article>
+          </section>
+          <article class="panel" style="margin-bottom:14px"><form class="report-filters" id="financeFilters"><div class="field"><label for="financeDate">Dia do lançamento</label><input id="financeDate" name="date" type="date" value="${escapeHtml(financeDateFilter)}"></div><div class="field"><label for="financeKind">Tipo</label><select id="financeKind" name="kind"><option value="all" ${financeKindFilter === "all" ? "selected" : ""}>Todos</option><option value="receivable" ${financeKindFilter === "receivable" ? "selected" : ""}>A receber</option><option value="payable" ${financeKindFilter === "payable" ? "selected" : ""}>A pagar</option><option value="expense" ${financeKindFilter === "expense" ? "selected" : ""}>Despesas</option></select></div><div class="field"><label for="financeSearch">Pesquisar descrição / pessoa</label><input id="financeSearch" name="search" type="search" value="${escapeHtml(financeSearch)}" placeholder="Ex.: fornecedor, cliente"></div><button class="button primary" type="submit">Filtrar</button><button class="button" type="button" data-action="clear-finance-filters">Todos os dias</button></form></article>
+          <article class="panel"><div class="panel-heading"><h2>Lançamentos financeiros</h2><span>${filteredEntries.length} resultado(s) · despesas no período: ${money(dailyExpenses)}</span></div>
+            ${rows || `<div class="empty-state">Nenhum lançamento encontrado para os filtros selecionados.</div>`}
+          </article>`;
+        document.getElementById("financeFilters").addEventListener("submit", event => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          financeDateFilter = String(data.get("date") || "");
+          financeKindFilter = String(data.get("kind") || "all");
+          financeSearch = String(data.get("search") || "");
+          renderFinance();
+        });
+      }
+
+      function financeEntryForm(kind) {
+        const isReceivable = kind === "receivable";
+        const isExpense = kind === "expense";
+        const customerOptions = state.customers.map(customer => `<option value="${escapeHtml(customer.id)}">${escapeHtml(customer.name)}</option>`).join("");
+        const body = `<div class="field"><label for="financeDescription">Descrição</label><input id="financeDescription" name="description" maxlength="100" required placeholder="${isReceivable ? "Ex.: compra a prazo" : "Ex.: compra de embalagens"}"></div>
+          ${isReceivable ? `<div class="field" style="margin-top:12px"><label for="financeCustomer">Cliente</label><select id="financeCustomer" name="customerId" required><option value="">Selecione um cliente</option>${customerOptions}</select></div>` : `<div class="field" style="margin-top:12px"><label for="financeParty">${isExpense ? "Categoria / favorecido" : "Fornecedor / favorecido"}</label><input id="financeParty" name="partyName" maxlength="80" required placeholder="${isExpense ? "Ex.: entrega, aluguel, embalagem" : ""}"></div>`}
+          <div class="field" style="margin-top:12px"><label for="financeAmount">Valor total (R$)</label><input id="financeAmount" name="amount" type="number" min="0.01" step="0.01" required></div>
+          ${isExpense ? `<div class="field" style="margin-top:12px"><label for="expensePaymentMethod">Forma de pagamento</label><select id="expensePaymentMethod" name="method" required><option>Dinheiro</option><option>Pix</option><option>Cartão de crédito</option><option>Cartão de débito</option><option>Transferência</option></select>${currentCashSession() ? "" : `<p class="helper">Para lançar despesa paga em dinheiro, abra o caixa.</p>`}</div>` : `<div class="field" style="margin-top:12px"><label for="financeDueDate">Vencimento (opcional)</label><input id="financeDueDate" name="dueDate" type="date"></div>`}`;
+        openModal(isExpense ? "Lançar despesa" : isReceivable ? "Nova conta a receber" : "Nova conta a pagar", body, "financeEntry", kind);
+      }
+
+      function saveFinanceEntry(form) {
+        const data = new FormData(form);
+        const kind = editingId;
+        const customer = kind === "receivable" ? state.customers.find(item => item.id === data.get("customerId")) : null;
+        const amount = roundMoney(number(data.get("amount")));
+        const isExpense = kind === "expense";
+        const method = isExpense ? String(data.get("method") || "") : "";
+        const session = currentCashSession();
+        if (!amount || (kind === "receivable" && !customer)) {
+          showToast("Informe um valor válido e selecione o cliente da conta a receber.");
+          return;
+        }
+        if (isExpense && method === "Dinheiro" && !session) {
+          showToast("Abra o caixa para lançar uma despesa paga em dinheiro.");
+          return;
+        }
+        const createdAt = new Date().toISOString();
+        const entry = {
+          id: `finance-${Date.now()}`,
+          kind,
+          description: String(data.get("description") || "").trim(),
+          partyName: customer?.name || String(data.get("partyName") || "").trim(),
+          customerId: customer?.id || null,
+          saleId: null,
+          amount,
+          paidAmount: isExpense ? amount : 0,
+          dueDate: isExpense ? "" : String(data.get("dueDate") || ""),
+          createdAt,
+          payments: isExpense ? [{
+            id: `payment-${Date.now()}`,
+            amount,
+            method,
+            date: createdAt,
+            cashSessionId: method === "Dinheiro" ? session.id : null
+          }] : []
+        };
+        state.financeEntries.push(entry);
+        if (!saveState()) {
+          state.financeEntries.pop();
+          return;
+        }
+        closeModal();
+        renderFinance();
+        showToast(kind === "receivable" ? "Conta a receber registrada." : isExpense ? "Despesa lançada e registrada no fluxo financeiro." : "Conta a pagar registrada.");
+      }
+
+      function openFinanceSettlement(entry) {
+        if (!entry || financeBalance(entry) <= 0) return;
+        const balance = financeBalance(entry);
+        const body = `<p class="helper">${escapeHtml(entry.description)} · ${escapeHtml(entry.partyName || "")}<br>Saldo em aberto: <strong>${money(balance)}</strong></p>
+          <div class="field" style="margin-top:14px"><label for="financePaymentAmount">Valor pago agora (R$)</label><input id="financePaymentAmount" name="amount" type="number" min="0.01" max="${balance.toFixed(2)}" step="0.01" value="${balance.toFixed(2)}" required></div>
+          <div class="field" style="margin-top:12px"><label for="financePaymentMethod">Forma de pagamento</label><select id="financePaymentMethod" name="method" required><option>Dinheiro</option><option>Pix</option><option>Cartão de crédito</option><option>Cartão de débito</option><option>Transferência</option></select></div>
+          ${currentCashSession() ? "" : `<p class="helper">Para baixar em dinheiro, abra o caixa. Outros meios podem ser registrados sem abrir o caixa.</p>`}`;
+        openModal(entry.kind === "receivable" ? "Receber pagamento" : "Pagar conta", body, "financePayment", entry.id);
+      }
+
+      function saveFinanceSettlement(form) {
+        const entry = state.financeEntries.find(item => item.id === editingId);
+        const data = new FormData(form);
+        const amount = roundMoney(number(data.get("amount")));
+        const method = String(data.get("method") || "");
+        const balance = entry ? financeBalance(entry) : 0;
+        const session = currentCashSession();
+        if (!entry || amount <= 0 || amount > balance) {
+          showToast("O valor informado precisa ser maior que zero e não pode superar o saldo.");
+          return;
+        }
+        if (method === "Dinheiro" && !session) {
+          showToast("Abra o caixa para registrar um pagamento em dinheiro.");
+          return;
+        }
+        const payment = {
+          id: `payment-${Date.now()}`,
+          amount,
+          method,
+          date: new Date().toISOString(),
+          cashSessionId: method === "Dinheiro" ? session.id : null
+        };
+        const previousPaidAmount = entry.paidAmount;
+        const linkedSale = entry.saleId ? state.sales.find(sale => sale.id === entry.saleId) : null;
+        const previousSalePaid = linkedSale?.paid;
+        entry.paidAmount = roundMoney(number(entry.paidAmount) + amount);
+        entry.payments = [...(entry.payments || []), payment];
+        if (linkedSale && financeBalance(entry) <= 0) linkedSale.paid = true;
+        if (!saveState()) {
+          entry.paidAmount = previousPaidAmount;
+          entry.payments.pop();
+          if (linkedSale) linkedSale.paid = previousSalePaid;
+          return;
+        }
+        closeModal();
+        render();
+        showToast(financeBalance(entry) ? "Pagamento parcial registrado; o saldo continua em aberto." : "Conta quitada. Pagamento registrado no histórico.");
+      }
+
       function renderCustomers() {
         const customers = [...state.customers].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
         const cards = customers.map(customer => {
           const orders = state.sales.filter(sale => sale.customerId === customer.id && sale.status !== "Cancelado");
-          const total = paidSales().filter(sale => sale.customerId === customer.id).reduce((sum, sale) => sum + number(sale.total), 0);
           const address = [customer.address, customer.neighborhood].filter(Boolean).join(" · ");
-          return `<article class="customer-item"><div class="customer-item-top"><button type="button" class="customer-summary" data-action="toggle-customer-details" data-id="${escapeHtml(customer.id)}" aria-expanded="false"><strong>${escapeHtml(customer.name)}</strong></button><button type="button" class="icon-button" data-action="edit-customer" data-id="${escapeHtml(customer.id)}" aria-label="Editar ${escapeHtml(customer.name)}">✎</button></div><div class="customer-address" id="customerDetails-${escapeHtml(customer.id)}" hidden><strong>Telefone:</strong> ${escapeHtml(customer.phone || "Não informado")}<br><strong>Endereço:</strong> ${escapeHtml(address || "Não informado")}<br><strong>Pedidos:</strong> ${orders.length}<br><strong>Total recebido:</strong> ${money(total)}${customer.notes ? `<br><strong>Observações:</strong> ${escapeHtml(customer.notes)}` : ""}</div></article>`;
+          const receivables = customerReceivables(customer.id);
+          const total = paidSales().filter(sale => sale.customerId === customer.id && sale.payment !== "Crediário").reduce((sum, sale) => sum + number(sale.total), 0)
+            + receivables.reduce((sum, entry) => sum + (entry.payments || []).reduce((paid, payment) => paid + number(payment.amount), 0), 0);
+          const debt = receivables.reduce((sum, entry) => sum + financeBalance(entry), 0);
+          const notesHistory = receivables.length ? receivables.map(entry => {
+            const balance = financeBalance(entry);
+            const payments = (entry.payments || []).map(payment => `<div class="cost-row"><span>${new Date(payment.date).toLocaleDateString("pt-BR")} · ${escapeHtml(payment.method)}</span><strong>${money(payment.amount)}</strong></div>`).join("");
+            return `<div style="padding:10px 0;border-top:1px solid var(--line)"><strong>${escapeHtml(entry.description)}</strong><div class="cost-summary" style="margin-top:7px"><div class="cost-row"><span>Valor da nota</span><strong>${money(entry.amount)}</strong></div><div class="cost-row"><span>Pago / saldo</span><strong>${money(entry.paidAmount)} / ${money(balance)}</strong></div><div class="cost-row"><span>Vencimento</span><strong>${entry.dueDate ? new Date(`${entry.dueDate}T00:00:00`).toLocaleDateString("pt-BR") : "Sem vencimento"}</strong></div></div>${payments ? `<div class="helper" style="margin-top:8px">Histórico de baixas</div><div class="cost-summary" style="margin-top:6px">${payments}</div>` : `<div class="helper" style="margin-top:7px">Nenhum pagamento registrado.</div>`}${balance > 0 ? `<button type="button" class="button small" style="margin-top:8px" data-action="settle-finance-entry" data-id="${escapeHtml(entry.id)}">Baixar pagamento</button>` : `<span class="pill" style="margin-top:8px">Quitada</span>`}</div>`;
+          }).join("") : `<p class="helper">Nenhuma nota fiada registrada.</p>`;
+          return `<article class="customer-item"><div class="customer-item-top"><button type="button" class="customer-summary" data-action="toggle-customer-details" data-id="${escapeHtml(customer.id)}" aria-expanded="false"><strong>${escapeHtml(customer.name)}</strong>${debt > 0 ? `<span class="pill orange" style="margin-left:8px">Deve ${money(debt)}</span>` : ""}</button><button type="button" class="icon-button" data-action="edit-customer" data-id="${escapeHtml(customer.id)}" aria-label="Editar ${escapeHtml(customer.name)}">✎</button></div><div class="customer-address" id="customerDetails-${escapeHtml(customer.id)}" hidden><strong>Telefone:</strong> ${escapeHtml(customer.phone || "Não informado")}<br><strong>Endereço:</strong> ${escapeHtml(address || "Não informado")}<br><strong>Pedidos:</strong> ${orders.length}<br><strong>Total recebido:</strong> ${money(total)}${customer.notes ? `<br><strong>Observações:</strong> ${escapeHtml(customer.notes)}` : ""}<div style="margin-top:14px"><strong>Notas fiadas e pagamentos</strong>${notesHistory}</div></div></article>`;
         }).join("");
         document.getElementById("pageContent").innerHTML = `
           <div class="page-heading"><div><div class="eyebrow">Sua base de clientes</div><h1>Clientes</h1><p class="subtitle">Salve contatos e endereços para agilizar os próximos pedidos.</p></div><button class="button primary" data-action="new-customer">＋ Novo cliente</button></div>
@@ -1866,6 +2100,7 @@
       function renderMore() {
         const links = [
           ["caixa", "▣", "Caixa"],
+          ["financeiro", "↕", "Fluxo financeiro"],
           ["relatorio-caixa", "▥", "Relatório de caixa"],
           ["relatorios", "▥", "Relatórios"],
           ["clientes", "♙", "Clientes"],
@@ -1878,9 +2113,9 @@
 
       function openCashForm(closeSession = false) {
         const session = currentCashSession();
-        const expected = session ? session.openingAmount + paidSales(session.id).filter(sale => sale.payment === "Dinheiro").reduce((sum, sale) => sum + number(sale.total), 0) : 0;
+        const expected = session ? session.openingAmount + paidSales(session.id).filter(sale => sale.payment === "Dinheiro").reduce((sum, sale) => sum + number(sale.total), 0) + cashFinanceMovement(session.id) : 0;
         const body = closeSession
-          ? `<p class="helper">Dinheiro esperado no caixa: <strong>${money(expected)}</strong> (valor inicial + vendas recebidas em dinheiro).</p><div class="field" style="margin-top:14px"><label for="cashCounted">Dinheiro contado no fechamento (R$)</label><input id="cashCounted" name="counted" type="number" min="0" step="0.01" value="${expected.toFixed(2)}" required></div><div class="field" style="margin-top:12px"><label for="cashCloseNotes">Observações</label><input id="cashCloseNotes" name="notes" maxlength="160" placeholder="Diferenças ou ocorrências"></div>`
+          ? `<p class="helper">Dinheiro esperado no caixa: <strong>${money(expected)}</strong> (fundo inicial + vendas e baixas de contas em dinheiro).</p><div class="field" style="margin-top:14px"><label for="cashCounted">Dinheiro contado no fechamento (R$)</label><input id="cashCounted" name="counted" type="number" min="0" step="0.01" value="${expected.toFixed(2)}" required></div><div class="field" style="margin-top:12px"><label for="cashCloseNotes">Observações</label><input id="cashCloseNotes" name="notes" maxlength="160" placeholder="Diferenças ou ocorrências"></div>`
           : `<div class="field"><label for="cashOpening">Valor inicial em dinheiro (R$)</label><input id="cashOpening" name="openingAmount" type="number" min="0" step="0.01" value="0" required></div><div class="field" style="margin-top:12px"><label for="cashOpenNotes">Observações</label><input id="cashOpenNotes" name="notes" maxlength="160" placeholder="Fundo de troco, operador..."></div>`;
         openModal(closeSession ? "Fechar caixa" : "Abrir caixa", body, closeSession ? "closeCash" : "openCash", session?.id || null);
       }
@@ -1893,7 +2128,7 @@
             showToast("Não há caixa aberto para fechar.");
             return;
           }
-          const expected = roundMoney(session.openingAmount + paidSales(session.id).filter(sale => sale.payment === "Dinheiro").reduce((sum, sale) => sum + number(sale.total), 0));
+          const expected = roundMoney(session.openingAmount + paidSales(session.id).filter(sale => sale.payment === "Dinheiro").reduce((sum, sale) => sum + number(sale.total), 0) + cashFinanceMovement(session.id));
           session.closedAt = new Date().toISOString();
           session.expectedCash = expected;
           session.countedCash = number(data.get("counted"));
@@ -1935,7 +2170,8 @@
         const sessions = [...state.cashSessions].sort((a, b) => new Date(b.openedAt) - new Date(a.openedAt));
         const sessionSales = session ? paidSales(session.id) : [];
         const cashSales = sessionSales.filter(sale => sale.payment === "Dinheiro").reduce((sum, sale) => sum + number(sale.total), 0);
-        const expected = roundMoney((session?.openingAmount || 0) + cashSales);
+        const cashMovements = session ? cashFinanceMovement(session.id) : 0;
+        const expected = roundMoney((session?.openingAmount || 0) + cashSales + cashMovements);
         const paymentTotals = ["Dinheiro", "Pix", "Cartão de crédito", "Cartão de débito"].map(payment => ({
           payment,
           amount: sessionSales.filter(sale => sale.payment === payment).reduce((sum, sale) => sum + number(sale.total), 0)
@@ -1943,7 +2179,7 @@
         document.getElementById("pageContent").innerHTML = `
           <div class="page-heading"><div><div class="eyebrow">Controle financeiro</div><h1>Caixa</h1><p class="subtitle">Abra o turno, registre vendas pagas e confira o valor contado no fechamento.</p></div></div>
           ${session ? `<section class="cash-hero"><div><span>Caixa aberto desde ${new Date(session.openedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span><strong>${money(expected)}</strong><span>Dinheiro esperado no caixa</span></div><button class="button" data-action="close-cash">Fechar caixa</button></section>
-            <section class="cash-metrics"><article class="cash-metric"><span>Fundo inicial</span><strong>${money(session.openingAmount)}</strong></article><article class="cash-metric"><span>Vendas em dinheiro</span><strong>${money(cashSales)}</strong></article><article class="cash-metric"><span>Vendas pagas no turno</span><strong>${money(sessionSales.reduce((sum, sale) => sum + number(sale.total), 0))}</strong></article></section>
+            <section class="cash-metrics"><article class="cash-metric"><span>Fundo inicial</span><strong>${money(session.openingAmount)}</strong></article><article class="cash-metric"><span>Vendas em dinheiro</span><strong>${money(cashSales)}</strong></article><article class="cash-metric"><span>Movimentos financeiros em dinheiro</span><strong>${money(cashMovements)}</strong></article><article class="cash-metric"><span>Vendas pagas no turno</span><strong>${money(sessionSales.reduce((sum, sale) => sum + number(sale.total), 0))}</strong></article></section>
             <article class="panel"><div class="panel-heading"><h2>Vendas por forma de pagamento</h2><span>${sessionSales.length} recebimento(s)</span></div><div class="cost-summary">${paymentTotals.map(item => `<div class="cost-row"><span>${escapeHtml(item.payment)}</span><strong>${money(item.amount)}</strong></div>`).join("")}</div></article>` :
             `<section class="panel" style="text-align:center;padding:35px"><div class="stat-icon" style="margin:0 auto 13px;width:44px;height:44px">▣</div><h2 style="margin:0;font-size:17px">Nenhum caixa aberto</h2><p class="subtitle">Informe o valor inicial do troco para começar a registrar vendas.</p><button class="button primary" style="margin-top:12px" data-action="open-cash">Abrir caixa</button></section>`}
           <article class="panel" style="margin-top:14px"><div class="panel-heading"><h2>Histórico de caixas</h2><span>${sessions.length} turno(s)</span></div>
@@ -1967,11 +2203,13 @@
         const rows = sessions.map(session => {
           const sales = paidSales(session.id);
           const cashSales = sales.filter(sale => sale.payment === "Dinheiro").reduce((sum, sale) => sum + number(sale.total), 0);
-          const expected = roundMoney(number(session.openingAmount) + cashSales);
+          const cashMovements = cashFinanceMovement(session.id);
+          const expected = roundMoney(number(session.openingAmount) + cashSales + cashFinanceMovement(session.id));
           return {
             session,
             sales,
             cashSales,
+            cashMovements,
             expected: session.closedAt ? number(session.expectedCash) : expected,
             counted: session.closedAt ? number(session.countedCash) : null,
             difference: session.closedAt ? number(session.difference) : null
@@ -1987,12 +2225,13 @@
           payment,
           total: allSales.filter(sale => sale.payment === payment).reduce((sum, sale) => sum + number(sale.total), 0)
         }));
-        const sessionRows = rows.map(({ session, sales, cashSales, expected, counted, difference }) => `
+        const sessionRows = rows.map(({ session, sales, cashSales, cashMovements, expected, counted, difference }) => `
           <tr>
             <td>${new Date(session.openedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</td>
             <td>${session.closedAt ? new Date(session.closedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—"}</td>
             <td>${money(session.openingAmount)}</td>
             <td>${money(cashSales)}</td>
+            <td>${money(cashMovements)}</td>
             <td>${money(expected)}</td>
             <td>${counted === null ? "—" : money(counted)}</td>
             <td class="${difference !== null && difference < 0 ? "margin-cell low" : "margin-cell"}">${difference === null ? "—" : money(difference)}</td>
@@ -2005,7 +2244,7 @@
           <p class="helper" style="margin:12px 0">Os turnos são agrupados pela data de abertura. Vendas canceladas não entram nos totais.</p>
           <section class="stats" style="margin-top:15px">
             <article class="stat-card"><div class="stat-top"><span>Vendas nos turnos</span><span class="stat-icon">↗</span></div><div class="stat-value">${money(totalSales)}</div><div class="stat-note">${allSales.length} recebimento(s) pago(s)</div></article>
-            <article class="stat-card"><div class="stat-top"><span>Dinheiro esperado</span><span class="stat-icon">▣</span></div><div class="stat-value">${money(totalExpected)}</div><div class="stat-note">inclui fundo inicial e vendas em dinheiro</div></article>
+            <article class="stat-card"><div class="stat-top"><span>Dinheiro esperado</span><span class="stat-icon">▣</span></div><div class="stat-value">${money(totalExpected)}</div><div class="stat-note">inclui fundo, vendas e baixas em dinheiro</div></article>
             <article class="stat-card"><div class="stat-top"><span>Dinheiro contado</span><span class="stat-icon">＋</span></div><div class="stat-value">${money(totalCounted)}</div><div class="stat-note">${closedRows.length} turno(s) fechado(s)</div></article>
             <article class="stat-card"><div class="stat-top"><span>Diferença dos fechamentos</span><span class="stat-icon">↕</span></div><div class="stat-value">${money(totalDifference)}</div><div class="stat-note">soma das diferenças registradas</div></article>
           </section>
@@ -2018,7 +2257,7 @@
             </article>
           </section>
           <article class="panel" style="margin-top:14px"><div class="panel-heading"><h2>Detalhamento por turno</h2><span>${rows.length} turno(s)</span></div>
-            ${rows.length ? `<div class="table-wrap"><table><thead><tr><th>Abertura</th><th>Fechamento</th><th>Fundo inicial</th><th>Vendas em dinheiro</th><th>Esperado</th><th>Contado</th><th>Diferença</th><th>Status</th></tr></thead><tbody>${sessionRows}</tbody></table></div>` : `<div class="empty-state">Nenhum turno de caixa no período selecionado.</div>`}
+            ${rows.length ? `<div class="table-wrap"><table><thead><tr><th>Abertura</th><th>Fechamento</th><th>Fundo inicial</th><th>Vendas em dinheiro</th><th>Contas em dinheiro (+ entrada / − saída)</th><th>Esperado</th><th>Contado</th><th>Diferença</th><th>Status</th></tr></thead><tbody>${sessionRows}</tbody></table></div>` : `<div class="empty-state">Nenhum turno de caixa no período selecionado.</div>`}
           </article>`;
         document.getElementById("cashReportFilters").addEventListener("submit", event => {
           event.preventDefault();
@@ -2053,7 +2292,7 @@
           itemTotals.set(item.name, current);
         }));
         const topItems = [...itemTotals.entries()].sort((a, b) => b[1].quantity - a[1].quantity).slice(0, 5);
-        const payments = ["Dinheiro", "Pix", "Pix online", "Cartão de crédito", "Cartão de débito", "A combinar"].map(payment => ({ payment, total: sales.filter(sale => sale.payment === payment).reduce((sum, sale) => sum + number(sale.total), 0) })).filter(item => item.total > 0);
+        const payments = ["Dinheiro", "Pix", "Pix online", "Cartão de crédito", "Cartão de débito", "Crediário", "A combinar"].map(payment => ({ payment, total: sales.filter(sale => sale.payment === payment).reduce((sum, sale) => sum + number(sale.total), 0) })).filter(item => item.total > 0);
         document.getElementById("pageContent").innerHTML = `
           <div class="page-heading"><div><div class="eyebrow">Desempenho do delivery</div><h1>Relatórios</h1><p class="subtitle">Consulte vendas recebidas, custos e produtos mais vendidos por período.</p></div><button class="button" data-action="print-report">Imprimir relatório</button></div>
           <form class="report-filters" id="reportFilters"><div class="field"><label for="reportStart">De</label><input id="reportStart" name="start" type="date" value="${start}" required></div><div class="field"><label for="reportEnd">Até</label><input id="reportEnd" name="end" type="date" value="${end}" required></div><button class="button primary" type="submit">Aplicar período</button></form>
@@ -2563,6 +2802,16 @@
         if (action.dataset.action === "open-cash") openCashForm();
         if (action.dataset.action === "close-cash") openCashForm(true);
         if (action.dataset.action === "receive-sale") receiveSale(state.sales.find(sale => sale.id === id));
+        if (action.dataset.action === "new-finance-receivable") financeEntryForm("receivable");
+        if (action.dataset.action === "new-finance-payable") financeEntryForm("payable");
+        if (action.dataset.action === "new-finance-expense") financeEntryForm("expense");
+        if (action.dataset.action === "clear-finance-filters") {
+          financeDateFilter = "";
+          financeSearch = "";
+          financeKindFilter = "all";
+          renderFinance();
+        }
+        if (action.dataset.action === "settle-finance-entry") openFinanceSettlement(state.financeEntries.find(entry => entry.id === id));
         if (action.dataset.action === "select-sale-customer") {
           const customer = state.customers.find(item => item.id === id);
           if (!customer) return;
@@ -2574,6 +2823,7 @@
             input.dataset.selectedName = customer.name;
             customerId.value = customer.id;
             suggestions.hidden = true;
+            updateSaleCheckoutAvailability();
           }
         }
         if (action.dataset.action === "toggle-customer-details") {
@@ -2625,6 +2875,8 @@
         if (form.dataset.type === "openCash") saveCashSession(form, false);
         if (form.dataset.type === "closeCash") saveCashSession(form, true);
         if (form.dataset.type === "receivePayment") saveReceivedPayment(form);
+        if (form.dataset.type === "financeEntry") saveFinanceEntry(form);
+        if (form.dataset.type === "financePayment") saveFinanceSettlement(form);
       });
       document.addEventListener("keydown", event => { if (event.key === "Escape") closeModal(); });
       window.addEventListener("storage", event => {
@@ -2635,7 +2887,7 @@
           renderPublicMenu();
           return;
         }
-        if (["vendas", "pedidos", "caixa", "relatorio-caixa", "relatorios", "inicio", "clientes"].includes(currentPage)) render();
+        if (["vendas", "pedidos", "caixa", "financeiro", "relatorio-caixa", "relatorios", "inicio", "clientes"].includes(currentPage)) render();
       });
       initializeAuth();
     })();
