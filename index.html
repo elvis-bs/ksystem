@@ -433,7 +433,6 @@
       <div class="nav-label" style="margin-top:20px">Financeiro</div>
       <nav class="nav" aria-label="Financeiro">
         <button data-page="caixa"><span class="nav-icon">▣</span>Caixa</button>
-        <button data-page="pagamentos-online"><span class="nav-icon">◇</span>Pagamentos online</button>
         <button data-page="relatorio-caixa"><span class="nav-icon">▥</span>Relatório de caixa</button>
         <button data-page="relatorios"><span class="nav-icon">▥</span>Relatórios</button>
       </nav>
@@ -486,10 +485,7 @@
       let syncQueue = Promise.resolve();
       let authMode = "signin";
       let onlineMenuReady = false;
-      let onlinePaymentsReady = false;
-      let onlinePaymentFunctionsReady = false;
       let onlineCashOrdersReady = false;
-      let mercadoPagoConnection = { configured: false, environment: "production", connected: false, sellerId: null, expiresAt: null, connectedAt: null };
       let onlineOrders = [];
       let onlineOrderRefreshTimer = null;
       let publicBusinessId = "";
@@ -497,9 +493,7 @@
       let publicMenuLoadError = "";
       let digitalFulfillment = "delivery";
       let supportedDigitalPaymentMethods = [];
-      let currentPixOrder = null;
       let currentOrderConfirmation = "";
-      let digitalPaymentPoll = null;
       const seedData = {
         pizzaEnabled: true,
         pizzaPricingMode: "size",
@@ -736,10 +730,7 @@
         currentUser = user;
         onlineOrders = [];
         onlineMenuReady = false;
-        onlinePaymentsReady = false;
-        onlinePaymentFunctionsReady = false;
         onlineCashOrdersReady = false;
-        mercadoPagoConnection = { configured: false, environment: "production", connected: false, sellerId: null, expiresAt: null, connectedAt: null };
         setSyncStatus("Carregando…");
         const { data: record, error } = await supabaseClient
           .from("business_data")
@@ -793,30 +784,13 @@
           .maybeSingle();
         onlineMenuReady = !publicMenuError;
         if (onlineMenuReady) {
-          const healthChecks = await Promise.all([
-            "create-pix-order",
-            "check-pix-order",
-            "mercadopago-webhook"
-          ].map(async functionName => {
-            const { data, error } = await supabaseClient.functions.invoke(functionName, { method: "GET" });
-            if (error) console.warn(`A função ${functionName} ainda não está configurada:`, error);
-            if (functionName === "create-pix-order" && !error) {
-              onlineCashOrdersReady = Array.isArray(data?.paymentMethods)
-                && data.paymentMethods.includes("cash_on_delivery")
-                && data.paymentMethods.includes("cash_on_pickup");
-            }
-            return !error && data?.configured === true;
-          }));
-          const { data: connection, error: connectionError } = await supabaseClient.functions.invoke("mercadopago-settings", {
-            body: { action: "status" }
-          });
-          if (connectionError) console.warn("Não foi possível verificar a conexão do Mercado Pago:", connectionError);
-          if (!connectionError && connection) mercadoPagoConnection = connection;
-          onlinePaymentFunctionsReady = healthChecks.every(Boolean);
-          onlinePaymentsReady = onlinePaymentFunctionsReady && mercadoPagoConnection.configured && mercadoPagoConnection.connected;
+          const { data, error: orderFunctionError } = await supabaseClient.functions.invoke("create-cash-order", { method: "GET" });
+          if (orderFunctionError) console.warn("A função de pedidos em dinheiro ainda não está publicada:", orderFunctionError);
+          onlineCashOrdersReady = !orderFunctionError
+            && Array.isArray(data?.paymentMethods)
+            && data.paymentMethods.includes("cash_on_delivery")
+            && data.paymentMethods.includes("cash_on_pickup");
         } else {
-          onlinePaymentFunctionsReady = false;
-          onlinePaymentsReady = false;
           onlineCashOrdersReady = false;
         }
         if (publicMenuError) {
@@ -837,15 +811,6 @@
         document.getElementById("userAvatar").textContent = (user.email || "B").charAt(0).toUpperCase();
         setSyncStatus("Sincronizado");
         render();
-        const oauthResult = new URLSearchParams(location.search).get("mp_oauth");
-        if (oauthResult) {
-          const callbackUrl = new URL(location.href);
-          callbackUrl.searchParams.delete("mp_oauth");
-          history.replaceState(null, "", callbackUrl);
-          if (oauthResult === "connected") showToast("Conta Mercado Pago conectada.");
-          else if (oauthResult === "denied") showToast("A autorização do Mercado Pago foi cancelada.");
-          else showToast("Não foi possível conectar. Confira a configuração e tente novamente.");
-        }
       }
 
       function startOnlineOrderRefresh() {
@@ -899,7 +864,7 @@
             };
             digitalFulfillment = "delivery";
             if (publicOrdering.acceptingOrders) {
-              const { data: checkoutCapabilities, error: checkoutCapabilitiesError } = await supabaseClient.functions.invoke("create-pix-order", { method: "GET" });
+              const { data: checkoutCapabilities, error: checkoutCapabilitiesError } = await supabaseClient.functions.invoke("create-cash-order", { method: "GET" });
               if (checkoutCapabilitiesError) {
                 console.warn("Não foi possível verificar as formas de pagamento disponíveis:", checkoutCapabilitiesError);
               } else if (Array.isArray(checkoutCapabilities?.paymentMethods)) {
@@ -924,10 +889,7 @@
             currentUser = null;
             onlineOrders = [];
             onlineMenuReady = false;
-            onlinePaymentsReady = false;
-            onlinePaymentFunctionsReady = false;
             onlineCashOrdersReady = false;
-            mercadoPagoConnection = { configured: false, environment: "production", connected: false, sellerId: null, expiresAt: null, connectedAt: null };
             if (onlineOrderRefreshTimer) clearInterval(onlineOrderRefreshTimer);
             onlineOrderRefreshTimer = null;
             showAuth();
@@ -1104,7 +1066,7 @@
       }
 
       function render() {
-        const labels = { inicio: "Visão geral", vendas: "Vendas e pedidos", pedidos: "Acompanhar pedidos", cardapio: "Cardápio digital", caixa: "Caixa", "pagamentos-online": "Pagamentos online", "relatorio-caixa": "Relatório de caixa", relatorios: "Relatórios", clientes: "Clientes", produtos: "Produtos e cardápio", insumos: "Insumos e custos", configuracoes: "Configurações", mais: "Mais opções" };
+        const labels = { inicio: "Visão geral", vendas: "Vendas e pedidos", pedidos: "Acompanhar pedidos", cardapio: "Cardápio digital", caixa: "Caixa", "relatorio-caixa": "Relatório de caixa", relatorios: "Relatórios", clientes: "Clientes", produtos: "Produtos e cardápio", insumos: "Insumos e custos", configuracoes: "Configurações", mais: "Mais opções" };
         const params = new URLSearchParams(location.search);
         if (params.has("cardapio")) {
           document.body.classList.add("public-menu");
@@ -1131,7 +1093,6 @@
         if (currentPage === "pedidos") renderOrders();
         if (currentPage === "cardapio") renderDigitalMenu();
         if (currentPage === "caixa") renderCash();
-        if (currentPage === "pagamentos-online") renderOnlinePaymentSettings();
         if (currentPage === "relatorio-caixa") renderCashReports();
         if (currentPage === "relatorios") renderReports();
         if (currentPage === "mais") renderMore();
@@ -1604,11 +1565,11 @@
         const onlineOrdering = state.onlineOrdering || seedData.onlineOrdering;
         const shareUrl = currentUser ? `${location.href.split("?")[0]}?cardapio=1&loja=${encodeURIComponent(currentUser.id)}` : "";
         document.getElementById("pageContent").innerHTML = `
-          <div class="page-heading"><div><div class="eyebrow">Vendas online</div><h1>Cardápio digital</h1><p class="subtitle">Configure os produtos, entrega/retirada e as formas de pagamento do seu cardápio.</p></div></div>
+          <div class="page-heading"><div><div class="eyebrow">Vendas online</div><h1>Cardápio digital</h1><p class="subtitle">Configure os produtos e o recebimento em dinheiro na entrega ou retirada.</p></div></div>
           <article class="panel" style="margin-bottom:15px"><div class="panel-heading"><h2>Publicação e entrega</h2><span>${onlineOrdering.published ? "Publicado" : "Não publicado"}</span></div>
             ${onlineOrdering.enabled && !onlineCashOrdersReady ? `<div class="callout" style="margin:0 0 13px"><span>ⓘ</span><div><b>Finalização em dinheiro ainda não liberada</b>Atualize a função de pedidos no Supabase para receber os pedidos do cardápio.</div></div>` : ""}
             <form class="form-grid" id="onlineOrderingForm">
-              <label class="setting-item full" style="margin:0"><span><strong>Publicar cardápio para visualização</strong><p>Disponibiliza seus produtos pelo link público, mesmo antes de configurar o Pix.</p></span><span class="switch"><input name="published" type="checkbox" ${onlineOrdering.published ? "checked" : ""}><span></span></span></label>
+              <label class="setting-item full" style="margin:0"><span><strong>Publicar cardápio para visualização</strong><p>Disponibiliza seus produtos pelo link público, sem exigir cadastro de pagamento online.</p></span><span class="switch"><input name="published" type="checkbox" ${onlineOrdering.published ? "checked" : ""}><span></span></span></label>
               <label class="setting-item full" style="margin:0"><span><strong>Aceitar pedidos online</strong><p>O cliente poderá pagar somente em dinheiro na entrega ou na retirada. A finalização será liberada quando o servidor estiver atualizado.</p></span><span class="switch"><input name="enabled" type="checkbox" ${onlineOrdering.enabled ? "checked" : ""}><span></span></span></label>
               <div class="field"><label for="deliveryFee">Taxa de entrega (R$)</label><input id="deliveryFee" name="deliveryFee" type="number" min="0" max="1000" step="0.01" value="${number(onlineOrdering.deliveryFee).toFixed(2)}" required></div>
               <label class="setting-item" style="margin:0"><span><strong>Permitir retirada no local</strong><p>O cliente poderá escolher retirada em vez de entrega.</p></span><span class="switch"><input name="pickupEnabled" type="checkbox" ${onlineOrdering.pickupEnabled ? "checked" : ""}><span></span></span></label>
@@ -1616,7 +1577,7 @@
               <div class="field full"><button class="button primary" type="submit" ${onlineMenuReady ? "" : "disabled"}>Salvar configurações</button></div>
             </form>
             ${onlineOrdering.published && onlineMenuReady ? `<div class="toolbar" style="margin-top:14px"><div class="field" style="flex:1"><label for="menuShareUrl">Link público do cardápio</label><input class="search" id="menuShareUrl" style="width:100%" readonly value="${escapeHtml(shareUrl)}"></div><button class="button" type="button" data-action="copy-menu-link">Copiar link</button></div>` : ""}
-            ${!onlineCashOrdersReady ? `<div class="callout" style="margin:13px 0 0"><span>ⓘ</span><div><b>Finalização em dinheiro ainda em implantação</b>Publique a função create-pix-order no Supabase para receber pedidos e liberar a finalização. O cardápio continuará disponível para consulta até lá.</div></div>` : ""}
+            ${!onlineCashOrdersReady ? `<div class="callout" style="margin:13px 0 0"><span>ⓘ</span><div><b>Finalização em dinheiro ainda em implantação</b>Publique a função create-cash-order no Supabase para receber pedidos e liberar a finalização. O cardápio continuará disponível para consulta até lá.</div></div>` : ""}
           </article>
           ${groups.length ? `<div class="filters" style="margin-bottom:13px">${groups.map(category => `<button class="filter-btn ${digitalCategory === category ? "active" : ""}" data-digital-category="${category}">${categoryIcon(category)} ${categoryName(category)}s</button>`).join("")}</div><article class="panel" style="margin-bottom:13px"><div class="panel-heading"><h2>${categoryIcon(digitalCategory)} ${categoryName(digitalCategory)}s</h2><span>${shownProducts.length} produto(s)</span></div><div class="digital-menu-list">${shownProducts.map(product => {
             const prices = productOptions(product).map(option => number(option.price));
@@ -1718,7 +1679,7 @@
               <div class="field full"><label for="digitalNotes">Observações do pedido</label><input id="digitalNotes" name="notes" maxlength="160" placeholder="Ponto de referência, sem cebola..."></div>
             </div>
             <button type="submit" class="button primary" ${digitalCart.length && !currentOrderConfirmation && cashCheckoutReady ? "" : "disabled"}>Finalizar pedido · ${money(total)}</button>
-            <div id="pixPaymentResult">${renderPixPaymentResult()}</div>
+            <div>${currentOrderConfirmation ? `<div class="callout" style="margin-top:14px"><span>✓</span><div><b>Pedido enviado à loja</b><p class="helper">Pedido #${escapeHtml(currentOrderConfirmation.slice(0, 8))}. O pagamento será feito ${digitalFulfillment === "pickup" ? "na retirada" : "na entrega"}.</p></div></div>` : ""}</div>
             </form>
           </section>` : ""}`;
         document.querySelectorAll("[data-public-product]").forEach(card => {
@@ -1757,18 +1718,6 @@
           });
           document.getElementById("digitalCheckout").addEventListener("submit", submitDigitalOrder);
         }
-      }
-
-      function renderPixPaymentResult() {
-        if (!currentPixOrder) {
-          return currentOrderConfirmation
-            ? `<div class="callout" style="margin-top:14px"><span>✓</span><div><b>Pedido enviado à loja</b><p class="helper">Pedido #${escapeHtml(currentOrderConfirmation.slice(0, 8))}. O pagamento será feito ${digitalFulfillment === "pickup" ? "na retirada" : "na entrega"}.</p></div></div>`
-            : "";
-        }
-        const qrImage = currentPixOrder.pixQrBase64
-          ? `<img src="data:image/png;base64,${escapeHtml(currentPixOrder.pixQrBase64)}" alt="QR Code Pix" style="display:block;width:min(240px,100%);margin:12px auto">`
-          : "";
-        return `<div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b id="pixPaymentStatus">Pedido #${escapeHtml(currentPixOrder.orderId.slice(0, 8))} · aguardando Pix</b><p class="helper">Abra o app do seu banco, escaneie o QR Code ou copie o código Pix. O pedido só será enviado à loja após a confirmação.</p></div></div>${qrImage}<div class="field"><label for="pixCopyPaste">Pix copia e cola</label><textarea id="pixCopyPaste" readonly rows="3" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;resize:vertical">${escapeHtml(currentPixOrder.pixCopyPaste)}</textarea></div><button type="button" class="button" data-action="copy-pix">Copiar código Pix</button>${currentPixOrder.ticketUrl ? `<a class="button" href="${escapeHtml(currentPixOrder.ticketUrl)}" target="_blank" rel="noopener noreferrer">Abrir pagamento</a>` : ""}`;
       }
 
       function addDigitalItem(productId) {
@@ -1829,7 +1778,7 @@
 
       function submitDigitalOrder(event) {
         event.preventDefault();
-        if (currentPixOrder || !digitalCart.length) return;
+        if (!digitalCart.length) return;
         const paymentMethod = digitalFulfillment === "pickup" ? "cash_on_pickup" : "cash_on_delivery";
         if (!supportedDigitalPaymentMethods.includes(paymentMethod)) {
           showToast("A finalização em dinheiro ainda está em implantação.");
@@ -1841,7 +1790,7 @@
         submitButton.disabled = true;
         submitButton.textContent = "Enviando pedido…";
         const data = new FormData(form);
-        supabaseClient.functions.invoke("create-pix-order", {
+        supabaseClient.functions.invoke("create-cash-order", {
           body: {
             businessId: publicBusinessId,
             fulfillment: digitalFulfillment,
@@ -1882,113 +1831,9 @@
         });
       }
 
-      function startDigitalPaymentPolling() {
-        if (digitalPaymentPoll) clearInterval(digitalPaymentPoll);
-        digitalPaymentPoll = setInterval(async () => {
-          if (!currentPixOrder) return;
-          const { data, error } = await supabaseClient.functions.invoke("check-pix-order", {
-            body: { orderId: currentPixOrder.orderId }
-          });
-          if (error) {
-            console.error("Não foi possível verificar o status do Pix:", error);
-            return;
-          }
-          if (data?.status === "approved") {
-            const status = document.getElementById("pixPaymentStatus");
-            if (status) status.textContent = `Pedido #${currentPixOrder.orderId.slice(0, 8)} · Pix confirmado`;
-            clearInterval(digitalPaymentPoll);
-            digitalPaymentPoll = null;
-            showToast("Pagamento confirmado. A loja recebeu seu pedido.");
-          } else if (["rejected", "cancelled", "refunded", "failed"].includes(data?.status)) {
-            const status = document.getElementById("pixPaymentStatus");
-            if (status) status.textContent = "Pagamento não aprovado. Entre em contato com a loja.";
-            clearInterval(digitalPaymentPoll);
-            digitalPaymentPoll = null;
-          }
-        }, 10000);
-      }
-
-      function renderOnlinePaymentSettings() {
-        document.getElementById("pageContent").innerHTML = `
-          <div class="page-heading"><div><div class="eyebrow">Recebimentos</div><h1>Pagamentos online</h1><p class="subtitle">Conecte a conta Mercado Pago da sua loja para receber pedidos online via Pix.</p></div></div>
-          <article class="panel">
-            <div class="panel-heading"><h2>Conta Mercado Pago</h2><span id="mercadoPagoConnectionLabel">Verificando…</span></div>
-            <div id="mercadoPagoConnectionCard" class="callout"><span>ⓘ</span><div>Consultando o status da conexão…</div></div>
-            <div class="toolbar" style="margin-top:14px">
-              <button class="button primary" type="button" data-action="connect-mercadopago" ${mercadoPagoConnection.configured ? "" : "disabled"}>${mercadoPagoConnection.connected ? "Reconectar conta" : "Conectar Mercado Pago"}</button>
-              <button class="button" type="button" data-action="refresh-mercadopago">Atualizar status</button>
-            </div>
-            <div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b>Seus dados ficam protegidos</b>A autorização é feita no site do Mercado Pago. O token de acesso e a renovação ficam restritos ao servidor e não são exibidos nem gravados no navegador.</div></div>
-          </article>
-          ${mercadoPagoConnection.configured ? "" : `<article class="panel" style="margin-top:14px"><div class="panel-heading"><h2>Ativação inicial</h2></div><p class="helper">Antes da primeira conexão, o administrador precisa cadastrar uma aplicação no Mercado Pago e configurar uma única vez o ID e o segredo da aplicação, a URL de retorno OAuth e o segredo do webhook nos Secrets do Supabase. Depois disso, cada loja conecta sua própria conta nesta tela.</p></article>`}`;
-        renderMercadoPagoConnectionCard();
-        refreshMercadoPagoConnection();
-      }
-
-      function renderMercadoPagoConnectionCard(errorMessage = "") {
-        const card = document.getElementById("mercadoPagoConnectionCard");
-        const label = document.getElementById("mercadoPagoConnectionLabel");
-        const connectButton = document.querySelector("[data-action='connect-mercadopago']");
-        if (!card || !label) return;
-        if (connectButton) {
-          connectButton.disabled = !mercadoPagoConnection.configured;
-          connectButton.textContent = mercadoPagoConnection.connected ? "Reconectar conta" : "Conectar Mercado Pago";
-        }
-        if (errorMessage) {
-          label.textContent = "Indisponível";
-          card.innerHTML = `<span>!</span><div>${escapeHtml(errorMessage)}</div>`;
-        } else if (mercadoPagoConnection.connected) {
-          label.textContent = mercadoPagoConnection.environment === "test" ? "Conectado · Teste" : "Conectado · Produção";
-          card.innerHTML = `<span>✓</span><div><b>Conta conectada · ${mercadoPagoConnection.environment === "test" ? "ambiente de teste" : "produção"}</b>Vendedor Mercado Pago: ${escapeHtml(mercadoPagoConnection.sellerId || "—")}${mercadoPagoConnection.connectedAt ? `<br>Conectada em ${new Date(mercadoPagoConnection.connectedAt).toLocaleString("pt-BR")}` : ""}</div>`;
-        } else if (mercadoPagoConnection.configured) {
-          label.textContent = mercadoPagoConnection.environment === "test" ? "Teste · Não conectado" : "Produção · Não conectado";
-          card.innerHTML = `<span>ⓘ</span><div><b>Conecte a conta da loja</b>Ambiente ${mercadoPagoConnection.environment === "test" ? "de teste" : "de produção"}. Você será direcionado ao Mercado Pago para autorizar o recebimento.</div>`;
-        } else {
-          label.textContent = "Configuração pendente";
-          card.innerHTML = `<span>ⓘ</span><div>A configuração inicial da aplicação ainda não foi concluída no servidor.</div>`;
-        }
-      }
-
-      async function refreshMercadoPagoConnection() {
-        try {
-          const { data, error } = await supabaseClient.functions.invoke("mercadopago-settings", {
-            body: { action: "status" }
-          });
-          if (error) throw error;
-          if (!data || typeof data.configured !== "boolean" || typeof data.connected !== "boolean") {
-            throw new Error("O servidor retornou um status de conexão inválido.");
-          }
-          mercadoPagoConnection = data;
-          onlinePaymentsReady = onlinePaymentFunctionsReady && onlineMenuReady && data.configured && data.connected;
-          renderMercadoPagoConnectionCard();
-        } catch (error) {
-          console.error("Não foi possível consultar a conexão Mercado Pago:", error);
-          renderMercadoPagoConnectionCard("Não foi possível verificar a conexão. Confirme se as funções e o schema foram publicados.");
-        }
-      }
-
-      async function startMercadoPagoConnection(button) {
-        button.disabled = true;
-        button.textContent = "Abrindo Mercado Pago…";
-        try {
-          const { data, error } = await supabaseClient.functions.invoke("mercadopago-settings", {
-            body: { action: "connect" }
-          });
-          if (error) throw error;
-          if (!data?.authorizationUrl) throw new Error("O servidor não retornou o endereço de autorização.");
-          location.assign(data.authorizationUrl);
-        } catch (error) {
-          console.error("Não foi possível iniciar a conexão Mercado Pago:", error);
-          showToast("Não foi possível iniciar a conexão. Confira a configuração do servidor.");
-          button.disabled = false;
-          button.textContent = mercadoPagoConnection.connected ? "Reconectar conta" : "Conectar Mercado Pago";
-        }
-      }
-
       function renderMore() {
         const links = [
           ["caixa", "▣", "Caixa"],
-          ["pagamentos-online", "◇", "Pagamentos online"],
           ["relatorio-caixa", "▥", "Relatório de caixa"],
           ["relatorios", "▥", "Relatórios"],
           ["clientes", "♙", "Clientes"],
@@ -2656,8 +2501,6 @@
           renderPublicMenu();
         }
         if (action.dataset.action === "public-add") addDigitalItem(id);
-        if (action.dataset.action === "connect-mercadopago") startMercadoPagoConnection(action);
-        if (action.dataset.action === "refresh-mercadopago") refreshMercadoPagoConnection();
         if (action.dataset.action === "return-to-system") location.href = location.pathname;
         if (action.dataset.action === "open-pdv") {
           if (!currentCashSession()) {

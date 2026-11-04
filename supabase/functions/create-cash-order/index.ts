@@ -1,4 +1,4 @@
-import { adminClient, getMercadoPagoAccessToken } from "../_shared/mercadopago.ts";
+import { adminClient } from "../_shared/supabase.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -47,15 +47,10 @@ function safeProductName(product: JsonRecord): string {
 Deno.serve(async request => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (request.method === "GET") {
-    const configured = Boolean(
-      Deno.env.get("MP_CLIENT_ID") &&
-      Deno.env.get("MP_CLIENT_SECRET") &&
-      Deno.env.get("MP_WEBHOOK_SECRET") &&
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
-    );
+    const configured = Boolean(Deno.env.get("SUPABASE_URL") && Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"));
     return jsonResponse({
       configured,
-      paymentMethods: ["cash_on_delivery", "cash_on_pickup"]
+      paymentMethods: configured ? ["cash_on_delivery", "cash_on_pickup"] : []
     });
   }
   if (request.method !== "POST") return jsonResponse({ error: "Method not allowed." }, 405);
@@ -70,20 +65,13 @@ Deno.serve(async request => {
     if (!customer || typeof customer !== "object") return jsonResponse({ error: "Customer information is required." }, 400);
     const customerName = text(customer.name, 70);
     const customerPhone = text(customer.phone, 25);
-    const customerEmail = text(customer.email, 254).toLowerCase();
     const address = text(customer.address, 180);
     const notes = text(customer.notes, 300);
     if (!["delivery", "pickup"].includes(fulfillment)) return jsonResponse({ error: "Invalid order fulfillment." }, 400);
     const allowedPaymentMethods = fulfillment === "pickup" ? ["cash_on_pickup"] : ["cash_on_delivery"];
     if (!allowedPaymentMethods.includes(paymentMethod)) return jsonResponse({ error: "Invalid payment method for this fulfillment option." }, 400);
-    if (customerName.length < 2 || customerPhone.length < 8
-      || (paymentMethod === "pix" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail))
-      || (customerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail))) {
-      return jsonResponse({
-        error: paymentMethod === "pix"
-          ? "Enter a valid name, phone, and email for Pix payment."
-          : "Enter a valid name and phone number."
-      }, 400);
+    if (customerName.length < 2 || customerPhone.length < 8) {
+      return jsonResponse({ error: "Enter a valid name and phone number." }, 400);
     }
     if (fulfillment === "delivery" && address.length < 6) return jsonResponse({ error: "Enter a delivery address." }, 400);
     if (!Array.isArray(body.items) || body.items.length < 1 || body.items.length > 20) {
@@ -200,18 +188,16 @@ Deno.serve(async request => {
     if (rateLimitError) throw rateLimitError;
     if (!allowed) return jsonResponse({ error: "Muitas tentativas de pedido. Aguarde um minuto e tente novamente." }, 429);
 
-    const accessToken = paymentMethod === "pix" ? await getMercadoPagoAccessToken(client, businessId) : "";
     const { data: order, error: insertError } = await client
       .from("online_orders")
       .insert({
         business_id: businessId,
         payment_status: "pending",
-        status: paymentMethod === "pix" ? "Aguardando Pix" : "Recebido",
+        status: "Recebido",
         total: totalCents / 100,
         order_data: {
           customerName,
           customerPhone,
-          customerEmail,
           address: fulfillment === "delivery" ? address : "",
           pickupAddress: fulfillment === "pickup" ? text(menu.pickupAddress, 180) : "",
           notes,
@@ -225,74 +211,13 @@ Deno.serve(async request => {
       .single();
     if (insertError) throw insertError;
 
-    if (paymentMethod !== "pix") {
-      return jsonResponse({
-        orderId: order.id,
-        total: totalCents / 100,
-        paymentMethod
-      }, 201);
-    }
-
-    const projectUrl = Deno.env.get("SUPABASE_URL");
-    if (!projectUrl) throw new Error("Supabase URL is not configured.");
-    const notificationUrl = new URL(`${projectUrl}/functions/v1/mercadopago-webhook`);
-    notificationUrl.searchParams.set("business_id", businessId);
-    const paymentResponse = await fetch("https://api.mercadopago.com/v1/payments", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "X-Idempotency-Key": String(order.id)
-      },
-      body: JSON.stringify({
-        transaction_amount: totalCents / 100,
-        description: `Pedido online ${String(order.id).slice(0, 8)}`,
-        payment_method_id: "pix",
-        external_reference: order.id,
-        date_of_expiration: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-        notification_url: notificationUrl.toString(),
-        payer: { email: customerEmail, first_name: customerName }
-      })
-    });
-    const payment = await paymentResponse.json() as JsonRecord;
-    if (!paymentResponse.ok) {
-      console.error("Mercado Pago Pix creation failed:", paymentResponse.status);
-      await client.from("online_orders").update({
-        payment_status: "failed",
-        status: "Cancelado",
-        updated_at: new Date().toISOString()
-      }).eq("id", order.id);
-      return jsonResponse({ error: "Não foi possível gerar o Pix. Confira os dados da conta Mercado Pago e tente novamente." }, 502);
-    }
-
-    const pointOfInteraction = payment.point_of_interaction as JsonRecord | undefined;
-    const transactionData = pointOfInteraction?.transaction_data as JsonRecord | undefined;
-    const paymentId = payment.id;
-    const qrCode = text(transactionData?.qr_code, 5000);
-    const qrCodeBase64 = text(transactionData?.qr_code_base64, 100_000);
-    if (!paymentId || (!qrCode && !qrCodeBase64)) throw new Error("Mercado Pago did not return Pix payment instructions.");
-    const { error: updateError } = await client.from("online_orders").update({
-      payment_id: String(paymentId),
-      updated_at: new Date().toISOString()
-    }).eq("id", order.id);
-    if (updateError) throw updateError;
-
     return jsonResponse({
       orderId: order.id,
       total: totalCents / 100,
-      pixCopyPaste: qrCode,
-      pixQrBase64: qrCodeBase64,
-      ticketUrl: text(transactionData?.ticket_url, 1000)
+      paymentMethod
     }, 201);
   } catch (error) {
     console.error("Could not create online order:", error);
-    const message = error instanceof Error ? error.message : "Unexpected error.";
-    if (message.includes("not configured")) {
-      return jsonResponse({ error: "O pagamento Pix ainda não está configurado. Fale com a loja ou escolha pagar no recebimento." }, 500);
-    }
-    if (message.includes("not connected")) {
-      return jsonResponse({ error: "A loja ainda não conectou o Mercado Pago. Escolha pagar no recebimento." }, 503);
-    }
     return jsonResponse({ error: "Não foi possível criar o pedido. Tente novamente." }, 500);
   }
 });

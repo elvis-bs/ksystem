@@ -1,4 +1,4 @@
-[functions.create-pix-order]
+[functions.create-cash-order]
 verify_jwt = false
 
 [functions.check-pix-order]
