@@ -2173,7 +2173,7 @@
         const selected = productFilter === "todos" ? state.products : state.products.filter(item => item.category === productFilter);
         const shown = selected.filter(item => item.category !== "pizza" || state.pizzaEnabled);
         document.getElementById("pageContent").innerHTML = `
-          <div class="page-heading"><div><div class="eyebrow">Seu cardápio</div><h1>${productFilter === "pizza" ? "Sabores disponíveis" : "Produtos"}</h1><p class="subtitle">${productFilter === "pizza" ? "Configure os tamanhos e depois cadastre os sabores que o cliente poderá combinar." : "Separe seu menu por categoria e acompanhe o custo de cada item."}</p></div><button class="button primary" data-action="new-product">＋ ${productFilter === "pizza" ? "Novo sabor" : "Novo produto"}</button></div>
+          <div class="page-heading"><div><div class="eyebrow">Seu cardápio</div><h1>${productFilter === "pizza" ? "Sabores disponíveis" : "Produtos"}</h1><p class="subtitle">${productFilter === "pizza" ? "Configure os tamanhos e depois cadastre os sabores que o cliente poderá combinar." : "Separe seu menu por categoria e acompanhe o custo de cada item."}</p></div><button class="button primary" data-action="${productFilter === "pizza" ? "new-pizza-flavor" : "new-product"}" ${productFilter === "pizza" && !state.pizzaSizes.length ? "disabled" : ""}>＋ ${productFilter === "pizza" ? "Cadastrar sabor" : "Novo produto"}</button></div>
           ${productFilter === "pizza" && state.pizzaEnabled ? `<article class="panel" style="margin-bottom:14px"><div class="panel-heading"><h2>1. Tamanhos e limite de sabores</h2><span>Compartilhado por todos os sabores</span></div><p class="helper">Defina quantos sabores cabem em cada tamanho. Em seguida, cadastre os sabores na lista abaixo; cada sabor mantém sua própria ficha técnica e seus preços por tamanho.</p><form id="pizzaSizesForm"><div class="dynamic-rows" id="pizzaSizeConfigRows">${state.pizzaSizes.map(pizzaSizeConfigRow).join("")}</div><div class="toolbar" style="margin-top:10px"><button type="button" class="button small" data-action="add-pizza-size">＋ Tamanho</button><button type="submit" class="button primary small">Salvar tamanhos</button></div></form></article>` : ""}
           <div class="toolbar"><div class="filters">
             <button class="filter-btn ${productFilter === "todos" ? "active" : ""}" data-filter="todos">Todos</button>
@@ -2181,7 +2181,7 @@
             <button class="filter-btn ${productFilter === "lanche" ? "active" : ""}" data-filter="lanche">🍔 Lanches</button>
             <button class="filter-btn ${productFilter === "bebida" ? "active" : ""}" data-filter="bebida">🥤 Bebidas</button>
           </div><input class="search" id="productSearch" type="search" placeholder="⌕  ${productFilter === "pizza" ? "Buscar sabor..." : "Buscar produto..."}"></div>
-          ${productFilter === "pizza" ? `<div class="panel-heading" style="margin:12px 0 8px"><h2>2. Sabores disponíveis</h2><span>Cadastre cada sabor com preço e ficha técnica</span></div>` : ""}
+          ${productFilter === "pizza" ? `<div class="panel-heading" style="margin:12px 0 8px"><h2>2. Sabores disponíveis</h2><span>Cada sabor tem sua própria ficha técnica e preço por tamanho</span></div>` : ""}
           <div class="product-grid" id="productGrid">${productCards(shown)}</div>`;
         const pizzaSizesForm = document.getElementById("pizzaSizesForm");
         if (pizzaSizesForm) {
@@ -2243,7 +2243,7 @@
       }
 
       function productCards(products) {
-        if (!products.length) return `<div class="empty-state">Nenhum produto nesta categoria ainda. Use <strong>＋ Novo produto</strong> para cadastrar.</div>`;
+        if (!products.length) return `<div class="empty-state">${productFilter === "pizza" ? `Nenhum sabor cadastrado ainda. Use <strong>＋ Cadastrar sabor</strong> para adicionar o primeiro.` : `Nenhum produto nesta categoria ainda. Use <strong>＋ Novo produto</strong> para cadastrar.`}</div>`;
         return products.map(product => {
           const options = productOptions(product);
           const startingPrice = Math.min(...options.map(option => number(option.price)));
@@ -2256,7 +2256,7 @@
               <div class="product-detail-content"><div class="product-pricing" style="margin-top:0"><div><span>Custo base</span><strong>${money(startingCost)}</strong></div><div><span>Preço${product.category === "pizza" ? " inicial" : ""}</span><strong>${money(startingPrice)}</strong></div><div><span>Margem</span><strong class="${margin < 30 ? "margin-cell low" : "margin-cell"}">${margin.toFixed(0)}%</strong></div></div>
                 <div class="product-pricing" style="margin-top:0;padding-top:9px;border-top:0"><div><span>Adicionais</span><strong>${extras}</strong></div><div><span>Status</span><strong>${product.active ? "Ativo" : "Pausado"}</strong></div><div><button class="button small danger" data-action="delete-product" data-id="${escapeHtml(product.id)}">Excluir</button></div></div>
                 ${extras ? `<div class="helper">${product.addons.map(addon => `${escapeHtml(addon.name)}: vende por ${money(addon.price)}, custa ${money(addon.cost)} · margem ${addon.price ? ((addon.price - addon.cost) / addon.price * 100).toFixed(0) : 0}%`).join("<br>")}</div>` : ""}
-              </div></details><button class="icon-button" data-action="edit-product" data-id="${escapeHtml(product.id)}" aria-label="Editar ${escapeHtml(product.name)}">✎</button></div>
+              </div></details><button class="icon-button" data-action="edit-product" data-id="${escapeHtml(product.id)}" aria-label="Editar ${product.category === "pizza" ? "sabor" : "produto"} ${escapeHtml(product.name)}">✎</button></div>
           </article>`;
         }).join("");
       }
@@ -2326,20 +2326,26 @@
         document.body.style.overflow = "";
       }
 
-      function productForm(product = null) {
-        const category = product?.category || (state.pizzaEnabled ? "pizza" : "lanche");
+      function productForm(product = null, forcedCategory = null) {
+        const category = forcedCategory || product?.category || "lanche";
         const ingredientOptions = state.ingredients.map(item => `<option value="${item.id}">${escapeHtml(item.name)} (${escapeHtml(item.unit)})</option>`).join("");
         const recipeRows = product?.recipe?.length ? product.recipe.map(item => `<div class="recipe-row"><select name="recipeIngredient" required aria-label="Insumo">${ingredientOptions}</select><input name="recipeQuantity" type="number" min="0.0001" step="any" required value="${number(item.quantity)}" placeholder="Qtd." aria-label="Quantidade"><button type="button" class="row-remove" data-remove-row aria-label="Remover ingrediente">×</button></div>`).join("") : "";
         const sizeRows = category === "pizza" ? pizzaProductSizeRows(product).map(sizeRow).join("") : "";
         const borderRows = product?.borderOptions?.length ? product.borderOptions.map(borderOptionRow).join("") : "";
         const addonRows = product?.addons?.length ? product.addons.map(item => addonRow(item)).join("") : "";
+        const categoryField = forcedCategory
+          ? `<input type="hidden" name="category" value="${escapeHtml(forcedCategory)}">`
+          : `<div class="field"><label for="productCategory">Categoria</label><select id="productCategory" name="category" data-product-category><option value="lanche" ${category === "lanche" ? "selected" : ""}>Lanche</option><option value="bebida" ${category === "bebida" ? "selected" : ""}>Bebida</option></select></div>`;
         const body = `<div class="form-grid">
-          <div class="field full"><label for="productName">Nome do produto</label><input id="productName" name="name" required maxlength="70" value="${escapeHtml(product?.name || "")}" placeholder="Ex.: Pizza Calabresa"></div>
-          <div class="field"><label for="productCategory">Categoria</label><select id="productCategory" name="category" data-product-category>${state.pizzaEnabled ? `<option value="pizza" ${category === "pizza" ? "selected" : ""}>Pizza</option>` : ""}<option value="lanche" ${category === "lanche" ? "selected" : ""}>Lanche</option><option value="bebida" ${category === "bebida" ? "selected" : ""}>Bebida</option></select></div>
+          <div class="field full"><label for="productName">${category === "pizza" ? "Nome do sabor" : "Nome do produto"}</label><input id="productName" name="name" required maxlength="70" value="${escapeHtml(product?.name || "")}" placeholder="${category === "pizza" ? "Ex.: Calabresa" : "Ex.: X-Burger da Casa"}"></div>
+          ${categoryField}
           <div class="field"><label for="productActive">Disponibilidade</label><select id="productActive" name="active"><option value="true" ${product?.active !== false ? "selected" : ""}>Ativo no cardápio</option><option value="false" ${product?.active === false ? "selected" : ""}>Pausado</option></select></div>
         </div>
         <div id="productSpecificFields"></div>`;
-        openModal(product ? "Editar produto" : "Novo produto", body, "product", product?.id || null);
+        const title = forcedCategory === "pizza"
+          ? `${product ? "Editar" : "Cadastrar"} sabor`
+          : `${product ? "Editar" : "Novo"} produto`;
+        openModal(title, body, "product", product?.id || null);
         updateProductFields(category, product, { ingredientOptions, recipeRows, sizeRows, borderRows, addonRows });
       }
 
@@ -2378,7 +2384,7 @@
         const borderRows = cached?.borderRows ?? (product?.borderOptions?.length ? product.borderOptions.map(borderOptionRow).join("") : "");
         const addonRows = cached?.addonRows ?? (product?.addons?.length ? product.addons.map(addonRow).join("") : "");
         const specific = document.getElementById("productSpecificFields");
-        const recipeSection = `<div class="form-section"><div class="form-section-head"><div><strong>Ficha técnica</strong><div class="helper">Selecione os insumos e a quantidade usada na receita.</div></div><button type="button" class="button small" data-add-row="recipe">＋ Ingrediente</button></div><div class="dynamic-rows" id="recipeRows">${recipeRows}</div><div class="recipe-total" id="recipeTotal"></div></div>`;
+        const recipeSection = `<div class="form-section"><div class="form-section-head"><div><strong>${category === "pizza" ? "Ficha técnica do sabor" : "Ficha técnica"}</strong><div class="helper">Selecione os insumos e a quantidade usada na receita.</div></div><button type="button" class="button small" data-add-row="recipe">＋ Ingrediente</button></div><div class="dynamic-rows" id="recipeRows">${recipeRows}</div><div class="recipe-total" id="recipeTotal"></div></div>`;
         const addonsSection = `<div class="form-section"><div class="form-section-head"><div><strong>Adicionais deste produto</strong><div class="helper">Cadastre aqui os adicionais que o cliente poderá escolher no cardápio, com preço de venda e custo.</div></div><button type="button" class="button small" data-add-row="addon">＋ Adicional</button></div><div class="dynamic-rows" id="addonRows">${addonRows}</div></div>`;
         if (category === "bebida") {
           specific.innerHTML = `<div class="form-grid" style="margin-top:14px"><div class="field"><label for="drinkCost">Custo de compra (R$)</label><input id="drinkCost" name="drinkCost" type="number" min="0" step="0.01" required value="${product ? number(product.cost) : ""}" placeholder="Ex.: 4,50"></div><div class="field"><label for="productPrice">Preço de venda (R$)</label><input id="productPrice" name="price" type="number" min="0" step="0.01" required value="${product ? number(product.price) : ""}" placeholder="Ex.: 7,50"></div></div>${addonsSection}`;
@@ -2681,7 +2687,11 @@
         }
         if (action.dataset.action === "print-report") window.print();
         if (action.dataset.action === "new-product") productForm();
-        if (action.dataset.action === "edit-product") productForm(state.products.find(item => item.id === id));
+        if (action.dataset.action === "new-pizza-flavor") productForm(null, "pizza");
+        if (action.dataset.action === "edit-product") {
+          const product = state.products.find(item => item.id === id);
+          if (product) productForm(product, product.category === "pizza" ? "pizza" : null);
+        }
         if (action.dataset.action === "delete-product") {
           const product = state.products.find(item => item.id === id);
           if (product && confirm(`Excluir "${product.name}" do cardápio?`)) {
