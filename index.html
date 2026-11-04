@@ -185,7 +185,8 @@
     .form-section-head small { color: var(--muted); font-size: 9px; }
     .dynamic-rows { display: grid; gap: 7px; }
     .recipe-row { display: grid; grid-template-columns: 1fr 105px 31px; gap: 7px; }
-    .size-row { display: grid; grid-template-columns: 1fr 95px 75px 95px 31px; gap: 7px; }
+    .size-row { display: grid; grid-template-columns: 1fr 110px 85px; gap: 7px; align-items: center; }
+    .pizza-size-config-row { display: grid; grid-template-columns: 1fr 120px 31px; gap: 7px; }
     .addon-row { display: grid; grid-template-columns: 1.2fr 95px 95px 31px; gap: 7px; }
     .row-remove { border: 0; border-radius: 7px; color: #9c6259; background: #fbefed; font-size: 14px; }
     .helper { margin: 7px 0 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
@@ -393,7 +394,8 @@
       .modal-body { padding: 15px 16px 5px; }
       .modal-footer { padding: 12px 16px max(12px, env(safe-area-inset-bottom)); }
       .form-grid { gap: 10px; }
-      .size-row { grid-template-columns: 1fr 68px 55px 75px 29px; gap: 4px; }
+      .size-row { grid-template-columns: 1fr 78px 62px; gap: 4px; }
+      .pizza-size-config-row { grid-template-columns: 1fr 72px 29px; gap: 5px; }
       .addon-row { grid-template-columns: 1fr 71px 71px 29px; gap: 5px; }
       .recipe-row { grid-template-columns: 1fr 83px 29px; gap: 5px; }
       .size-row input, .addon-row input, .recipe-row input, .recipe-row select { padding: 0 6px; font-size: 10px; }
@@ -498,6 +500,11 @@
       const seedData = {
         pizzaEnabled: true,
         pizzaPricingMode: "size",
+        pizzaSizes: [
+          { id: "pizza-size-broto", name: "Broto", flavorLimit: 1 },
+          { id: "pizza-size-media", name: "Média", flavorLimit: 2 },
+          { id: "pizza-size-grande", name: "Grande", flavorLimit: 3 }
+        ],
         onlineOrdering: { published: false, enabled: false, deliveryFee: 0, pickupEnabled: false, pickupAddress: "" },
         customers: [],
         sales: [],
@@ -556,6 +563,7 @@
           return {
             ...JSON.parse(JSON.stringify(seedData)),
             ...parsed,
+            pizzaSizes: normalizePizzaSizes(parsed.pizzaSizes, products),
             pizzaPricingMode: parsed.pizzaPricingMode === "highest" ? "highest" : "size",
             onlineOrdering: {
               published: parsed.onlineOrdering?.published === true || parsed.onlineOrdering?.enabled === true,
@@ -610,6 +618,7 @@
         return {
           pizzaEnabled: sourceState.pizzaEnabled === true,
           pizzaPricingMode: sourceState.pizzaPricingMode === "highest" ? "highest" : "size",
+          pizzaSizes: normalizePizzaSizes(sourceState.pizzaSizes, sourceState.products),
           acceptingOrders: onlineOrdering.enabled === true,
           pickupAddress: onlineOrdering.pickupAddress || "",
           products: sourceState.products.filter(product => product.active && (product.category !== "pizza" || sourceState.pizzaEnabled)).map(product => ({
@@ -731,6 +740,7 @@
           state = {
             ...JSON.parse(JSON.stringify(seedData)),
             ...parsed,
+            pizzaSizes: normalizePizzaSizes(parsed.pizzaSizes, parsed.products),
             pizzaPricingMode: parsed.pizzaPricingMode === "highest" ? "highest" : "size",
             onlineOrdering: {
               published: parsed.onlineOrdering?.published === true || parsed.onlineOrdering?.enabled === true,
@@ -932,6 +942,35 @@
         return String(name || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase("pt-BR");
       }
 
+      function normalizePizzaSizes(configured, products) {
+        const source = Array.isArray(configured) && configured.length
+          ? configured
+          : [...new Map((Array.isArray(products) ? products : [])
+            .filter(product => product.category === "pizza")
+            .flatMap(product => Array.isArray(product.sizes) ? product.sizes : [])
+            .filter(size => typeof size.name === "string" && size.name.trim())
+            .map(size => [normalizedPizzaSize(size.name), size])).values()];
+        const seen = new Set();
+        return source.filter(size => {
+          const key = normalizedPizzaSize(size.name);
+          if (!key || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        }).map((size, index) => {
+          const matchingOptions = (Array.isArray(products) ? products : [])
+            .filter(product => product.category === "pizza")
+            .flatMap(product => Array.isArray(product.sizes) ? product.sizes : [])
+            .filter(option => normalizedPizzaSize(option.name) === normalizedPizzaSize(size.name));
+          const configuredLimit = Number(size.flavorLimit);
+          const legacyLimit = Math.max(0, ...matchingOptions.map(option => Math.floor(Number(option.flavorLimit) || 0)));
+          return {
+            id: typeof size.id === "string" && size.id ? size.id : `pizza-size-${Date.now()}-${index}`,
+            name: size.name.trim(),
+            flavorLimit: Math.min(20, Math.max(1, Math.floor(configuredLimit || legacyLimit || defaultPizzaFlavorLimit(size.name))))
+          };
+        });
+      }
+
       function defaultPizzaFlavorLimit(sizeName) {
         const size = normalizedPizzaSize(sizeName);
         if (/\b(broto|pequena|pequeno|individual|mini|p)\b/.test(size)) return 1;
@@ -941,6 +980,8 @@
       }
 
       function pizzaFlavorLimit(option) {
+        const sharedSize = state.pizzaSizes?.find(size => normalizedPizzaSize(size.name) === normalizedPizzaSize(option?.name));
+        if (sharedSize) return sharedSize.flavorLimit;
         const configuredLimit = Number(option?.flavorLimit);
         return Number.isInteger(configuredLimit) && configuredLimit > 0 ? configuredLimit : defaultPizzaFlavorLimit(option?.name);
       }
@@ -2132,19 +2173,73 @@
         const selected = productFilter === "todos" ? state.products : state.products.filter(item => item.category === productFilter);
         const shown = selected.filter(item => item.category !== "pizza" || state.pizzaEnabled);
         document.getElementById("pageContent").innerHTML = `
-          <div class="page-heading"><div><div class="eyebrow">Seu cardápio</div><h1>Produtos</h1><p class="subtitle">Separe seu menu por categoria e acompanhe o custo de cada item.</p></div><button class="button primary" data-action="new-product">＋ Novo produto</button></div>
+          <div class="page-heading"><div><div class="eyebrow">Seu cardápio</div><h1>${productFilter === "pizza" ? "Sabores disponíveis" : "Produtos"}</h1><p class="subtitle">${productFilter === "pizza" ? "Configure os tamanhos e depois cadastre os sabores que o cliente poderá combinar." : "Separe seu menu por categoria e acompanhe o custo de cada item."}</p></div><button class="button primary" data-action="new-product">＋ ${productFilter === "pizza" ? "Novo sabor" : "Novo produto"}</button></div>
+          ${productFilter === "pizza" && state.pizzaEnabled ? `<article class="panel" style="margin-bottom:14px"><div class="panel-heading"><h2>1. Tamanhos e limite de sabores</h2><span>Compartilhado por todos os sabores</span></div><p class="helper">Defina quantos sabores cabem em cada tamanho. Em seguida, cadastre os sabores na lista abaixo; cada sabor mantém sua própria ficha técnica e seus preços por tamanho.</p><form id="pizzaSizesForm"><div class="dynamic-rows" id="pizzaSizeConfigRows">${state.pizzaSizes.map(pizzaSizeConfigRow).join("")}</div><div class="toolbar" style="margin-top:10px"><button type="button" class="button small" data-action="add-pizza-size">＋ Tamanho</button><button type="submit" class="button primary small">Salvar tamanhos</button></div></form></article>` : ""}
           <div class="toolbar"><div class="filters">
             <button class="filter-btn ${productFilter === "todos" ? "active" : ""}" data-filter="todos">Todos</button>
             ${state.pizzaEnabled ? `<button class="filter-btn ${productFilter === "pizza" ? "active" : ""}" data-filter="pizza">🍕 Pizzas</button>` : ""}
             <button class="filter-btn ${productFilter === "lanche" ? "active" : ""}" data-filter="lanche">🍔 Lanches</button>
             <button class="filter-btn ${productFilter === "bebida" ? "active" : ""}" data-filter="bebida">🥤 Bebidas</button>
-          </div><input class="search" id="productSearch" type="search" placeholder="⌕  Buscar produto..."></div>
+          </div><input class="search" id="productSearch" type="search" placeholder="⌕  ${productFilter === "pizza" ? "Buscar sabor..." : "Buscar produto..."}"></div>
+          ${productFilter === "pizza" ? `<div class="panel-heading" style="margin:12px 0 8px"><h2>2. Sabores disponíveis</h2><span>Cadastre cada sabor com preço e ficha técnica</span></div>` : ""}
           <div class="product-grid" id="productGrid">${productCards(shown)}</div>`;
+        const pizzaSizesForm = document.getElementById("pizzaSizesForm");
+        if (pizzaSizesForm) {
+          pizzaSizesForm.addEventListener("submit", savePizzaSizes);
+          pizzaSizesForm.addEventListener("click", event => {
+            if (event.target.closest("[data-action='add-pizza-size']")) {
+              document.getElementById("pizzaSizeConfigRows").insertAdjacentHTML("beforeend", pizzaSizeConfigRow({ id: `pizza-size-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, name: "", flavorLimit: 1 }));
+            }
+            if (event.target.closest("[data-remove-pizza-size]")) event.target.closest(".pizza-size-config-row").remove();
+          });
+        }
         document.getElementById("productSearch").addEventListener("input", event => {
           const term = event.target.value.trim().toLocaleLowerCase("pt-BR");
           const filtered = shown.filter(item => item.name.toLocaleLowerCase("pt-BR").includes(term));
           document.getElementById("productGrid").innerHTML = productCards(filtered);
         });
+      }
+
+      function pizzaSizeConfigRow(size) {
+        return `<div class="pizza-size-config-row"><input type="hidden" name="pizzaSizeId" value="${escapeHtml(size.id || "")}"><input name="pizzaSizeName" required maxlength="30" value="${escapeHtml(size.name || "")}" placeholder="Ex.: Grande" aria-label="Nome do tamanho"><input name="pizzaSizeFlavorLimit" type="number" min="1" max="20" step="1" required value="${Math.min(20, Math.max(1, Math.floor(number(size.flavorLimit) || 1)))}" placeholder="Sabores" aria-label="Limite de sabores"><button type="button" class="row-remove" data-remove-pizza-size aria-label="Remover tamanho">×</button></div>`;
+      }
+
+      function savePizzaSizes(event) {
+        event.preventDefault();
+        const rows = [...event.currentTarget.querySelectorAll(".pizza-size-config-row")];
+        const nextSizes = rows.map(row => ({
+          id: row.querySelector("[name='pizzaSizeId']").value || `pizza-size-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          name: row.querySelector("[name='pizzaSizeName']").value.trim(),
+          flavorLimit: Math.min(20, Math.max(1, Math.floor(number(row.querySelector("[name='pizzaSizeFlavorLimit']").value))))
+        }));
+        const names = nextSizes.map(size => normalizedPizzaSize(size.name));
+        if (!nextSizes.length || names.some(name => !name) || new Set(names).size !== names.length) {
+          showToast("Informe ao menos um tamanho e use nomes diferentes.");
+          return;
+        }
+        const previousState = JSON.stringify(state);
+        const previousSizes = state.pizzaSizes;
+        const retainedIds = new Set(nextSizes.map(size => size.id));
+        state.products = state.products.map(product => {
+          if (product.category !== "pizza") return product;
+          const sizes = (product.sizes || []).flatMap(option => {
+            const previousSize = previousSizes.find(size => normalizedPizzaSize(size.name) === normalizedPizzaSize(option.name));
+            const updatedSize = previousSize
+              ? nextSizes.find(size => size.id === previousSize.id)
+              : nextSizes.find(size => normalizedPizzaSize(size.name) === normalizedPizzaSize(option.name));
+            return updatedSize && retainedIds.has(updatedSize.id)
+              ? [{ ...option, name: updatedSize.name, flavorLimit: updatedSize.flavorLimit }]
+              : [];
+          });
+          return { ...product, sizes };
+        });
+        state.pizzaSizes = nextSizes;
+        if (!saveState()) {
+          state = JSON.parse(previousState);
+          return;
+        }
+        renderProducts();
+        showToast("Tamanhos e limites de sabores atualizados. Confira os preços de cada sabor nos tamanhos novos.");
       }
 
       function productCards(products) {
@@ -2235,7 +2330,7 @@
         const category = product?.category || (state.pizzaEnabled ? "pizza" : "lanche");
         const ingredientOptions = state.ingredients.map(item => `<option value="${item.id}">${escapeHtml(item.name)} (${escapeHtml(item.unit)})</option>`).join("");
         const recipeRows = product?.recipe?.length ? product.recipe.map(item => `<div class="recipe-row"><select name="recipeIngredient" required aria-label="Insumo">${ingredientOptions}</select><input name="recipeQuantity" type="number" min="0.0001" step="any" required value="${number(item.quantity)}" placeholder="Qtd." aria-label="Quantidade"><button type="button" class="row-remove" data-remove-row aria-label="Remover ingrediente">×</button></div>`).join("") : "";
-        const sizeRows = product?.sizes?.length ? product.sizes.map(item => sizeRow(item)).join("") : category === "pizza" ? sizeRow({ name: "Média", price: "", factor: 1 }) : "";
+        const sizeRows = category === "pizza" ? pizzaProductSizeRows(product).map(sizeRow).join("") : "";
         const borderRows = product?.borderOptions?.length ? product.borderOptions.map(borderOptionRow).join("") : "";
         const addonRows = product?.addons?.length ? product.addons.map(item => addonRow(item)).join("") : "";
         const body = `<div class="form-grid">
@@ -2249,8 +2344,21 @@
       }
 
       function sizeRow(item = {}) {
-        const flavorLimit = item.flavorLimit == null ? defaultPizzaFlavorLimit(item.name) : number(item.flavorLimit);
-        return `<div class="size-row"><input name="sizeName" required maxlength="30" value="${escapeHtml(item.name || "")}" placeholder="Tamanho" aria-label="Nome do tamanho"><input name="sizePrice" type="number" min="0.01" step="0.01" required value="${item.price === "" ? "" : number(item.price) || ""}" placeholder="Preço R$" aria-label="Preço"><input name="sizeFactor" type="number" min="0.01" step="0.01" required value="${number(item.factor) || 1}" placeholder="Fator" aria-label="Fator do custo"><input name="sizeFlavorLimit" type="number" min="1" max="20" step="1" required value="${flavorLimit}" placeholder="Sabores" aria-label="Limite de sabores"><button type="button" class="row-remove" data-remove-row aria-label="Remover tamanho">×</button></div>`;
+        const requiredPrice = item.requiredPrice ? "required" : "";
+        return `<div class="size-row"><strong>${escapeHtml(item.name || "")}</strong><input type="hidden" name="sizeName" value="${escapeHtml(item.name || "")}"><input name="sizePrice" type="number" min="0.01" step="0.01" ${requiredPrice} value="${item.price === "" ? "" : number(item.price) || ""}" placeholder="Preço R$" aria-label="Preço de ${escapeHtml(item.name || "tamanho")}"><input name="sizeFactor" type="number" min="0.01" step="0.01" required value="${number(item.factor) || 1}" placeholder="Fator" aria-label="Fator de custo de ${escapeHtml(item.name || "tamanho")}"></div>`;
+      }
+
+      function pizzaProductSizeRows(product = null) {
+        const existingSizes = product?.sizes || [];
+        return state.pizzaSizes.map(sharedSize => {
+          const option = existingSizes.find(size => normalizedPizzaSize(size.name) === normalizedPizzaSize(sharedSize.name));
+          return {
+            name: sharedSize.name,
+            price: option ? number(option.price) : "",
+            factor: option ? number(option.factor) || 1 : 1,
+            requiredPrice: option ? true : !product
+          };
+        });
       }
 
       function addonRow(item = {}) {
@@ -2266,7 +2374,7 @@
         let recipeRows = cached?.recipeRows;
         if (recipeRows === undefined) recipeRows = product?.recipe?.length ? product.recipe.map(item => `<div class="recipe-row"><select name="recipeIngredient" required aria-label="Insumo">${ingredientOptions}</select><input name="recipeQuantity" type="number" min="0.0001" step="any" required value="${number(item.quantity)}" placeholder="Qtd." aria-label="Quantidade"><button type="button" class="row-remove" data-remove-row aria-label="Remover ingrediente">×</button></div>`).join("") : "";
         let sizeRows = cached?.sizeRows;
-        if (sizeRows === undefined) sizeRows = product?.sizes?.length ? product.sizes.map(sizeRow).join("") : sizeRow({ name: "Média", price: "", factor: 1 });
+        if (sizeRows === undefined) sizeRows = category === "pizza" ? pizzaProductSizeRows(product).map(sizeRow).join("") : "";
         const borderRows = cached?.borderRows ?? (product?.borderOptions?.length ? product.borderOptions.map(borderOptionRow).join("") : "");
         const addonRows = cached?.addonRows ?? (product?.addons?.length ? product.addons.map(addonRow).join("") : "");
         const specific = document.getElementById("productSpecificFields");
@@ -2275,7 +2383,7 @@
         if (category === "bebida") {
           specific.innerHTML = `<div class="form-grid" style="margin-top:14px"><div class="field"><label for="drinkCost">Custo de compra (R$)</label><input id="drinkCost" name="drinkCost" type="number" min="0" step="0.01" required value="${product ? number(product.cost) : ""}" placeholder="Ex.: 4,50"></div><div class="field"><label for="productPrice">Preço de venda (R$)</label><input id="productPrice" name="price" type="number" min="0" step="0.01" required value="${product ? number(product.price) : ""}" placeholder="Ex.: 7,50"></div></div>${addonsSection}`;
         } else if (category === "pizza") {
-          specific.innerHTML = `${recipeSection}<div class="form-section"><div class="form-section-head"><div><strong>Tamanhos, preços e sabores</strong><div class="helper">Defina o preço, fator da receita e quantos sabores o cliente pode escolher em cada tamanho.</div></div><button type="button" class="button small" data-add-row="size">＋ Tamanho</button></div><div class="dynamic-rows" id="sizeRows">${sizeRows}</div></div><div class="form-section"><div class="form-section-head"><div><strong>Opções de borda</strong><div class="helper">“Sem borda” será incluída automaticamente. Cadastre aqui as bordas pagas para o cliente escolher.</div></div><button type="button" class="button small" data-add-row="border">＋ Cadastrar borda</button></div><div class="dynamic-rows" id="borderRows">${borderRows}</div></div>${addonsSection}`;
+          specific.innerHTML = `${recipeSection}<div class="form-section"><div class="form-section-head"><div><strong>Sabor disponível</strong><div class="helper">O nome deste produto será uma opção de sabor. Os tamanhos e o limite de sabores são compartilhados; informe o preço deste sabor em cada tamanho para disponibilizá-lo ao cliente.</div></div></div><div class="dynamic-rows" id="sizeRows">${sizeRows || `<p class="helper">Cadastre primeiro os tamanhos na lista de Pizzas.</p>`}</div></div><div class="form-section"><div class="form-section-head"><div><strong>Opções de borda</strong><div class="helper">“Sem borda” será incluída automaticamente. Cadastre aqui as bordas pagas para o cliente escolher.</div></div><button type="button" class="button small" data-add-row="border">＋ Cadastrar borda</button></div><div class="dynamic-rows" id="borderRows">${borderRows}</div></div>${addonsSection}`;
         } else {
           specific.innerHTML = `${recipeSection}<div class="field" style="margin-top:13px"><label for="productPrice">Preço de venda (R$)</label><input id="productPrice" name="price" type="number" min="0" step="0.01" required value="${product ? number(product.price) : ""}" placeholder="Ex.: 27,90"></div>${addonsSection}`;
         }
@@ -2367,19 +2475,23 @@
           }
           product.recipe = recipe;
           if (category === "pizza") {
+            if (!state.pizzaSizes.length) {
+              showToast("Configure os tamanhos na lista de Pizzas antes de cadastrar os sabores.");
+              return;
+            }
             product.sizes = [...document.querySelectorAll("#sizeRows .size-row")].map(row => ({
               name: row.querySelector("[name='sizeName']").value.trim(),
               price: number(row.querySelector("[name='sizePrice']").value),
-              factor: number(row.querySelector("[name='sizeFactor']").value) || 1,
-              flavorLimit: Math.min(20, Math.max(1, Math.floor(number(row.querySelector("[name='sizeFlavorLimit']").value) || 1)))
-            })).filter(item => item.name);
+              factor: number(row.querySelector("[name='sizeFactor']").value) || 1
+            })).filter(item => item.name && item.price > 0);
             product.borderOptions = [...document.querySelectorAll("#borderRows .addon-row")].map(row => ({
               name: row.querySelector("[name='borderName']").value.trim(),
               price: number(row.querySelector("[name='borderPrice']").value),
               cost: number(row.querySelector("[name='borderCost']").value)
             })).filter(item => item.name);
-            if (!product.sizes.length) {
-              showToast("Adicione pelo menos um tamanho para a pizza.");
+            const existingPizza = state.products.find(item => item.id === product.id && item.category === "pizza");
+            if (!product.sizes.length || (!existingPizza && product.sizes.length !== state.pizzaSizes.length)) {
+              showToast("Informe o preço e o fator de custo para cada tamanho configurado.");
               return;
             }
           } else {
