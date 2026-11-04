@@ -1386,7 +1386,7 @@
         changeSaleStatus(sale, event.currentTarget.value);
       }
 
-      function changeSaleStatus(sale, status) {
+      function changeSaleStatus(sale, status, onSuccess, onFailure) {
         const previousStatus = sale.status;
         sale.status = status;
         if (sale.onlineOrderId) {
@@ -1396,10 +1396,12 @@
               const { error } = await supabaseClient.from("online_orders").update({ status }).eq("id", sale.onlineOrderId);
               if (error) throw error;
               showToast("Status do pedido atualizado.");
+              onSuccess?.();
             } catch (error) {
               console.error("Não foi possível atualizar o status do pedido online:", error);
               sale.status = previousStatus;
               showToast("Não foi possível atualizar o pedido online.");
+              onFailure?.();
             }
             await refreshOnlineOrders();
             render();
@@ -1409,10 +1411,40 @@
         if (!saveState()) {
           sale.status = previousStatus;
           render();
+          onFailure?.();
           return;
         }
         render();
         showToast("Status do pedido atualizado.");
+        onSuccess?.();
+      }
+
+      function orderPreparationWhatsAppUrl(sale) {
+        let phone = String(sale.customerPhone || "").replace(/\D/g, "").replace(/^0+/, "");
+        if (phone.length === 10 || phone.length === 11) phone = `55${phone}`;
+        if (phone.length < 12 || phone.length > 15) return "";
+        const orderNumber = String(sale.id || "").slice(-5);
+        const message = `Olá, ${sale.customerName || "tudo bem"}! 🍕 Seu pedido #${orderNumber} já começou a ser preparado com carinho. Obrigado por escolher a gente! 💚`;
+        return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+      }
+
+      function advanceOrder(sale, status) {
+        const shouldNotifyCustomer = status === "Em preparo";
+        const whatsappUrl = shouldNotifyCustomer ? orderPreparationWhatsAppUrl(sale) : "";
+        const whatsappWindow = whatsappUrl ? window.open("about:blank", "_blank") : null;
+        if (whatsappWindow) whatsappWindow.opener = null;
+
+        changeSaleStatus(sale, status, () => {
+          if (!shouldNotifyCustomer) return;
+          if (!whatsappUrl) {
+            showToast("Status atualizado, mas o pedido não tem um WhatsApp válido.");
+          } else if (!whatsappWindow) {
+            showToast("Status atualizado. O navegador bloqueou a abertura do WhatsApp.");
+          } else {
+            whatsappWindow.location.href = whatsappUrl;
+            showToast("WhatsApp aberto com a mensagem pronta. Toque em Enviar para avisar o cliente.");
+          }
+        }, () => whatsappWindow?.close());
       }
 
       function renderOrders() {
@@ -2556,7 +2588,7 @@
         }
         if (action.dataset.action === "advance-order") {
           const sale = allSales().find(item => item.id === id);
-          if (sale) changeSaleStatus(sale, action.dataset.status);
+          if (sale) advanceOrder(sale, action.dataset.status);
         }
         if (action.dataset.action === "print-report") window.print();
         if (action.dataset.action === "new-product") productForm();
