@@ -1746,12 +1746,11 @@
           { status: "Saiu para entrega", label: "Na entrega" }
         ];
         const activeStatuses = statusColumns.map(column => column.status);
-        const sales = allSales();
+        const sales = allSales().filter(sale => !(sale.onlineOrderId && sale.paymentMethod === "pix" && !sale.paid));
         const today = localDateKey(new Date());
         const activeOrders = sales.filter(sale => activeStatuses.includes(sale.status || "Recebido"));
         const newOrders = sales.filter(sale => (sale.status || "Recebido") === "Recebido");
         const completedOrders = sales.filter(sale => sale.status === "Concluído" && localDateKey(sale.createdAt) === today);
-        const pendingOrders = sales.filter(sale => sale.onlineOrderId && sale.paymentMethod === "pix" && sale.paymentStatus === "pending");
         const cancelledOrders = [...sales]
           .filter(sale => sale.status === "Cancelado" && localDateKey(sale.createdAt) === today)
           .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -1794,7 +1793,6 @@
             <article class="orders-summary-card"><span>Finalizados</span><strong>${completedOrders.length}</strong></article>
             <article class="orders-summary-card"><span>Cancelados</span><strong>${cancelledOrders.length}</strong></article>
           </section>
-          ${pendingOrders.length ? `<div class="callout" style="margin-bottom:14px"><span>ⓘ</span><div><b>${pendingOrders.length} pedido(s) aguardando Pix</b>Esses pedidos só entram na fila de preparo após confirmação do pagamento.</div></div>` : ""}
           <div class="orders-board">${columns}</div>
           ${cancelledOrders.length ? `<details class="orders-cancelled"><summary class="button">Pedidos cancelados (${cancelledOrders.length})</summary><div class="orders-board" style="grid-template-columns:minmax(230px, 1fr);margin-top:10px"><section class="orders-column"><div class="orders-column-list">${cancelledOrders.map(card).join("")}</div></section></div></details>` : ""}`;
         document.querySelector("[data-completed-orders]").addEventListener("click", () => {
