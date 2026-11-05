@@ -596,6 +596,7 @@
       let financeSearch = "";
       let financeKindFilter = "all";
       let lastRegisteredSaleId = null;
+      let showTodaySales = false;
       let editingId = null;
       let editingType = null;
 
@@ -1340,9 +1341,9 @@
                   <div id="saleAddonChoices" class="sale-addons"></div>
                 </form>` : `<div class="empty-state">Não há produtos ativos no cardápio. Cadastre ou ative produtos antes de vender.</div>`}
               </article>
-              ${standalonePdv ? "" : `<article class="panel"><div class="panel-heading"><h2>Pedidos de hoje</h2><span>${history.length} pedido${history.length === 1 ? "" : "s"}</span></div>
-                ${!currentCashSession() ? `<div class="callout" style="margin:0 0 12px"><span>ⓘ</span><div><b>Caixa fechado</b>Abra o caixa para registrar vendas e receber pedidos. <button class="button small" data-page="caixa">Abrir caixa</button></div></div>` : ""}
-                ${history.length ? `<div class="table-wrap"><table><thead><tr><th>Pedido</th><th>Cliente</th><th>Itens</th><th>Total</th><th>Pagamento</th><th>Recebimento</th><th>Status</th></tr></thead><tbody>${history.map(sale => `<tr><td>#${escapeHtml(sale.id.slice(-5))}<br><span class="helper">${new Date(sale.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span><br><button type="button" class="button small" data-action="print-receipt" data-id="${escapeHtml(sale.id)}">Imprimir cupom</button></td><td>${escapeHtml(sale.customerName || "Balcão")}</td><td>${(sale.items || []).reduce((sum, item) => sum + number(item.quantity), 0)}</td><td>${money(sale.total)}</td><td>${escapeHtml(sale.payment || "Não informado")}</td><td>${sale.paid ? `<span class="pill">Pago</span>` : sale.onlineOrderId && sale.paymentMethod === "pix" ? `<span class="pill orange">${escapeHtml(receiptPaymentStatus(sale))}</span>` : sale.onlineOrderId ? `<span class="pill orange">A receber</span>` : sale.payment === "Crediário" ? `<button class="button small" data-page="financeiro">Em aberto</button>` : `<button class="button small" data-action="receive-sale" data-id="${escapeHtml(sale.id)}" ${currentCashSession() ? "" : "disabled"}>Receber</button>`}</td><td>${sale.onlineOrderId && !sale.paid && sale.paymentMethod === "pix" ? `<span class="pill orange">${escapeHtml(receiptPaymentStatus(sale))}</span>` : `<select class="order-status-select" data-sale-status="${escapeHtml(sale.id)}" aria-label="Status do pedido">${["Recebido", "Em preparo", "Saiu para entrega", "Concluído", "Cancelado"].map(status => `<option ${status === (sale.status || "Recebido") ? "selected" : ""}>${status}</option>`).join("")}</select>`}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">Nenhum pedido registrado hoje. Consulte vendas de outros dias em Relatórios.</div>`}
+              ${standalonePdv ? "" : `<article class="panel"><div class="panel-heading"><h2>Pedidos de hoje</h2><button type="button" class="button small" data-action="toggle-today-sales" aria-expanded="${showTodaySales}">${showTodaySales ? "Ocultar pedidos" : `Ver pedidos de hoje (${history.length})`}</button></div>
+                ${showTodaySales ? `${!currentCashSession() ? `<div class="callout" style="margin:0 0 12px"><span>ⓘ</span><div><b>Caixa fechado</b>Abra o caixa para registrar vendas e receber pedidos. <button class="button small" data-page="caixa">Abrir caixa</button></div></div>` : ""}
+                ${history.length ? `<div class="table-wrap"><table><thead><tr><th>Pedido</th><th>Cliente</th><th>Itens</th><th>Total</th><th>Pagamento</th><th>Recebimento</th><th>Status</th></tr></thead><tbody>${history.map(sale => `<tr><td>#${escapeHtml(sale.id.slice(-5))}<br><span class="helper">${new Date(sale.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span><br><button type="button" class="button small" data-action="print-receipt" data-id="${escapeHtml(sale.id)}">Imprimir cupom</button></td><td>${escapeHtml(sale.customerName || "Balcão")}</td><td>${(sale.items || []).reduce((sum, item) => sum + number(item.quantity), 0)}</td><td>${money(sale.total)}</td><td>${escapeHtml(sale.payment || "Não informado")}</td><td>${sale.paid ? `<span class="pill">Pago</span>` : sale.onlineOrderId && sale.paymentMethod === "pix" ? `<span class="pill orange">${escapeHtml(receiptPaymentStatus(sale))}</span>` : sale.onlineOrderId ? `<span class="pill orange">A receber</span>` : sale.payment === "Crediário" ? `<button class="button small" data-page="financeiro">Em aberto</button>` : `<button class="button small" data-action="receive-sale" data-id="${escapeHtml(sale.id)}" ${currentCashSession() ? "" : "disabled"}>Receber</button>`}</td><td>${sale.onlineOrderId && !sale.paid && sale.paymentMethod === "pix" ? `<span class="pill orange">${escapeHtml(receiptPaymentStatus(sale))}</span>` : `<select class="order-status-select" data-sale-status="${escapeHtml(sale.id)}" aria-label="Status do pedido">${["Recebido", "Em preparo", "Saiu para entrega", "Concluído", "Cancelado"].map(status => `<option ${status === (sale.status || "Recebido") ? "selected" : ""}>${status}</option>`).join("")}</select>`}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">Nenhum pedido registrado hoje.</div>`}` : ""}
               </article>`}
             </div>
             <article class="panel"><div class="panel-heading"><h2>Resumo do pedido</h2><span>${saleCart.reduce((sum, item) => sum + number(item.quantity), 0)} item(ns)</span></div>
@@ -3066,6 +3067,10 @@
         if (action.dataset.action === "open-cash") openCashForm();
         if (action.dataset.action === "close-cash") openCashForm(true);
         if (action.dataset.action === "receive-sale") receiveSale(state.sales.find(sale => sale.id === id));
+        if (action.dataset.action === "toggle-today-sales") {
+          showTodaySales = !showTodaySales;
+          renderSales();
+        }
         if (action.dataset.action === "new-finance-receivable") financeEntryForm("receivable");
         if (action.dataset.action === "new-finance-payable") financeEntryForm("payable");
         if (action.dataset.action === "new-finance-expense") financeEntryForm("expense");
