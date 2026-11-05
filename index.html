@@ -1626,9 +1626,10 @@
         ];
         const activeStatuses = statusColumns.slice(0, 3).map(column => column.status);
         const sales = allSales();
+        const today = localDateKey(new Date());
         const activeOrders = sales.filter(sale => activeStatuses.includes(sale.status || "Recebido"));
         const newOrders = sales.filter(sale => (sale.status || "Recebido") === "Recebido");
-        const completedOrders = sales.filter(sale => sale.status === "Concluído");
+        const completedOrders = sales.filter(sale => sale.status === "Concluído" && localDateKey(sale.createdAt) === today);
         const pendingOrders = sales.filter(sale => sale.onlineOrderId && sale.paymentMethod === "pix" && sale.paymentStatus === "pending");
         const cancelledOrders = [...sales].filter(sale => sale.status === "Cancelado").sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         const card = sale => {
@@ -1657,7 +1658,10 @@
           </article>`;
         };
         const columns = statusColumns.map(column => {
-          const orders = [...sales].filter(sale => (sale.status || "Recebido") === column.status).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+          const orders = [...sales].filter(sale =>
+            (sale.status || "Recebido") === column.status
+            && (column.status !== "Concluído" || localDateKey(sale.createdAt) === today)
+          ).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
           return `<section class="orders-column"><div class="orders-column-head"><h2>${column.label}</h2><span class="orders-column-count">${orders.length}</span></div><div class="orders-column-list">${orders.map(card).join("") || `<div class="orders-empty">Nenhum pedido nesta etapa.</div>`}</div></section>`;
         }).join("");
         document.getElementById("pageContent").innerHTML = `
