@@ -157,6 +157,22 @@ export async function fetchMercadoPagoPayment(accessToken: string, paymentId: st
   return await response.json() as MercadoPagoPayment;
 }
 
+export async function cancelMercadoPagoPayment(accessToken: string, paymentId: string): Promise<MercadoPagoPayment> {
+  const response = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ status: "cancelled" })
+  });
+  if (!response.ok) {
+    console.error("Mercado Pago payment cancellation failed:", response.status);
+    throw new Error("Could not cancel the Mercado Pago payment.");
+  }
+  return await response.json() as MercadoPagoPayment;
+}
+
 export async function createMercadoPagoPixPayment(
   client: SupabaseClient,
   businessId: string,

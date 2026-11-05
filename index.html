@@ -557,6 +557,9 @@
       let supportedDigitalPaymentMethods = [];
       let currentOrderConfirmation = "";
       let currentPixPayment = null;
+      let currentPixOrderCart = [];
+      let cancelPixInProgress = false;
+      const digitalCustomerDraft = { name: "", phone: "", email: "", address: "", notes: "" };
       let pixPaymentStatusTimer = null;
       const seedData = {
         pizzaEnabled: true,
@@ -2282,7 +2285,7 @@
         const qrImage = currentPixPayment.qrCodeBase64
           ? `<img src="data:image/png;base64,${escapeHtml(currentPixPayment.qrCodeBase64)}" alt="QR Code Pix" style="display:block;width:min(220px,100%);height:auto;margin:12px auto">`
           : "";
-        return `<div class="callout" style="margin-top:14px"><span>ⓘ</span><div style="width:100%"><b>Aguardando pagamento Pix</b><p class="helper">Pedido #${escapeHtml(currentOrderConfirmation.slice(0, 8))}. Escaneie o QR Code ou copie o código Pix no aplicativo do banco. O pedido será confirmado automaticamente após o pagamento.</p>${qrImage}<textarea id="pixCopyCode" class="search" rows="4" readonly style="width:100%;margin-top:8px">${escapeHtml(currentPixPayment.qrCode)}</textarea><button type="button" class="button" data-action="copy-pix-code" style="margin-top:8px">Copiar código Pix</button><p class="helper">Aguardando confirmação do Mercado Pago…</p></div></div>`;
+        return `<div class="callout" style="margin-top:14px"><span>ⓘ</span><div style="width:100%"><b>Aguardando pagamento Pix</b><p class="helper">Pedido #${escapeHtml(currentOrderConfirmation.slice(0, 8))}. Escaneie o QR Code ou copie o código Pix no aplicativo do banco. O pedido será confirmado automaticamente após o pagamento.</p>${qrImage}<textarea id="pixCopyCode" class="search" rows="4" readonly style="width:100%;margin-top:8px">${escapeHtml(currentPixPayment.qrCode)}</textarea><button type="button" class="button" data-action="copy-pix-code" style="margin-top:8px">Copiar código Pix</button><p class="helper">Aguardando confirmação do Mercado Pago…</p><button type="button" class="button" data-action="cancel-pix-order" style="margin-top:8px" ${cancelPixInProgress ? "disabled" : ""}>${cancelPixInProgress ? "Cancelando Pix…" : "Cancelar Pix e mudar forma de pagamento"}</button></div></div>`;
       }
 
       function renderPublicMenu() {
@@ -2336,11 +2339,11 @@
             <div class="field" style="margin-top:13px"><label for="digitalPaymentMethod">Forma de pagamento</label><select id="digitalPaymentMethod" ${currentOrderConfirmation ? "disabled" : ""}>${paymentOptions.map(option => `<option value="${option.value}">${escapeHtml(option.label)}</option>`).join("")}</select></div>
             <div class="sale-total"><span id="digitalOrderBreakdown">Itens ${money(subtotal)}${deliveryFee ? ` + entrega ${money(deliveryFee)}` : ""}</span><strong id="digitalOrderTotal">${money(total)}</strong></div>
             <form class="sale-checkout" id="digitalCheckout"><div class="form-grid">
-              <div class="field"><label for="digitalName">Seu nome</label><input id="digitalName" name="name" required maxlength="70"></div>
-              <div class="field"><label for="digitalPhone">WhatsApp / telefone</label><input id="digitalPhone" name="phone" type="tel" required maxlength="25"></div>
-              <div class="field full" id="digitalEmailField" ${digitalPaymentMethod === "pix" ? "" : "hidden"}><label for="digitalEmail">E-mail para o pagamento Pix</label><input id="digitalEmail" name="email" type="email" maxlength="254" ${digitalPaymentMethod === "pix" ? "required" : ""}></div>
-              <div class="field full" id="digitalAddressField" ${digitalFulfillment === "pickup" ? "hidden" : ""}><label for="digitalAddress">Endereço de entrega</label><input id="digitalAddress" name="address" ${digitalFulfillment === "pickup" ? "" : "required"} maxlength="180" placeholder="Rua, número, bairro e complemento"></div>
-              <div class="field full"><label for="digitalNotes">Observações do pedido</label><input id="digitalNotes" name="notes" maxlength="160" placeholder="Ponto de referência, sem cebola..."></div>
+              <div class="field"><label for="digitalName">Seu nome</label><input id="digitalName" name="name" required maxlength="70" value="${escapeHtml(digitalCustomerDraft.name)}"></div>
+              <div class="field"><label for="digitalPhone">WhatsApp / telefone</label><input id="digitalPhone" name="phone" type="tel" required maxlength="25" value="${escapeHtml(digitalCustomerDraft.phone)}"></div>
+              <div class="field full" id="digitalEmailField" ${digitalPaymentMethod === "pix" ? "" : "hidden"}><label for="digitalEmail">E-mail para o pagamento Pix</label><input id="digitalEmail" name="email" type="email" maxlength="254" value="${escapeHtml(digitalCustomerDraft.email)}" ${digitalPaymentMethod === "pix" ? "required" : ""}></div>
+              <div class="field full" id="digitalAddressField" ${digitalFulfillment === "pickup" ? "hidden" : ""}><label for="digitalAddress">Endereço de entrega</label><input id="digitalAddress" name="address" ${digitalFulfillment === "pickup" ? "" : "required"} maxlength="180" placeholder="Rua, número, bairro e complemento" value="${escapeHtml(digitalCustomerDraft.address)}"></div>
+              <div class="field full"><label for="digitalNotes">Observações do pedido</label><input id="digitalNotes" name="notes" maxlength="160" placeholder="Ponto de referência, sem cebola..." value="${escapeHtml(digitalCustomerDraft.notes)}"></div>
             </div>
             <button type="submit" class="button primary" ${digitalCart.length && !currentOrderConfirmation && canPlaceOrders ? "" : "disabled"}>Finalizar pedido · ${money(total)}</button>
             <div>${currentOrderConfirmation ? renderDigitalOrderConfirmation() : ""}</div>
@@ -2392,7 +2395,12 @@
             emailField.hidden = digitalPaymentMethod !== "pix";
             emailInput.required = digitalPaymentMethod === "pix";
           });
-          document.getElementById("digitalCheckout").addEventListener("submit", submitDigitalOrder);
+          const checkout = document.getElementById("digitalCheckout");
+          checkout.addEventListener("input", event => {
+            const field = event.target;
+            if (field.name in digitalCustomerDraft) digitalCustomerDraft[field.name] = field.value;
+          });
+          checkout.addEventListener("submit", submitDigitalOrder);
         }
       }
 
@@ -2507,6 +2515,7 @@
               status: String(result.paymentStatus || "pending")
             }
             : null;
+          currentPixOrderCart = currentPixPayment?.status === "pending" ? [...digitalCart] : [];
           digitalCart = [];
           renderPublicMenu();
           if (currentPixPayment?.status === "pending") startPixPaymentStatusPolling(currentOrderConfirmation);
@@ -2525,6 +2534,7 @@
         if (pixPaymentStatusTimer) clearInterval(pixPaymentStatusTimer);
         let attempts = 0;
         const checkStatus = async () => {
+          if (cancelPixInProgress) return;
           if (!currentPixPayment || currentPixPayment.status !== "pending" || currentOrderConfirmation !== orderId) {
             clearInterval(pixPaymentStatusTimer);
             pixPaymentStatusTimer = null;
@@ -2559,6 +2569,43 @@
         };
         pixPaymentStatusTimer = setInterval(checkStatus, 5000);
         checkStatus();
+      }
+
+      async function cancelDigitalPixOrder() {
+        if (!currentOrderConfirmation || currentPixPayment?.status !== "pending" || cancelPixInProgress) return;
+        const orderId = currentOrderConfirmation;
+        cancelPixInProgress = true;
+        renderPublicMenu();
+        try {
+          const { data, error } = await supabaseClient.functions.invoke("check-pix-order", {
+            body: { action: "cancel", orderId }
+          });
+          if (error || !data?.status) throw new Error(data?.error || error?.message || "Não foi possível cancelar o Pix.");
+          if (currentOrderConfirmation !== orderId || !currentPixPayment) return;
+          if (data.status === "approved") {
+            currentPixPayment.status = "approved";
+            if (pixPaymentStatusTimer) clearInterval(pixPaymentStatusTimer);
+            pixPaymentStatusTimer = null;
+            renderPublicMenu();
+            showToast("O Pix já foi pago e não pode ser cancelado por aqui.");
+            return;
+          }
+          if (data.status !== "cancelled") throw new Error(data.error || "O Mercado Pago não confirmou o cancelamento do Pix.");
+          if (pixPaymentStatusTimer) clearInterval(pixPaymentStatusTimer);
+          pixPaymentStatusTimer = null;
+          digitalCart = currentPixOrderCart;
+          currentPixOrderCart = [];
+          currentOrderConfirmation = "";
+          currentPixPayment = null;
+          renderPublicMenu();
+          showToast("Pix cancelado. Seu pedido foi mantido; escolha outra forma de pagamento.");
+        } catch (error) {
+          console.error("Não foi possível cancelar o Pix:", error);
+          showToast(error.message || "Não foi possível cancelar o Pix. Tente novamente.");
+        } finally {
+          cancelPixInProgress = false;
+          renderPublicMenu();
+        }
       }
 
       function renderMore() {
@@ -3306,9 +3353,14 @@
         if (action.dataset.action === "new-digital-order") {
           currentOrderConfirmation = "";
           currentPixPayment = null;
+          currentPixOrderCart = [];
           if (pixPaymentStatusTimer) clearInterval(pixPaymentStatusTimer);
           pixPaymentStatusTimer = null;
           renderPublicMenu();
+          return;
+        }
+        if (action.dataset.action === "cancel-pix-order") {
+          cancelDigitalPixOrder();
           return;
         }
         if (action.dataset.action === "remove-sale-item") {
