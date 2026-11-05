@@ -538,14 +538,18 @@
       let authMode = "signin";
       let onlineMenuReady = false;
       let onlineCashOrdersReady = false;
+      let mercadoPagoStatus = { configured: false, connected: false, sellerId: "" };
       let onlineOrders = [];
       let onlineOrderRefreshTimer = null;
       let publicBusinessId = "";
       let publicOrdering = { deliveryFee: 0, pickupEnabled: false, pickupAddress: "", acceptingOrders: false };
       let publicMenuLoadError = "";
       let digitalFulfillment = "delivery";
+      let digitalPaymentMethod = "";
       let supportedDigitalPaymentMethods = [];
       let currentOrderConfirmation = "";
+      let currentPixPayment = null;
+      let pixPaymentStatusTimer = null;
       const seedData = {
         pizzaEnabled: true,
         pizzaPricingMode: "size",
@@ -862,6 +866,7 @@
         onlineOrders = [];
         onlineMenuReady = false;
         onlineCashOrdersReady = false;
+        mercadoPagoStatus = { configured: false, connected: false, sellerId: "" };
         setSyncStatus("Carregando…");
         const { data: record, error } = await supabaseClient
           .from("business_data")
@@ -946,7 +951,50 @@
         document.getElementById("userEmail").textContent = user.email || "Meu negócio";
         document.getElementById("userAvatar").textContent = (user.email || "B").charAt(0).toUpperCase();
         setSyncStatus("Sincronizado");
+        await refreshMercadoPagoStatus();
         render();
+        const oauthResult = new URLSearchParams(location.search).get("mp_oauth");
+        if (oauthResult) {
+          const messages = {
+            connected: "Conta Mercado Pago conectada. O Pix online está habilitado.",
+            denied: "A conexão com o Mercado Pago foi cancelada.",
+            expired: "A tentativa de conexão expirou. Tente novamente.",
+            error: "Não foi possível conectar o Mercado Pago. Verifique a configuração do servidor."
+          };
+          showToast(messages[oauthResult] || messages.error);
+          const url = new URL(location.href);
+          url.searchParams.delete("mp_oauth");
+          history.replaceState(null, "", url);
+        }
+      }
+
+      async function refreshMercadoPagoStatus() {
+        if (!currentUser || !supabaseClient) return;
+        const { data, error } = await supabaseClient.functions.invoke("mercadopago-settings", {
+          body: { action: "status" }
+        });
+        if (error) {
+          console.warn("Não foi possível verificar a conexão com o Mercado Pago:", error);
+          mercadoPagoStatus = { configured: false, connected: false, sellerId: "" };
+          return;
+        }
+        mercadoPagoStatus = {
+          configured: data?.configured === true,
+          connected: data?.connected === true,
+          sellerId: typeof data?.sellerId === "string" ? data.sellerId : ""
+        };
+      }
+
+      async function connectMercadoPago() {
+        const { data, error } = await supabaseClient.functions.invoke("mercadopago-settings", {
+          body: { action: "connect" }
+        });
+        if (error || typeof data?.authorizationUrl !== "string") {
+          console.error("Não foi possível iniciar a conexão com o Mercado Pago:", error || data?.error);
+          showToast(data?.error || "Não foi possível conectar ao Mercado Pago.");
+          return;
+        }
+        location.href = data.authorizationUrl;
       }
 
       function startOnlineOrderRefresh() {
@@ -999,14 +1047,17 @@
               acceptingOrders: publication.menu.acceptingOrders === true
             };
             digitalFulfillment = "delivery";
+            digitalPaymentMethod = "cash_on_delivery";
             if (publicOrdering.acceptingOrders) {
-              const { data: checkoutCapabilities, error: checkoutCapabilitiesError } = await supabaseClient.functions.invoke("create-cash-order", { method: "GET" });
+              const { data: checkoutCapabilities, error: checkoutCapabilitiesError } = await supabaseClient.functions.invoke("create-cash-order", {
+                body: { action: "payment_methods", businessId: publicBusinessId }
+              });
               if (checkoutCapabilitiesError) {
                 console.warn("Não foi possível verificar as formas de pagamento disponíveis:", checkoutCapabilitiesError);
               } else if (Array.isArray(checkoutCapabilities?.paymentMethods)) {
                 supportedDigitalPaymentMethods = checkoutCapabilities.paymentMethods.filter(method =>
                   typeof method === "string"
-                  && ["cash_on_delivery", "cash_on_pickup"].includes(method)
+                  && ["cash_on_delivery", "cash_on_pickup", "pix"].includes(method)
                 );
               }
             }
@@ -2049,13 +2100,18 @@
         const shownProducts = products.filter(product => product.category === digitalCategory);
         const onlineOrdering = state.onlineOrdering || seedData.onlineOrdering;
         const shareUrl = currentUser ? `${location.href.split("?")[0]}?cardapio=1&loja=${encodeURIComponent(currentUser.id)}` : "";
+        const mpConnectionMessage = !mercadoPagoStatus.configured
+          ? "O Mercado Pago ainda não está configurado no servidor."
+          : mercadoPagoStatus.connected
+            ? `Conta conectada${mercadoPagoStatus.sellerId ? ` · ${mercadoPagoStatus.sellerId}` : ""}. O cliente poderá pagar com Pix online.`
+            : "Conecte a conta Mercado Pago da loja para receber e confirmar Pix automaticamente.";
         document.getElementById("pageContent").innerHTML = `
-          <div class="page-heading"><div><div class="eyebrow">Vendas online</div><h1>Cardápio digital</h1><p class="subtitle">Configure os produtos e o recebimento em dinheiro na entrega ou retirada.</p></div></div>
+          <div class="page-heading"><div><div class="eyebrow">Vendas online</div><h1>Cardápio digital</h1><p class="subtitle">Configure os produtos e as formas de pagamento na entrega ou retirada.</p></div></div>
           <article class="panel" style="margin-bottom:15px"><div class="panel-heading"><h2>Publicação e entrega</h2><span>${onlineOrdering.published ? "Publicado" : "Não publicado"}</span></div>
             ${onlineOrdering.enabled && !onlineCashOrdersReady ? `<div class="callout" style="margin:0 0 13px"><span>ⓘ</span><div><b>Finalização em dinheiro ainda não liberada</b>Atualize a função de pedidos no Supabase para receber os pedidos do cardápio.</div></div>` : ""}
             <form class="form-grid" id="onlineOrderingForm">
               <label class="setting-item full" style="margin:0"><span><strong>Publicar cardápio para visualização</strong><p>Disponibiliza seus produtos pelo link público, sem exigir cadastro de pagamento online.</p></span><span class="switch"><input name="published" type="checkbox" ${onlineOrdering.published ? "checked" : ""}><span></span></span></label>
-              <label class="setting-item full" style="margin:0"><span><strong>Aceitar pedidos online</strong><p>O cliente poderá pagar somente em dinheiro na entrega ou na retirada. A finalização será liberada quando o servidor estiver atualizado.</p></span><span class="switch"><input name="enabled" type="checkbox" ${onlineOrdering.enabled ? "checked" : ""}><span></span></span></label>
+              <label class="setting-item full" style="margin:0"><span><strong>Aceitar pedidos online</strong><p>O cliente poderá pagar em dinheiro na entrega ou retirada, ou com Pix online quando a conta estiver conectada.</p></span><span class="switch"><input name="enabled" type="checkbox" ${onlineOrdering.enabled ? "checked" : ""}><span></span></span></label>
               <div class="field"><label for="deliveryFee">Taxa de entrega (R$)</label><input id="deliveryFee" name="deliveryFee" type="number" min="0" max="1000" step="0.01" value="${number(onlineOrdering.deliveryFee).toFixed(2)}" required></div>
               <label class="setting-item" style="margin:0"><span><strong>Permitir retirada no local</strong><p>O cliente poderá escolher retirada em vez de entrega.</p></span><span class="switch"><input name="pickupEnabled" type="checkbox" ${onlineOrdering.pickupEnabled ? "checked" : ""}><span></span></span></label>
               <div class="field full"><label for="pickupAddress">Endereço para retirada</label><input id="pickupAddress" name="pickupAddress" maxlength="180" value="${escapeHtml(onlineOrdering.pickupAddress)}" placeholder="Endereço da loja" ${onlineOrdering.pickupEnabled ? "required" : ""}></div>
@@ -2064,6 +2120,7 @@
             ${onlineOrdering.published && onlineMenuReady ? `<div class="toolbar" style="margin-top:14px"><div class="field" style="flex:1"><label for="menuShareUrl">Link público do cardápio</label><input class="search" id="menuShareUrl" style="width:100%" readonly value="${escapeHtml(shareUrl)}"></div><button class="button" type="button" data-action="copy-menu-link">Copiar link</button></div>` : ""}
             ${!onlineCashOrdersReady ? `<div class="callout" style="margin:13px 0 0"><span>ⓘ</span><div><b>Finalização em dinheiro ainda em implantação</b>Publique a função create-cash-order no Supabase para receber pedidos e liberar a finalização. O cardápio continuará disponível para consulta até lá.</div></div>` : ""}
           </article>
+          <article class="panel" style="margin-bottom:15px"><div class="panel-heading"><h2>Pix online</h2><span>${mercadoPagoStatus.connected ? "Conectado" : "Mercado Pago"}</span></div><p class="helper">${escapeHtml(mpConnectionMessage)}</p><button class="button ${mercadoPagoStatus.connected ? "" : "primary"}" type="button" id="connectMercadoPago" ${mercadoPagoStatus.configured ? "" : "disabled"}>${mercadoPagoStatus.connected ? "Reconectar Mercado Pago" : "Conectar conta Mercado Pago"}</button></article>
           ${groups.length ? `<div class="filters" style="margin-bottom:13px">${groups.map(category => `<button class="filter-btn ${digitalCategory === category ? "active" : ""}" data-digital-category="${category}">${categoryIcon(category)} ${categoryName(category)}s</button>`).join("")}</div><article class="panel" style="margin-bottom:13px"><div class="panel-heading"><h2>${categoryIcon(digitalCategory)} ${categoryName(digitalCategory)}s</h2><span>${shownProducts.length} produto(s)</span></div><div class="digital-menu-list">${shownProducts.map(product => {
             const prices = productOptions(product).map(option => number(option.price));
             const priceLabel = prices.length > 1 ? `A partir de ${money(Math.min(...prices))}` : money(prices[0]);
@@ -2072,6 +2129,7 @@
           }).join("")}</div></article>` : `<div class="empty-state">Ative ou cadastre produtos para montar seu cardápio digital.</div>`}
           <p class="helper public-note">Configure publicação e entrega antes de compartilhar o cardápio.</p>`;
         document.getElementById("onlineOrderingForm").addEventListener("submit", saveOnlineOrdering);
+        document.getElementById("connectMercadoPago").addEventListener("click", connectMercadoPago);
       }
 
       async function saveOnlineOrdering(event) {
@@ -2117,6 +2175,22 @@
         showToast(published || enabled ? "Cardápio publicado. Compartilhe o link público." : "Configurações do cardápio salvas.");
       }
 
+      function renderDigitalOrderConfirmation() {
+        if (!currentPixPayment) {
+          return `<div class="callout" style="margin-top:14px"><span>✓</span><div><b>Pedido enviado à loja</b><p class="helper">Pedido #${escapeHtml(currentOrderConfirmation.slice(0, 8))}. O pagamento será feito ${digitalFulfillment === "pickup" ? "na retirada" : "na entrega"}.</p><button type="button" class="button" data-action="new-digital-order">Fazer outro pedido</button></div></div>`;
+        }
+        if (currentPixPayment.status === "approved") {
+          return `<div class="callout" style="margin-top:14px"><span>✓</span><div><b>Pix confirmado!</b><p class="helper">Pedido #${escapeHtml(currentOrderConfirmation.slice(0, 8))} enviado à loja.</p><button type="button" class="button" data-action="new-digital-order">Fazer outro pedido</button></div></div>`;
+        }
+        if (["rejected", "cancelled", "refunded", "failed"].includes(currentPixPayment.status)) {
+          return `<div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b>Pagamento Pix não aprovado</b><p class="helper">O pedido #${escapeHtml(currentOrderConfirmation.slice(0, 8))} foi cancelado. Faça um novo pedido ou tente outra forma de pagamento.</p><button type="button" class="button" data-action="new-digital-order">Fazer outro pedido</button></div></div>`;
+        }
+        const qrImage = currentPixPayment.qrCodeBase64
+          ? `<img src="data:image/png;base64,${escapeHtml(currentPixPayment.qrCodeBase64)}" alt="QR Code Pix" style="display:block;width:min(220px,100%);height:auto;margin:12px auto">`
+          : "";
+        return `<div class="callout" style="margin-top:14px"><span>ⓘ</span><div style="width:100%"><b>Aguardando pagamento Pix</b><p class="helper">Pedido #${escapeHtml(currentOrderConfirmation.slice(0, 8))}. Escaneie o QR Code ou copie o código Pix no aplicativo do banco. O pedido será confirmado automaticamente após o pagamento.</p>${qrImage}<textarea id="pixCopyCode" class="search" rows="4" readonly style="width:100%;margin-top:8px">${escapeHtml(currentPixPayment.qrCode)}</textarea><button type="button" class="button" data-action="copy-pix-code" style="margin-top:8px">Copiar código Pix</button><p class="helper">Aguardando confirmação do Mercado Pago…</p></div></div>`;
+      }
+
       function renderPublicMenu() {
         if (publicMenuLoadError) {
           document.getElementById("pageContent").innerHTML = `<section class="panel" style="margin-top:24px;text-align:center"><div class="stat-icon" style="margin:0 auto 13px;width:44px;height:44px">ⓘ</div><h1 style="font-size:22px">Cardápio indisponível</h1><p class="subtitle">${escapeHtml(publicMenuLoadError)}</p></section>`;
@@ -2127,7 +2201,16 @@
         if (!groups.includes(digitalCategory)) digitalCategory = groups[0] || null;
         const shownProducts = products.filter(product => product.category === digitalCategory);
         const cashPaymentMethod = digitalFulfillment === "pickup" ? "cash_on_pickup" : "cash_on_delivery";
-        const canPlaceOrders = publicOrdering.acceptingOrders && supportedDigitalPaymentMethods.includes(cashPaymentMethod);
+        const paymentOptions = [
+          ...(supportedDigitalPaymentMethods.includes(cashPaymentMethod)
+            ? [{ value: cashPaymentMethod, label: digitalFulfillment === "pickup" ? "Dinheiro na retirada" : "Dinheiro na entrega" }]
+            : []),
+          ...(supportedDigitalPaymentMethods.includes("pix") ? [{ value: "pix", label: "Pix online" }] : [])
+        ];
+        if (!paymentOptions.some(option => option.value === digitalPaymentMethod)) {
+          digitalPaymentMethod = paymentOptions[0]?.value || "";
+        }
+        const canPlaceOrders = publicOrdering.acceptingOrders && paymentOptions.length > 0;
         const items = shownProducts.map(product => {
           const options = productOptions(product);
           const prices = options.map(option => number(option.price));
@@ -2141,7 +2224,7 @@
               ${product.category === "pizza" ? `<div data-pizza-flavor-container></div><div data-pizza-border-container></div>` : ""}
               ${(product.addons || []).length ? `<div class="option-group"><span class="section-label">Adicionais deste produto (opcional)</span><div class="sale-addons">${product.addons.map((addon, index) => `<label class="addon-choice"><input type="checkbox" data-public-addon="${index}">${escapeHtml(addon.name)} + ${money(addon.price)}</label>`).join("")}</div></div>` : ""}
               ${product.category === "pizza" ? `<p class="helper" data-public-price></p>` : ""}
-              ${canPlaceOrders ? `<button type="button" class="button primary" data-action="public-add" data-id="${escapeHtml(product.id)}">Adicionar ao pedido</button>` : ""}
+              ${canPlaceOrders && !currentOrderConfirmation ? `<button type="button" class="button primary" data-action="public-add" data-id="${escapeHtml(product.id)}">Adicionar ao pedido</button>` : ""}
             </div>
           </details>`;
         }).join("");
@@ -2149,25 +2232,24 @@
         const subtotal = digitalCart.reduce((sum, item) => sum + saleLineTotal(item), 0);
         const deliveryFee = digitalFulfillment === "delivery" ? publicOrdering.deliveryFee : 0;
         const total = roundMoney(subtotal + deliveryFee);
-        const pickupPaymentMethod = digitalFulfillment === "pickup" ? "cash_on_pickup" : "cash_on_delivery";
-        const cashCheckoutReady = supportedDigitalPaymentMethods.includes(pickupPaymentMethod);
         document.getElementById("pageContent").innerHTML = `
-          <header class="digital-hero"><div class="digital-hero-copy"><div class="eyebrow">BORA! DELIVERY · CARDÁPIO DIGITAL</div><h1>${publicOrdering.acceptingOrders ? "Peça algo gostoso." : "Confira nosso cardápio."}</h1><p>${publicOrdering.acceptingOrders ? "Escolha seus favoritos e receba seu pedido do seu jeito." : "Conheça nossos produtos e preços."}</p><div class="digital-menu-highlights"><span class="digital-menu-highlight"><span>◷</span>Entrega · ${publicOrdering.deliveryFee ? money(publicOrdering.deliveryFee) : "grátis"}</span>${publicOrdering.pickupEnabled ? `<span class="digital-menu-highlight"><span>⌖</span>Retirada no local</span>` : ""}${publicOrdering.acceptingOrders ? `<span class="digital-menu-highlight"><span>✓</span>Pagamento em dinheiro</span>` : `<span class="digital-menu-highlight"><span>●</span>Cardápio para consulta</span>`}</div></div><span class="digital-hero-mark" aria-hidden="true">🍽️</span></header>
-          ${!publicOrdering.acceptingOrders ? `<div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b>Cardápio disponível para consulta</b>A loja ainda não está aceitando pedidos. A finalização somente em dinheiro será liberada após a atualização do servidor e a ativação dos pedidos no painel da loja.</div></div>` : !cashCheckoutReady ? `<div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b>Finalização em dinheiro ainda não liberada</b>O site está pronto, mas falta atualizar o servidor que registra os pedidos da loja. Por segurança, a finalização ficará indisponível até essa atualização.</div></div>` : ""}
+          <header class="digital-hero"><div class="digital-hero-copy"><div class="eyebrow">BORA! DELIVERY · CARDÁPIO DIGITAL</div><h1>${publicOrdering.acceptingOrders ? "Peça algo gostoso." : "Confira nosso cardápio."}</h1><p>${publicOrdering.acceptingOrders ? "Escolha seus favoritos e receba seu pedido do seu jeito." : "Conheça nossos produtos e preços."}</p><div class="digital-menu-highlights"><span class="digital-menu-highlight"><span>◷</span>Entrega · ${publicOrdering.deliveryFee ? money(publicOrdering.deliveryFee) : "grátis"}</span>${publicOrdering.pickupEnabled ? `<span class="digital-menu-highlight"><span>⌖</span>Retirada no local</span>` : ""}${publicOrdering.acceptingOrders ? `<span class="digital-menu-highlight"><span>✓</span>${supportedDigitalPaymentMethods.includes("pix") ? "Pix online ou dinheiro" : "Pagamento em dinheiro"}</span>` : `<span class="digital-menu-highlight"><span>●</span>Cardápio para consulta</span>`}</div></div><span class="digital-hero-mark" aria-hidden="true">🍽️</span></header>
+          ${!publicOrdering.acceptingOrders ? `<div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b>Cardápio disponível para consulta</b>A loja ainda não está aceitando pedidos. A finalização será liberada após a ativação dos pedidos no painel da loja.</div></div>` : !canPlaceOrders ? `<div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b>Finalização online indisponível</b>A loja ainda não configurou o recebimento de pedidos no servidor.</div></div>` : ""}
           ${groups.length ? `<nav class="filters category-tabs" aria-label="Categorias do cardápio">${categoryButtons}</nav><section class="digital-menu-section"><div class="panel-heading"><h2>${categoryIcon(digitalCategory)} ${categoryName(digitalCategory)}s</h2><span>${shownProducts.length} produto(s)</span></div><div class="digital-menu-list">${items}</div></section>` : `<div class="empty-state" style="margin-top:13px">O cardápio está temporariamente sem produtos disponíveis.</div>`}
           ${canPlaceOrders ? `<section class="panel" id="digitalCart" tabindex="-1" style="margin-top:22px"><div class="panel-heading"><h2>Seu pedido</h2><span id="digitalCartCount">${digitalCart.length} item(ns)</span></div><div id="digitalCartSummary">${digitalCart.length ? digitalCart.map((item, index) => `<div class="sale-cart-row"><div><strong>${escapeHtml(item.name)}${item.optionName !== "Padrão" ? ` · ${escapeHtml(item.optionName)}` : ""} × ${item.quantity}</strong><small>${[item.border?.name, ...item.addons.map(addon => addon.name)].filter(Boolean).join(" · ") || "Sem adicionais"}</small></div><span>${money(saleLineTotal(item))}</span><span></span><button type="button" class="icon-button" data-action="remove-digital-item" data-index="${index}">×</button></div>`).join("") : `<div class="empty-state">Adicione um produto ao pedido.</div>`}</div>
-            <div class="field" style="margin-top:13px"><label for="digitalFulfillment">Como prefere receber?</label><select id="digitalFulfillment"><option value="delivery">Entrega · ${money(publicOrdering.deliveryFee)}</option>${publicOrdering.pickupEnabled ? `<option value="pickup">Retirada no local · grátis</option>` : ""}</select></div>
+            <div class="field" style="margin-top:13px"><label for="digitalFulfillment">Como prefere receber?</label><select id="digitalFulfillment" ${currentOrderConfirmation ? "disabled" : ""}><option value="delivery">Entrega · ${money(publicOrdering.deliveryFee)}</option>${publicOrdering.pickupEnabled ? `<option value="pickup">Retirada no local · grátis</option>` : ""}</select></div>
             ${publicOrdering.pickupEnabled && publicOrdering.pickupAddress ? `<p class="helper" id="pickupAddressNote" ${digitalFulfillment === "pickup" ? "" : "hidden"}>Endereço para retirada: ${escapeHtml(publicOrdering.pickupAddress)}</p>` : ""}
-            <div class="field" style="margin-top:13px"><label>Forma de pagamento</label><input value="${digitalFulfillment === "pickup" ? "Dinheiro na retirada" : "Dinheiro na entrega"}" readonly></div>
+            <div class="field" style="margin-top:13px"><label for="digitalPaymentMethod">Forma de pagamento</label><select id="digitalPaymentMethod" ${currentOrderConfirmation ? "disabled" : ""}>${paymentOptions.map(option => `<option value="${option.value}">${escapeHtml(option.label)}</option>`).join("")}</select></div>
             <div class="sale-total"><span id="digitalOrderBreakdown">Itens ${money(subtotal)}${deliveryFee ? ` + entrega ${money(deliveryFee)}` : ""}</span><strong id="digitalOrderTotal">${money(total)}</strong></div>
             <form class="sale-checkout" id="digitalCheckout"><div class="form-grid">
               <div class="field"><label for="digitalName">Seu nome</label><input id="digitalName" name="name" required maxlength="70"></div>
               <div class="field"><label for="digitalPhone">WhatsApp / telefone</label><input id="digitalPhone" name="phone" type="tel" required maxlength="25"></div>
+              <div class="field full" id="digitalEmailField" ${digitalPaymentMethod === "pix" ? "" : "hidden"}><label for="digitalEmail">E-mail para o pagamento Pix</label><input id="digitalEmail" name="email" type="email" maxlength="254" ${digitalPaymentMethod === "pix" ? "required" : ""}></div>
               <div class="field full" id="digitalAddressField" ${digitalFulfillment === "pickup" ? "hidden" : ""}><label for="digitalAddress">Endereço de entrega</label><input id="digitalAddress" name="address" ${digitalFulfillment === "pickup" ? "" : "required"} maxlength="180" placeholder="Rua, número, bairro e complemento"></div>
               <div class="field full"><label for="digitalNotes">Observações do pedido</label><input id="digitalNotes" name="notes" maxlength="160" placeholder="Ponto de referência, sem cebola..."></div>
             </div>
-            <button type="submit" class="button primary" ${digitalCart.length && !currentOrderConfirmation && cashCheckoutReady ? "" : "disabled"}>Finalizar pedido · ${money(total)}</button>
-            <div>${currentOrderConfirmation ? `<div class="callout" style="margin-top:14px"><span>✓</span><div><b>Pedido enviado à loja</b><p class="helper">Pedido #${escapeHtml(currentOrderConfirmation.slice(0, 8))}. O pagamento será feito ${digitalFulfillment === "pickup" ? "na retirada" : "na entrega"}.</p></div></div>` : ""}</div>
+            <button type="submit" class="button primary" ${digitalCart.length && !currentOrderConfirmation && canPlaceOrders ? "" : "disabled"}>Finalizar pedido · ${money(total)}</button>
+            <div>${currentOrderConfirmation ? renderDigitalOrderConfirmation() : ""}</div>
             </form>
           </section>${digitalCart.length ? `<div class="public-cart-bar"><a class="button primary" href="#digitalCart"><span class="public-cart-count"><span>${digitalCart.length}</span>Ver pedido</span><strong>${money(total)} <span aria-hidden="true">→</span></strong></a></div>` : ""}` : ""}`;
         document.querySelectorAll("[data-public-product]").forEach(card => {
@@ -2202,7 +2284,19 @@
           fulfillmentSelect.value = digitalFulfillment;
           fulfillmentSelect.addEventListener("change", () => {
             digitalFulfillment = fulfillmentSelect.value;
+            if (digitalPaymentMethod !== "pix") {
+              digitalPaymentMethod = digitalFulfillment === "pickup" ? "cash_on_pickup" : "cash_on_delivery";
+            }
             renderPublicMenu();
+          });
+          const paymentSelect = document.getElementById("digitalPaymentMethod");
+          paymentSelect.value = digitalPaymentMethod;
+          paymentSelect.addEventListener("change", () => {
+            digitalPaymentMethod = paymentSelect.value;
+            const emailField = document.getElementById("digitalEmailField");
+            const emailInput = document.getElementById("digitalEmail");
+            emailField.hidden = digitalPaymentMethod !== "pix";
+            emailInput.required = digitalPaymentMethod === "pix";
           });
           document.getElementById("digitalCheckout").addEventListener("submit", submitDigitalOrder);
         }
@@ -2260,46 +2354,50 @@
           addons
         });
         currentOrderConfirmation = "";
+        currentPixPayment = null;
+        if (pixPaymentStatusTimer) clearInterval(pixPaymentStatusTimer);
+        pixPaymentStatusTimer = null;
         renderPublicMenu();
         showToast("Adicionado ao pedido.");
       }
 
-      function submitDigitalOrder(event) {
+      async function submitDigitalOrder(event) {
         event.preventDefault();
         if (!digitalCart.length) return;
-        const paymentMethod = digitalFulfillment === "pickup" ? "cash_on_pickup" : "cash_on_delivery";
+        const paymentMethod = digitalPaymentMethod;
         if (!supportedDigitalPaymentMethods.includes(paymentMethod)) {
-          showToast("A finalização em dinheiro ainda está em implantação.");
+          showToast("Essa forma de pagamento não está disponível nesta loja.");
           return;
         }
         const form = event.currentTarget;
         if (!form.reportValidity()) return;
         const submitButton = form.querySelector("button[type='submit']");
         submitButton.disabled = true;
-        submitButton.textContent = "Enviando pedido…";
+        submitButton.textContent = paymentMethod === "pix" ? "Gerando Pix…" : "Enviando pedido…";
         const data = new FormData(form);
-        supabaseClient.functions.invoke("create-cash-order", {
-          body: {
-            businessId: publicBusinessId,
-            fulfillment: digitalFulfillment,
-            paymentMethod,
-            customer: {
-              name: data.get("name"),
-              phone: data.get("phone"),
-              email: "",
-              address: data.get("address"),
-              notes: data.get("notes")
-            },
-            items: digitalCart.map(item => ({
-              productId: item.productId,
-              optionName: item.optionName,
-              flavorIds: item.flavorIds || [],
-              borderName: item.borderName || "Sem borda",
-              addonIndexes: item.addonIndexes || [],
-              quantity: item.quantity
-            }))
-          }
-        }).then(({ data: result, error }) => {
+        try {
+          const { data: result, error } = await supabaseClient.functions.invoke("create-cash-order", {
+            body: {
+              businessId: publicBusinessId,
+              fulfillment: digitalFulfillment,
+              paymentMethod,
+              customer: {
+                name: data.get("name"),
+                phone: data.get("phone"),
+                email: data.get("email"),
+                address: data.get("address"),
+                notes: data.get("notes")
+              },
+              items: digitalCart.map(item => ({
+                productId: item.productId,
+                optionName: item.optionName,
+                flavorIds: item.flavorIds || [],
+                borderName: item.borderName || "Sem borda",
+                addonIndexes: item.addonIndexes || [],
+                quantity: item.quantity
+              }))
+            }
+          });
           if (error || !result?.orderId) {
             console.error("Não foi possível criar o pedido online:", error || result?.error);
             showToast(result?.error || "Não foi possível enviar o pedido. Tente novamente.");
@@ -2308,15 +2406,65 @@
             return;
           }
           currentOrderConfirmation = String(result.orderId);
+          currentPixPayment = paymentMethod === "pix"
+            ? {
+              qrCode: String(result.pix?.qrCode || ""),
+              qrCodeBase64: String(result.pix?.qrCodeBase64 || ""),
+              status: String(result.paymentStatus || "pending")
+            }
+            : null;
           digitalCart = [];
           renderPublicMenu();
-          showToast("Pedido enviado à loja. Pagamento em dinheiro no recebimento.");
-        }).catch(error => {
+          if (currentPixPayment?.status === "pending") startPixPaymentStatusPolling(currentOrderConfirmation);
+          showToast(paymentMethod === "pix"
+            ? currentPixPayment.status === "approved" ? "Pix confirmado. Pedido enviado à loja." : "Pix gerado. Conclua o pagamento para confirmar o pedido."
+            : "Pedido enviado à loja. Pagamento em dinheiro no recebimento.");
+        } catch (error) {
           console.error("Não foi possível enviar o pedido:", error);
           showToast("Não foi possível enviar o pedido. Verifique sua conexão e tente novamente.");
           submitButton.disabled = false;
           submitButton.textContent = `Finalizar pedido · ${money(roundMoney(digitalCart.reduce((sum, item) => sum + saleLineTotal(item), 0) + (digitalFulfillment === "delivery" ? publicOrdering.deliveryFee : 0)))}`;
-        });
+        }
+      }
+
+      function startPixPaymentStatusPolling(orderId) {
+        if (pixPaymentStatusTimer) clearInterval(pixPaymentStatusTimer);
+        let attempts = 0;
+        const checkStatus = async () => {
+          if (!currentPixPayment || currentPixPayment.status !== "pending" || currentOrderConfirmation !== orderId) {
+            clearInterval(pixPaymentStatusTimer);
+            pixPaymentStatusTimer = null;
+            return;
+          }
+          attempts += 1;
+          if (attempts > 120) {
+            clearInterval(pixPaymentStatusTimer);
+            pixPaymentStatusTimer = null;
+            return;
+          }
+          try {
+            const { data, error } = await supabaseClient.functions.invoke("check-pix-order", {
+              body: { orderId }
+            });
+            if (error) {
+              console.warn("Não foi possível conferir o pagamento Pix:", error);
+              return;
+            }
+            const status = typeof data?.status === "string" ? data.status : "pending";
+            if (status === currentPixPayment.status) return;
+            currentPixPayment.status = status;
+            if (status !== "pending") {
+              clearInterval(pixPaymentStatusTimer);
+              pixPaymentStatusTimer = null;
+              renderPublicMenu();
+              showToast(status === "approved" ? "Pix confirmado. Pedido enviado à loja." : "O pagamento Pix não foi aprovado.");
+            }
+          } catch (error) {
+            console.warn("Não foi possível conferir o pagamento Pix:", error);
+          }
+        };
+        pixPaymentStatusTimer = setInterval(checkStatus, 5000);
+        checkStatus();
       }
 
       function renderMore() {
@@ -3028,6 +3176,34 @@
         const action = event.target.closest("[data-action]");
         if (!action) return;
         const id = action.dataset.id;
+        if (action.dataset.action === "copy-pix-code") {
+          const pixCode = document.getElementById("pixCopyCode");
+          if (!pixCode) return;
+          if (!navigator.clipboard || !navigator.clipboard.writeText) {
+            pixCode.focus();
+            pixCode.select();
+            showToast("Selecione o código Pix e copie manualmente.");
+            return;
+          }
+          navigator.clipboard.writeText(pixCode.value).then(
+            () => showToast("Código Pix copiado."),
+            error => {
+              console.error("Não foi possível copiar o código Pix:", error);
+              pixCode.focus();
+              pixCode.select();
+              showToast("Não foi possível copiar automaticamente. Selecione o código e copie manualmente.");
+            }
+          );
+          return;
+        }
+        if (action.dataset.action === "new-digital-order") {
+          currentOrderConfirmation = "";
+          currentPixPayment = null;
+          if (pixPaymentStatusTimer) clearInterval(pixPaymentStatusTimer);
+          pixPaymentStatusTimer = null;
+          renderPublicMenu();
+          return;
+        }
         if (action.dataset.action === "remove-sale-item") {
           saleCart.splice(Number(action.dataset.index), 1);
           renderSales();

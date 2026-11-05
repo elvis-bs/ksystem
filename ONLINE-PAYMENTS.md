@@ -1,32 +1,48 @@
-# Pedidos online com pagamento em dinheiro
+# Pedidos online com Pix
 
-O cardápio digital aceita somente dinheiro na entrega ou na retirada. Não é necessário conectar banco, Mercado Pago ou outro meio de pagamento online.
+O cardápio digital aceita dinheiro na entrega ou retirada e Pix online pelo Mercado Pago. O pedido pago por Pix só passa de **Aguardando Pix** para **Recebido** após a confirmação do Mercado Pago.
 
-## Publicação
+## Pré-requisitos do Mercado Pago
 
-1. No Supabase, execute `supabase-schema.sql` no **SQL Editor**, caso ainda não tenha feito isso.
-2. Autorize a CLI na sua conta Supabase e associe este projeto:
+Configure no projeto Supabase os secrets já usados pela integração:
+
+- `MP_CLIENT_ID`
+- `MP_CLIENT_SECRET`
+- `MP_OAUTH_REDIRECT_URI`: URL da função `mercadopago-oauth-callback` deste projeto Supabase.
+- `MP_OAUTH_APP_URL`: URL publicada do Bora! Gestão para onde o cliente volta após autorizar a conta.
+- `MP_WEBHOOK_SECRET`: chave secreta de assinatura do webhook de pagamentos configurado no painel da aplicação Mercado Pago.
+- `MP_TEST_MODE`: `true` para credenciais de teste; `false` para produção.
+
+Não coloque essas credenciais no código nem no cardápio público. Cadastre a mesma URL de callback nas configurações OAuth da aplicação Mercado Pago e configure o evento de pagamentos para usar a função `mercadopago-webhook`.
+
+## Atualização do banco e funções
+
+1. Execute `supabase-schema.sql` no **SQL Editor** do Supabase, caso ainda não tenha aplicado o esquema de pagamentos.
+2. No terminal, autorize e associe a CLI ao projeto:
 
    ```powershell
    supabase login
    supabase link --project-ref jnqwtqixklmuxaeppkry
    ```
 
-   A autenticação acima autoriza a publicação de código no projeto Supabase; não é uma autenticação bancária e não conecta nenhuma conta de pagamento.
-
-3. Publique a função que valida e registra os pedidos:
+3. Publique as funções:
 
    ```powershell
    supabase functions deploy create-cash-order
+   supabase functions deploy mercadopago-settings
+   supabase functions deploy mercadopago-oauth-callback
+   supabase functions deploy mercadopago-webhook
+   supabase functions deploy check-pix-order
    ```
 
-4. Publique o site no GitHub Pages, entre no sistema e abra **Cardápio digital**.
-5. Publique o catálogo, configure entrega e/ou retirada e ative **Aceitar pedidos online**. A finalização será liberada quando o servidor confirmar que aceita pedidos em dinheiro.
-6. Faça um pedido de teste. Os pedidos são registrados como **Recebido**, e a loja cobra em dinheiro no recebimento.
+4. Publique o site no GitHub Pages e entre no Bora! Gestão.
+5. Abra **Cardápio digital** e clique em **Conectar conta Mercado Pago**. Autorize a conta que receberá os pagamentos.
+6. Publique o cardápio e ative **Aceitar pedidos online**.
 
-## Funcionamento
+## Como o Pix funciona
 
-- O cliente informa nome, telefone e endereço quando escolhe entrega.
-- Para retirada, o cardápio apresenta o endereço da loja configurado pelo lojista.
-- A função no servidor verifica a publicação, disponibilidade, preços, adicionais, endereço, taxa de entrega e limite de tentativas antes de gravar o pedido.
-- O pedido online não atualiza o saldo do caixa; o pagamento deve ser registrado pela loja ao recebê-lo.
+- O cliente escolhe Pix online no checkout, informa um e-mail e recebe o QR Code e o código Pix copia e cola.
+- O servidor valida produtos, adicionais, taxa, total e disponibilidade antes de criar a cobrança Pix no Mercado Pago.
+- O cardápio consulta o status do pagamento; o webhook também atualiza o pedido. Apenas pagamentos aprovados são marcados como recebidos.
+- O pedido online não atualiza o caixa automaticamente; registre o recebimento no sistema conforme o fluxo financeiro da loja.
+- Para usar somente dinheiro, não é necessário conectar o Mercado Pago.

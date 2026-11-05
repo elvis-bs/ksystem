@@ -1,4 +1,9 @@
-import { adminClient } from "../_shared/supabase.ts";
+import {
+  adminClient,
+  createMercadoPagoPixPayment,
+  reconcilePayment,
+  type MercadoPagoPixPayment
+} from "../_shared/mercadopago.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -58,27 +63,64 @@ Deno.serve(async request => {
   try {
     const body = await request.json() as JsonRecord;
     const businessId = text(body.businessId, 50);
+    if (!/^[0-9a-f-]{36}$/i.test(businessId)) return jsonResponse({ error: "Invalid store." }, 400);
+    const client = adminClient();
+    if (body.action === "payment_methods") {
+      const { data: publication, error: menuError } = await client
+        .from("public_menus")
+        .select("menu,pickup_enabled,published")
+        .eq("user_id", businessId)
+        .eq("published", true)
+        .maybeSingle();
+      if (menuError) throw menuError;
+      if (!publication || (publication.menu as JsonRecord).acceptingOrders !== true) {
+        return jsonResponse({ paymentMethods: [] });
+      }
+
+      const paymentMethods = ["cash_on_delivery"];
+      if (publication.pickup_enabled) paymentMethods.push("cash_on_pickup");
+      const mpConfigured = Boolean(
+        Deno.env.get("MP_CLIENT_ID")
+        && Deno.env.get("MP_CLIENT_SECRET")
+        && Deno.env.get("MP_WEBHOOK_SECRET")
+      );
+      if (mpConfigured) {
+        const { data: connection, error: connectionError } = await client
+          .from("mercadopago_connections")
+          .select("business_id")
+          .eq("business_id", businessId)
+          .maybeSingle();
+        if (connectionError) throw connectionError;
+        if (connection) paymentMethods.push("pix");
+      }
+      return jsonResponse({ paymentMethods });
+    }
+
     const customer = body.customer as JsonRecord;
     const fulfillment = text(body.fulfillment, 20);
     const paymentMethod = text(body.paymentMethod, 40);
-    if (!/^[0-9a-f-]{36}$/i.test(businessId)) return jsonResponse({ error: "Invalid store." }, 400);
     if (!customer || typeof customer !== "object") return jsonResponse({ error: "Customer information is required." }, 400);
     const customerName = text(customer.name, 70);
     const customerPhone = text(customer.phone, 25);
+    const customerEmail = text(customer.email, 254).toLowerCase();
     const address = text(customer.address, 180);
     const notes = text(customer.notes, 300);
     if (!["delivery", "pickup"].includes(fulfillment)) return jsonResponse({ error: "Invalid order fulfillment." }, 400);
-    const allowedPaymentMethods = fulfillment === "pickup" ? ["cash_on_pickup"] : ["cash_on_delivery"];
+    const allowedPaymentMethods = paymentMethod === "pix"
+      ? ["pix"]
+      : fulfillment === "pickup" ? ["cash_on_pickup"] : ["cash_on_delivery"];
     if (!allowedPaymentMethods.includes(paymentMethod)) return jsonResponse({ error: "Invalid payment method for this fulfillment option." }, 400);
     if (customerName.length < 2 || customerPhone.length < 8) {
       return jsonResponse({ error: "Enter a valid name and phone number." }, 400);
+    }
+    if (paymentMethod === "pix" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)) {
+      return jsonResponse({ error: "Enter a valid email address for Pix payment." }, 400);
     }
     if (fulfillment === "delivery" && address.length < 6) return jsonResponse({ error: "Enter a delivery address." }, 400);
     if (!Array.isArray(body.items) || body.items.length < 1 || body.items.length > 20) {
       return jsonResponse({ error: "The order must contain between 1 and 20 items." }, 400);
     }
 
-    const client = adminClient();
     const { data: publication, error: menuError } = await client
       .from("public_menus")
       .select("menu,delivery_fee,pickup_enabled,published")
@@ -92,6 +134,21 @@ Deno.serve(async request => {
     }
     if (fulfillment === "pickup" && !publication.pickup_enabled) {
       return jsonResponse({ error: "Pickup is not available for this store." }, 400);
+    }
+    if (paymentMethod === "pix") {
+      const mpConfigured = Boolean(
+        Deno.env.get("MP_CLIENT_ID")
+        && Deno.env.get("MP_CLIENT_SECRET")
+        && Deno.env.get("MP_WEBHOOK_SECRET")
+      );
+      if (!mpConfigured) return jsonResponse({ error: "Pix online is not configured for this store." }, 503);
+      const { data: connection, error: connectionError } = await client
+        .from("mercadopago_connections")
+        .select("business_id")
+        .eq("business_id", businessId)
+        .maybeSingle();
+      if (connectionError) throw connectionError;
+      if (!connection) return jsonResponse({ error: "Pix online is not connected for this store." }, 400);
     }
 
     const menu = publication.menu as JsonRecord;
@@ -193,11 +250,12 @@ Deno.serve(async request => {
       .insert({
         business_id: businessId,
         payment_status: "pending",
-        status: "Recebido",
+        status: paymentMethod === "pix" ? "Aguardando Pix" : "Recebido",
         total: totalCents / 100,
         order_data: {
           customerName,
           customerPhone,
+          customerEmail,
           address: fulfillment === "delivery" ? address : "",
           pickupAddress: fulfillment === "pickup" ? text(menu.pickupAddress, 180) : "",
           notes,
@@ -210,6 +268,43 @@ Deno.serve(async request => {
       .select("id")
       .single();
     if (insertError) throw insertError;
+
+    if (paymentMethod === "pix") {
+      let payment: MercadoPagoPixPayment;
+      try {
+        payment = await createMercadoPagoPixPayment(
+          client,
+          businessId,
+          String(order.id),
+          totalCents / 100,
+          `Pedido online ${String(order.id).slice(0, 8)}`,
+          customerEmail
+        );
+      } catch (error) {
+        const { error: updateError } = await client
+          .from("online_orders")
+          .update({ payment_status: "failed", status: "Cancelado", updated_at: new Date().toISOString() })
+          .eq("id", order.id)
+          .eq("payment_status", "pending");
+        if (updateError) console.error("Could not mark failed Pix order:", updateError);
+        throw error;
+      }
+
+      const paymentResult = await reconcilePayment(client, payment, businessId);
+      const transactionData = payment.point_of_interaction?.transaction_data;
+      if (!transactionData?.qr_code) throw new Error("Mercado Pago returned an empty Pix code.");
+      return jsonResponse({
+        orderId: order.id,
+        total: totalCents / 100,
+        paymentMethod,
+        paymentStatus: paymentResult.paymentStatus,
+        pix: {
+          qrCode: transactionData.qr_code,
+          qrCodeBase64: transactionData.qr_code_base64 || "",
+          ticketUrl: transactionData.ticket_url || ""
+        }
+      }, 201);
+    }
 
     return jsonResponse({
       orderId: order.id,

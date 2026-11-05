@@ -11,6 +11,16 @@ export type MercadoPagoPayment = {
   currency_id?: string;
 };
 
+export type MercadoPagoPixPayment = MercadoPagoPayment & {
+  point_of_interaction?: {
+    transaction_data?: {
+      qr_code?: string;
+      qr_code_base64?: string;
+      ticket_url?: string;
+    };
+  };
+};
+
 type MercadoPagoConnection = {
   business_id: string;
   mp_user_id: string;
@@ -147,6 +157,49 @@ export async function fetchMercadoPagoPayment(accessToken: string, paymentId: st
   return await response.json() as MercadoPagoPayment;
 }
 
+export async function createMercadoPagoPixPayment(
+  client: SupabaseClient,
+  businessId: string,
+  orderId: string,
+  amount: number,
+  description: string,
+  payerEmail: string
+): Promise<MercadoPagoPixPayment> {
+  const accessToken = await getMercadoPagoAccessToken(client, businessId);
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  if (!supabaseUrl) throw new Error("Supabase URL is not configured.");
+  const notificationUrl = new URL("/functions/v1/mercadopago-webhook", supabaseUrl);
+  notificationUrl.searchParams.set("business_id", businessId);
+
+  const response = await fetch("https://api.mercadopago.com/v1/payments", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      "X-Idempotency-Key": orderId
+    },
+    body: JSON.stringify({
+      transaction_amount: amount,
+      description,
+      payment_method_id: "pix",
+      external_reference: orderId,
+      notification_url: notificationUrl.toString(),
+      payer: { email: payerEmail }
+    })
+  });
+  if (!response.ok) {
+    console.error("Mercado Pago Pix creation failed:", response.status);
+    throw new Error("Could not create the Mercado Pago Pix payment.");
+  }
+
+  const payment = await response.json() as MercadoPagoPixPayment;
+  const transactionData = payment.point_of_interaction?.transaction_data;
+  if (!payment.id || !payment.status || !transactionData?.qr_code || payment.currency_id !== "BRL") {
+    throw new Error("Mercado Pago returned incomplete Pix payment details.");
+  }
+  return payment;
+}
+
 export async function reconcilePayment(
   client: SupabaseClient,
   payment: MercadoPagoPayment,
@@ -192,7 +245,7 @@ export async function reconcilePayment(
   if (paymentStatus === "approved" && orderStatus === "Aguardando Pix") orderStatus = "Recebido";
   if (["rejected", "cancelled", "refunded"].includes(paymentStatus)) orderStatus = "Cancelado";
 
-  const { error: updateError } = await client
+  let updateQuery = client
     .from("online_orders")
     .update({
       payment_id: String(payment.id),
@@ -202,6 +255,9 @@ export async function reconcilePayment(
       updated_at: new Date().toISOString()
     })
     .eq("id", order.id);
+  if (paymentStatus !== "approved") updateQuery = updateQuery.neq("payment_status", "approved");
+  if (paymentStatus !== "refunded") updateQuery = updateQuery.neq("payment_status", "refunded");
+  const { error: updateError } = await updateQuery;
   if (updateError) throw updateError;
 
   return { orderId: String(order.id), paymentStatus };
