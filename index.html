@@ -248,6 +248,17 @@
     .order-card-actions .order-status-select { min-width: 0; width: 100%; }
     .orders-empty { padding: 18px 8px; border: 1px dashed #d6dbd2; border-radius: 9px; color: var(--muted); background: rgba(255,255,255,.55); text-align: center; font-size: 10px; }
     .order-card-actions .button.receipt-button { border-color: #dce5da; color: var(--green); background: #f5f8f3; }
+    .order-card-actions .order-details-trigger { width: 36px; height: 34px; justify-self: end; padding: 0; }
+    .order-details-list { display: grid; gap: 11px; }
+    .order-details-section { padding-bottom: 11px; border-bottom: 1px solid var(--line); }
+    .order-details-section:last-of-type { padding-bottom: 0; border-bottom: 0; }
+    .order-details-section h3 { margin: 0 0 7px; color: var(--muted); font-size: 10px; letter-spacing: .04em; text-transform: uppercase; }
+    .order-details-section p { margin: 4px 0; font-size: 12px; line-height: 1.5; }
+    .order-details-item { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; font-size: 12px; }
+    .order-details-item small { display: block; margin-top: 3px; color: var(--muted); }
+    .order-details-total { display: flex; justify-content: space-between; margin-top: 7px; font-size: 15px; font-weight: 800; }
+    .order-details-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 15px; }
+    #modalForm[data-type="orderDetails"] .modal-footer { display: none; }
     .orders-cancelled { margin-top: 15px; }
     .customer-item { overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
     .customer-item-top { display: flex; align-items: center; gap: 8px; padding: 5px 7px 5px 13px; }
@@ -1636,8 +1647,6 @@
         const completedOrders = sales.filter(sale => sale.status === "Concluído");
         const pendingOrders = sales.filter(sale => sale.onlineOrderId && sale.paymentMethod === "pix" && sale.paymentStatus === "pending");
         const cancelledOrders = [...sales].filter(sale => sale.status === "Cancelado").sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        const statuses = ["Recebido", "Em preparo", "Saiu para entrega", "Concluído", "Cancelado"];
-        const statusOptions = selected => statuses.map(status => `<option ${selected === status ? "selected" : ""}>${status}</option>`).join("");
         const card = sale => {
           const createdAt = new Date(sale.createdAt);
           const elapsedMinutes = Math.max(0, Math.floor((Date.now() - createdAt.getTime()) / 60000));
@@ -1648,8 +1657,6 @@
             const details = [item.optionName, item.border?.name, ...(item.addons || []).map(addon => addon.name)].filter(Boolean);
             return `<div class="order-card-item"><strong>${number(item.quantity)}×</strong> ${escapeHtml(item.name || "Produto")}${details.length ? `<small>${escapeHtml(details.join(" · "))}</small>` : ""}</div>`;
           }).join("");
-          const nextStatus = { "Recebido": "Em preparo", "Em preparo": "Saiu para entrega", "Saiu para entrega": "Concluído" }[sale.status || "Recebido"];
-          const nextLabel = { "Recebido": "Iniciar preparo", "Em preparo": "Saiu para entrega", "Saiu para entrega": "Finalizar pedido" }[sale.status || "Recebido"];
           return `<article class="order-card">
             <div class="order-card-top"><span class="order-card-id">Pedido #${escapeHtml(String(sale.id || "").slice(-5))}</span><span class="order-card-age">${elapsed}</span></div>
             <div class="order-card-customer">${escapeHtml(sale.customerName || "Balcão")}</div>
@@ -1659,7 +1666,7 @@
             ${sale.fulfillment ? `<div class="order-card-meta"><span>${sale.fulfillment === "pickup" ? "Retirada no local" : "Entrega"}${sale.deliveryFee ? ` · taxa ${money(sale.deliveryFee)}` : ""}</span><span>${sale.paid ? "Pix pago" : sale.paymentMethod === "pix" ? "Aguardando Pix" : escapeHtml(sale.payment || "Pagamento na entrega")}</span></div>` : `<div class="order-card-meta"><span>${escapeHtml(sale.payment || "Pagamento pendente")}</span><span>${sale.paid ? "Pago" : "Pendente"}</span></div>`}
             ${sale.address ? `<div class="order-card-contact">${sale.fulfillment === "pickup" ? "Retirada em" : "Endereço"}: ${escapeHtml(sale.address)}</div>` : sale.pickupAddress ? `<div class="order-card-contact">Retirada em: ${escapeHtml(sale.pickupAddress)}</div>` : ""}
             ${sale.notes ? `<div class="order-card-contact">Obs.: ${escapeHtml(sale.notes)}</div>` : ""}
-            <div class="order-card-actions">${sale.onlineOrderId && sale.paymentMethod === "pix" && !sale.paid ? `<span class="pill orange">${sale.paymentStatus === "pending" ? "Aguardando confirmação do Pix" : "Pagamento não aprovado"}</span>` : `${nextStatus ? `<button type="button" class="button primary" data-action="advance-order" data-id="${escapeHtml(sale.id)}" data-status="${nextStatus}">${nextLabel} →</button>` : ""}<select class="order-status-select" data-sale-status="${escapeHtml(sale.id)}" aria-label="Alterar status do pedido">${statusOptions(sale.status || "Recebido")}</select>`}<button type="button" class="button receipt-button" data-action="print-receipt" data-id="${escapeHtml(sale.id)}">Imprimir pedido</button></div>
+            <div class="order-card-actions"><button type="button" class="button icon-button order-details-trigger" data-action="order-details" data-id="${escapeHtml(sale.id)}" aria-label="Detalhes do pedido #${escapeHtml(String(sale.id || "").slice(-5))}" title="Detalhes do pedido"><svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="m16 16 4 4M11 8v.1M11 11v4"></path></svg></button></div>
           </article>`;
         };
         const columns = statusColumns.map(column => {
@@ -1677,7 +1684,45 @@
           ${pendingOrders.length ? `<div class="callout" style="margin-bottom:14px"><span>ⓘ</span><div><b>${pendingOrders.length} pedido(s) aguardando Pix</b>Esses pedidos só entram na fila de preparo após confirmação do pagamento.</div></div>` : ""}
           <div class="orders-board">${columns}</div>
           ${cancelledOrders.length ? `<details class="orders-cancelled"><summary class="button">Pedidos cancelados (${cancelledOrders.length})</summary><div class="orders-board" style="grid-template-columns:minmax(230px, 1fr);margin-top:10px"><section class="orders-column"><div class="orders-column-list">${cancelledOrders.map(card).join("")}</div></section></div></details>` : ""}`;
-        document.querySelectorAll("[data-sale-status]").forEach(select => select.addEventListener("change", updateSaleStatus));
+      }
+
+      function showOrderDetails(sale) {
+        if (!sale) {
+          showToast("Não foi possível encontrar os dados deste pedido.");
+          return;
+        }
+        const status = sale.status || "Recebido";
+        const createdAt = new Date(sale.createdAt);
+        const dateLabel = Number.isNaN(createdAt.getTime())
+          ? "Data não informada"
+          : createdAt.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+        const items = (sale.items || []).map(item => {
+          const details = [item.optionName, item.border?.name, ...(item.addons || []).map(addon => addon.name)].filter(Boolean);
+          return `<div class="order-details-item"><span>${number(item.quantity)}× ${escapeHtml(item.name || "Produto")}${details.length ? `<small>${escapeHtml(details.join(" · "))}</small>` : ""}</span><strong>${money(saleLineTotal(item))}</strong></div>`;
+        }).join("");
+        const isPendingPix = sale.onlineOrderId && sale.paymentMethod === "pix" && !sale.paid;
+        const statuses = ["Recebido", "Em preparo", "Saiu para entrega", "Concluído", "Cancelado"];
+        const location = sale.fulfillment === "pickup"
+          ? sale.pickupAddress || state.receiptSettings?.address
+          : sale.address || "";
+        const body = `<div class="order-details-list">
+          <section class="order-details-section"><h3>Pedido #${escapeHtml(String(sale.id || "").slice(-5))}</h3><p>${escapeHtml(dateLabel)}</p>${isPendingPix ? `<p><span class="pill orange">Aguardando confirmação do Pix</span></p>` : `<div class="field"><label for="orderDetailsStatus">Status do pedido</label><select id="orderDetailsStatus" data-order-details-status>${statuses.map(option => `<option ${status === option ? "selected" : ""}>${option}</option>`).join("")}</select></div>`}</section>
+          <section class="order-details-section"><h3>Cliente</h3><p><strong>${escapeHtml(sale.customerName || "Balcão")}</strong></p>${sale.customerPhone ? `<p>${escapeHtml(sale.customerPhone)}</p>` : ""}${sale.fulfillment ? `<p>${sale.fulfillment === "pickup" ? "Retirada no local" : "Entrega"}</p>` : ""}${location ? `<p>${sale.fulfillment === "pickup" ? "Retirar em" : "Endereço"}: ${escapeHtml(location)}</p>` : ""}</section>
+          <section class="order-details-section"><h3>Itens</h3>${items || `<p>Itens não informados.</p>`}<div class="order-details-total"><span>Total</span><strong>${money(sale.total)}</strong></div>${sale.deliveryFee ? `<p>Inclui taxa de entrega de ${money(sale.deliveryFee)}.</p>` : ""}</section>
+          <section class="order-details-section"><h3>Pagamento e observações</h3><p>${escapeHtml(sale.payment || "Pagamento não informado")} · ${sale.paid ? "Pago" : "Pendente"}</p>${sale.notes ? `<p>Observação: ${escapeHtml(sale.notes)}</p>` : ""}</section>
+          <div class="order-details-actions"><button type="button" class="button primary" data-action="print-receipt" data-id="${escapeHtml(sale.id)}">Imprimir cupom</button></div>
+        </div>`;
+        openModal(`Detalhes do pedido #${String(sale.id || "").slice(-5)}`, body, "orderDetails", sale.id);
+        const statusSelect = document.querySelector("[data-order-details-status]");
+        if (statusSelect) statusSelect.addEventListener("change", event => {
+          const updatedSale = allSales().find(item => item.id === sale.id);
+          if (!updatedSale) {
+            showToast("Não foi possível encontrar esse pedido.");
+            return;
+          }
+          closeModal();
+          changeSaleStatus(updatedSale, event.currentTarget.value);
+        });
       }
 
       function receiveSale(sale) {
@@ -3072,6 +3117,9 @@
         if (action.dataset.action === "advance-order") {
           const sale = allSales().find(item => item.id === id);
           if (sale) advanceOrder(sale, action.dataset.status);
+        }
+        if (action.dataset.action === "order-details") {
+          showOrderDetails(allSales().find(item => item.id === id));
         }
         if (action.dataset.action === "print-receipt") {
           const sale = allSales().find(item => item.id === id);
