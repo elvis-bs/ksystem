@@ -106,6 +106,11 @@
     th { padding: 9px 8px; border-bottom: 1px solid var(--line); color: #90958d; font-size: 9px; font-weight: 750; letter-spacing: .7px; text-transform: uppercase; white-space: nowrap; }
     td { padding: 12px 8px; border-bottom: 1px solid #f0f1ed; font-size: 11px; white-space: nowrap; }
     tbody tr:last-child td { border-bottom: 0; }
+    .finance-table { min-width: 930px; }
+    .finance-table td:nth-child(2) { min-width: 180px; white-space: normal; }
+    .finance-table td:nth-child(2) strong { overflow-wrap: anywhere; }
+    .finance-actions { display: flex; align-items: center; gap: 5px; }
+    .finance-actions .button { flex: 0 0 auto; }
     .product-name-cell { display: flex; align-items: center; gap: 9px; font-weight: 650; }
     .food-thumb { width: 31px; height: 31px; display: grid; place-items: center; border-radius: 9px; background: #f7efe5; font-size: 16px; }
     .pill { display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 20px; color: var(--green); background: var(--green-soft); font-size: 9px; font-weight: 700; }
@@ -1660,13 +1665,15 @@
           const paymentHistory = (entry.payments || []).map(payment => `<div class="cost-row"><span>${new Date(payment.date).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} · ${escapeHtml(payment.method)}</span><strong>${money(payment.amount)}</strong></div>`).join("");
           const kindLabel = entry.kind === "receivable" ? "A receber" : entry.kind === "payable" ? "A pagar" : "Despesa";
           const statusLabel = entry.kind === "expense" ? "Lançada" : status;
+          const description = String(entry.description || "").trim() || "Sem descrição";
+          const canManageEntry = !entry.saleId;
           return `<tr>
             <td><span class="pill ${entry.kind !== "receivable" ? "orange" : ""}">${kindLabel}</span></td>
-            <td><strong>${escapeHtml(entry.description)}</strong><br><span class="helper">${escapeHtml(entry.partyName || "")}</span>${paymentHistory ? `<details style="margin-top:7px"><summary class="helper">Ver ${entry.payments.length} pagamento(s)</summary><div class="cost-summary" style="margin-top:7px">${paymentHistory}</div></details>` : ""}</td>
+            <td><strong>${escapeHtml(description)}</strong>${entry.partyName ? `<br><span class="helper">${escapeHtml(entry.partyName)}</span>` : ""}${paymentHistory ? `<details style="margin-top:7px"><summary class="helper">Ver ${(entry.payments || []).length} pagamento(s)</summary><div class="cost-summary" style="margin-top:7px">${paymentHistory}</div></details>` : ""}</td>
             <td>${money(entry.amount)}</td><td>${money(entry.paidAmount)}</td><td><strong>${money(balance)}</strong></td>
             <td>${entry.dueDate ? new Date(`${entry.dueDate}T00:00:00`).toLocaleDateString("pt-BR") : "—"}</td>
             <td><span class="pill ${status === "Atrasado" || entry.kind === "expense" ? "orange" : ""}">${statusLabel}</span></td>
-            <td>${entry.kind !== "expense" && balance > 0 ? `<button type="button" class="button small" data-action="settle-finance-entry" data-id="${escapeHtml(entry.id)}">Baixar pagamento</button>` : `<span class="helper">Histórico registrado</span>`}</td>
+            <td><div class="finance-actions">${entry.kind !== "expense" && balance > 0 ? `<button type="button" class="button small" data-action="settle-finance-entry" data-id="${escapeHtml(entry.id)}">Baixar</button>` : ""}${canManageEntry ? `<button type="button" class="button small" data-action="edit-finance-entry" data-id="${escapeHtml(entry.id)}" aria-label="Editar ${escapeHtml(description)}">Editar</button><button type="button" class="button small danger" data-action="delete-finance-entry" data-id="${escapeHtml(entry.id)}" aria-label="Excluir ${escapeHtml(description)}">Excluir</button>` : `<span class="helper">Vinculada à venda</span>`}</div></td>
           </tr>`;
         }).join("");
         document.getElementById("pageContent").innerHTML = `
@@ -1679,7 +1686,7 @@
           </section>
           <article class="panel" style="margin-bottom:14px"><form class="report-filters" id="financeFilters"><div class="field"><label for="financeDate">Dia do lançamento</label><input id="financeDate" name="date" type="date" value="${escapeHtml(financeDateFilter)}"></div><div class="field"><label for="financeKind">Tipo</label><select id="financeKind" name="kind"><option value="all" ${financeKindFilter === "all" ? "selected" : ""}>Todos</option><option value="receivable" ${financeKindFilter === "receivable" ? "selected" : ""}>A receber</option><option value="payable" ${financeKindFilter === "payable" ? "selected" : ""}>A pagar</option><option value="expense" ${financeKindFilter === "expense" ? "selected" : ""}>Despesas</option></select></div><div class="field"><label for="financeSearch">Pesquisar descrição / pessoa</label><input id="financeSearch" name="search" type="search" value="${escapeHtml(financeSearch)}" placeholder="Ex.: fornecedor, cliente"></div><button class="button primary" type="submit">Filtrar</button><button class="button" type="button" data-action="clear-finance-filters">Todos os dias</button></form></article>
           <article class="panel"><div class="panel-heading"><h2>Lançamentos financeiros</h2><span>${filteredEntries.length} resultado(s) · despesas no período: ${money(dailyExpenses)}</span></div>
-            ${rows || `<div class="empty-state">Nenhum lançamento encontrado para os filtros selecionados.</div>`}
+            ${rows ? `<div class="table-wrap"><table class="finance-table"><thead><tr><th>Tipo</th><th>Descrição / pessoa</th><th>Valor</th><th>Pago</th><th>Saldo</th><th>Vencimento</th><th>Situação</th><th>Ações</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty-state">Nenhum lançamento encontrado para os filtros selecionados.</div>`}
           </article>`;
         document.getElementById("financeFilters").addEventListener("submit", event => {
           event.preventDefault();
@@ -1691,15 +1698,20 @@
         });
       }
 
-      function financeEntryForm(kind) {
+      function financeEntryForm(kind, entry = null) {
         const isReceivable = kind === "receivable";
         const isExpense = kind === "expense";
-        const customerOptions = state.customers.map(customer => `<option value="${escapeHtml(customer.id)}">${escapeHtml(customer.name)}</option>`).join("");
-        const body = `<div class="field"><label for="financeDescription">Descrição</label><input id="financeDescription" name="description" maxlength="100" required placeholder="${isReceivable ? "Ex.: compra a prazo" : "Ex.: compra de embalagens"}"></div>
-          ${isReceivable ? `<div class="field" style="margin-top:12px"><label for="financeCustomer">Cliente</label><select id="financeCustomer" name="customerId" required><option value="">Selecione um cliente</option>${customerOptions}</select></div>` : `<div class="field" style="margin-top:12px"><label for="financeParty">${isExpense ? "Categoria / favorecido" : "Fornecedor / favorecido"}</label><input id="financeParty" name="partyName" maxlength="80" required placeholder="${isExpense ? "Ex.: entrega, aluguel, embalagem" : ""}"></div>`}
-          <div class="field" style="margin-top:12px"><label for="financeAmount">Valor total (R$)</label><input id="financeAmount" name="amount" type="number" min="0.01" step="0.01" required></div>
-          ${isExpense ? `<div class="field" style="margin-top:12px"><label for="expensePaymentMethod">Forma de pagamento</label><select id="expensePaymentMethod" name="method" required><option>Dinheiro</option><option>Pix</option><option>Cartão de crédito</option><option>Cartão de débito</option><option>Transferência</option></select>${currentCashSession() ? "" : `<p class="helper">Para lançar despesa paga em dinheiro, abra o caixa.</p>`}</div>` : `<div class="field" style="margin-top:12px"><label for="financeDueDate">Vencimento (opcional)</label><input id="financeDueDate" name="dueDate" type="date"></div>`}`;
-        openModal(isExpense ? "Lançar despesa" : isReceivable ? "Nova conta a receber" : "Nova conta a pagar", body, "financeEntry", kind);
+        const customerOptions = state.customers.map(customer => `<option value="${escapeHtml(customer.id)}" ${entry?.customerId === customer.id ? "selected" : ""}>${escapeHtml(customer.name)}</option>`).join("");
+        const paymentMethod = entry?.payments?.[0]?.method || "Não informado";
+        const body = `<div class="field"><label for="financeDescription">Descrição</label><input id="financeDescription" name="description" maxlength="100" required value="${escapeHtml(entry?.description || "")}" placeholder="${isReceivable ? "Ex.: venda a prazo" : isExpense ? "Ex.: compra de embalagens" : "Ex.: conta de energia"}"></div>
+          ${isReceivable ? `<div class="field" style="margin-top:12px"><label for="financeCustomer">Cliente</label><select id="financeCustomer" name="customerId" required><option value="">Selecione um cliente</option>${customerOptions}</select></div>` : `<div class="field" style="margin-top:12px"><label for="financeParty">${isExpense ? "Categoria / favorecido" : "Fornecedor / favorecido"}</label><input id="financeParty" name="partyName" maxlength="80" required value="${escapeHtml(entry?.partyName || "")}" placeholder="${isExpense ? "Ex.: entrega, aluguel, embalagem" : "Ex.: fornecedor"}"></div>`}
+          <div class="field" style="margin-top:12px"><label for="financeAmount">Valor total (R$)</label><input id="financeAmount" name="amount" type="number" min="${entry && !isExpense ? number(entry.paidAmount).toFixed(2) : "0.01"}" step="0.01" required value="${entry ? number(entry.amount).toFixed(2) : ""}"></div>
+          ${isExpense ? entry
+            ? `<p class="helper" style="margin-top:12px">Forma de pagamento registrada: ${escapeHtml(paymentMethod)}. O histórico será mantido.</p>`
+            : `<div class="field" style="margin-top:12px"><label for="expensePaymentMethod">Forma de pagamento</label><select id="expensePaymentMethod" name="method" required><option>Dinheiro</option><option>Pix</option><option>Cartão de crédito</option><option>Cartão de débito</option><option>Transferência</option></select>${currentCashSession() ? "" : `<p class="helper">Para lançar despesa paga em dinheiro, abra o caixa.</p>`}</div>`
+            : `<div class="field" style="margin-top:12px"><label for="financeDueDate">Vencimento (opcional)</label><input id="financeDueDate" name="dueDate" type="date" value="${escapeHtml(entry?.dueDate || "")}"></div>`}`;
+        const title = entry ? "Editar lançamento" : isExpense ? "Lançar despesa" : isReceivable ? "Nova conta a receber" : "Nova conta a pagar";
+        openModal(title, body, entry ? "financeEntryEdit" : "financeEntry", entry ? entry.id : kind);
       }
 
       function saveFinanceEntry(form) {
@@ -1709,9 +1721,11 @@
         const amount = roundMoney(number(data.get("amount")));
         const isExpense = kind === "expense";
         const method = isExpense ? String(data.get("method") || "") : "";
+        const description = String(data.get("description") || "").trim();
+        const partyName = customer?.name || String(data.get("partyName") || "").trim();
         const session = currentCashSession();
-        if (!amount || (kind === "receivable" && !customer)) {
-          showToast("Informe um valor válido e selecione o cliente da conta a receber.");
+        if (!description || !amount || (kind === "receivable" && !customer) || (!customer && !partyName)) {
+          showToast("Informe a descrição, a pessoa ou categoria e um valor válido para o lançamento.");
           return;
         }
         if (isExpense && method === "Dinheiro" && !session) {
@@ -1722,8 +1736,8 @@
         const entry = {
           id: `finance-${Date.now()}`,
           kind,
-          description: String(data.get("description") || "").trim(),
-          partyName: customer?.name || String(data.get("partyName") || "").trim(),
+          description,
+          partyName,
           customerId: customer?.id || null,
           saleId: null,
           amount,
@@ -1746,6 +1760,63 @@
         closeModal();
         renderFinance();
         showToast(kind === "receivable" ? "Conta a receber registrada." : isExpense ? "Despesa lançada e registrada no fluxo financeiro." : "Conta a pagar registrada.");
+      }
+
+      function saveFinanceEntryEdit(form) {
+        const entry = state.financeEntries.find(item => item.id === form.dataset.id);
+        if (!entry || entry.saleId) {
+          showToast("Este lançamento está vinculado a uma venda e não pode ser editado por aqui.");
+          return;
+        }
+        const data = new FormData(form);
+        const description = String(data.get("description") || "").trim();
+        const amount = roundMoney(number(data.get("amount")));
+        const customer = entry.kind === "receivable" ? state.customers.find(item => item.id === data.get("customerId")) : null;
+        const partyName = customer?.name || String(data.get("partyName") || "").trim();
+        if (!description || !partyName || !amount || (entry.kind === "receivable" && !customer)) {
+          showToast("Informe a descrição, a pessoa ou categoria e um valor válido para o lançamento.");
+          return;
+        }
+        if (entry.kind !== "expense" && amount < number(entry.paidAmount)) {
+          showToast("O valor total não pode ser menor que os pagamentos já registrados.");
+          return;
+        }
+        const previousEntry = JSON.parse(JSON.stringify(entry));
+        entry.description = description;
+        entry.partyName = partyName;
+        entry.customerId = customer?.id || null;
+        entry.amount = amount;
+        if (entry.kind === "expense") {
+          entry.paidAmount = amount;
+          if (entry.payments?.length) entry.payments[0].amount = amount;
+        } else {
+          entry.dueDate = String(data.get("dueDate") || "");
+        }
+        if (!saveState()) {
+          Object.assign(entry, previousEntry);
+          return;
+        }
+        closeModal();
+        renderFinance();
+        showToast("Lançamento atualizado.");
+      }
+
+      function deleteFinanceEntry(entry) {
+        if (!entry || entry.saleId) {
+          showToast("Este lançamento está vinculado a uma venda e não pode ser excluído por aqui.");
+          return;
+        }
+        const description = String(entry.description || "").trim() || "Sem descrição";
+        if (!confirm(`Excluir "${description}"? O histórico de pagamentos também será removido e o saldo do caixa poderá mudar.`)) return;
+        const index = state.financeEntries.findIndex(item => item.id === entry.id);
+        if (index < 0) return;
+        state.financeEntries.splice(index, 1);
+        if (!saveState()) {
+          state.financeEntries.splice(index, 0, entry);
+          return;
+        }
+        renderFinance();
+        showToast("Lançamento excluído.");
       }
 
       function openFinanceSettlement(entry) {
@@ -2845,6 +2916,13 @@
         if (action.dataset.action === "new-finance-receivable") financeEntryForm("receivable");
         if (action.dataset.action === "new-finance-payable") financeEntryForm("payable");
         if (action.dataset.action === "new-finance-expense") financeEntryForm("expense");
+        if (action.dataset.action === "edit-finance-entry") {
+          const entry = state.financeEntries.find(item => item.id === id);
+          if (entry) financeEntryForm(entry.kind, entry);
+        }
+        if (action.dataset.action === "delete-finance-entry") {
+          deleteFinanceEntry(state.financeEntries.find(item => item.id === id));
+        }
         if (action.dataset.action === "clear-finance-filters") {
           financeDateFilter = "";
           financeSearch = "";
@@ -2916,6 +2994,7 @@
         if (form.dataset.type === "closeCash") saveCashSession(form, true);
         if (form.dataset.type === "receivePayment") saveReceivedPayment(form);
         if (form.dataset.type === "financeEntry") saveFinanceEntry(form);
+        if (form.dataset.type === "financeEntryEdit") saveFinanceEntryEdit(form);
         if (form.dataset.type === "financePayment") saveFinanceSettlement(form);
       });
       document.addEventListener("keydown", event => { if (event.key === "Escape") closeModal(); });
