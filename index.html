@@ -75,6 +75,7 @@
     .user-avatar { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; color: var(--green); background: var(--green-soft); font-weight: 800; }
     .content { width: min(1120px, 100%); margin: 0 auto; padding: 34px 38px 55px; }
     .page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 25px; }
+    .page-heading-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
     .eyebrow { margin-bottom: 7px; color: var(--green); font-size: 11px; font-weight: 750; letter-spacing: 1.1px; text-transform: uppercase; }
     h1 { margin: 0; font-size: clamp(24px, 3vw, 32px); letter-spacing: -1.1px; }
     .subtitle { margin: 7px 0 0; color: var(--muted); font-size: 13px; }
@@ -89,6 +90,7 @@
     .button:disabled { cursor: not-allowed; opacity: .5; transform: none; }
     .button.small { min-height: 32px; padding: 0 11px; font-size: 11px; }
     .button.danger { color: var(--red); }
+    .button.rounded { border-radius: 999px; }
     .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 13px; margin-bottom: 21px; }
     .stat-card, .panel, .product-card { border: 1px solid var(--line); border-radius: 13px; background: var(--surface); }
     .stat-card { min-height: 116px; padding: 17px 18px; }
@@ -249,6 +251,7 @@
     .orders-empty { padding: 18px 8px; border: 1px dashed #d6dbd2; border-radius: 9px; color: var(--muted); background: rgba(255,255,255,.55); text-align: center; font-size: 10px; }
     .order-card-actions .button.receipt-button { border-color: #dce5da; color: var(--green); background: #f5f8f3; }
     .order-card-actions .order-details-trigger { width: 36px; height: 34px; justify-self: end; padding: 0; }
+    .orders-completed-list { display: grid; gap: 10px; }
     .order-details-list { display: grid; gap: 11px; }
     .order-details-section { padding-bottom: 11px; border-bottom: 1px solid var(--line); }
     .order-details-section:last-of-type { padding-bottom: 0; border-bottom: 0; }
@@ -259,7 +262,8 @@
     .order-details-total { display: flex; justify-content: space-between; margin-top: 7px; font-size: 15px; font-weight: 800; }
     .order-details-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 15px; }
     #modalForm[data-type="orderDetails"] .modal-footer { display: none; }
-    .orders-cancelled, .orders-completed { margin-top: 15px; }
+    #modalForm[data-type="completedOrders"] .modal-footer { display: none; }
+    .orders-cancelled { margin-top: 15px; }
     .customer-item { overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
     .customer-item-top { display: flex; align-items: center; gap: 8px; padding: 5px 7px 5px 13px; }
     .customer-summary { display: flex; min-width: 0; flex: 1; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 3px; border: 0; color: var(--ink); background: transparent; text-align: left; }
@@ -391,7 +395,9 @@
       .topbar { height: 58px; padding: 0 17px; }
       .user-chip > span:last-child { display: none; }
       .content { padding: 23px 16px 30px; }
-      .page-heading { align-items: flex-start; margin-bottom: 19px; }
+      .page-heading { align-items: flex-start; flex-wrap: wrap; margin-bottom: 19px; }
+      .page-heading-actions { width: 100%; }
+      .page-heading-actions .button { flex: 1; }
       .page-heading .button { min-height: 36px; padding: 0 10px; font-size: 10px; }
       .subtitle { max-width: 260px; font-size: 11px; line-height: 1.45; }
       .stats { gap: 9px; margin-bottom: 13px; }
@@ -1727,7 +1733,7 @@
           return `<section class="orders-column"><div class="orders-column-head"><h2>${column.label}</h2><span class="orders-column-count">${orders.length}</span></div><div class="orders-column-list">${orders.map(card).join("") || `<div class="orders-empty">Nenhum pedido nesta etapa.</div>`}</div></section>`;
         }).join("");
         document.getElementById("pageContent").innerHTML = `
-          <div class="page-heading"><div><div class="eyebrow">Acompanhe a operação</div><h1>Pedidos</h1><p class="subtitle">Veja cada pedido por etapa e atualize o andamento com um toque.</p></div><button class="button" data-page="vendas">＋ Nova venda</button></div>
+          <div class="page-heading"><div><div class="eyebrow">Acompanhe a operação</div><h1>Pedidos</h1><p class="subtitle">Veja cada pedido por etapa e atualize o andamento com um toque.</p></div><div class="page-heading-actions"><button class="button rounded" type="button" data-completed-orders>Pedidos finalizados (${completedOrders.length})</button><button class="button" data-page="vendas">＋ Nova venda</button></div></div>
           <section class="orders-summary">
             <article class="orders-summary-card"><span>Em andamento</span><strong>${activeOrders.length}</strong></article>
             <article class="orders-summary-card"><span>Novos</span><strong>${newOrders.length}</strong></article>
@@ -1736,8 +1742,13 @@
           </section>
           ${pendingOrders.length ? `<div class="callout" style="margin-bottom:14px"><span>ⓘ</span><div><b>${pendingOrders.length} pedido(s) aguardando Pix</b>Esses pedidos só entram na fila de preparo após confirmação do pagamento.</div></div>` : ""}
           <div class="orders-board">${columns}</div>
-          ${completedOrders.length ? `<details class="orders-completed"><summary class="button">Pedidos finalizados (${completedOrders.length})</summary><div class="orders-board" style="grid-template-columns:minmax(230px, 1fr);margin-top:10px"><section class="orders-column"><div class="orders-column-list">${completedOrders.map(card).join("")}</div></section></div></details>` : ""}
           ${cancelledOrders.length ? `<details class="orders-cancelled"><summary class="button">Pedidos cancelados (${cancelledOrders.length})</summary><div class="orders-board" style="grid-template-columns:minmax(230px, 1fr);margin-top:10px"><section class="orders-column"><div class="orders-column-list">${cancelledOrders.map(card).join("")}</div></section></div></details>` : ""}`;
+        document.querySelector("[data-completed-orders]").addEventListener("click", () => {
+          const body = completedOrders.length
+            ? `<div class="orders-completed-list">${completedOrders.map(card).join("")}</div>`
+            : `<div class="empty-state">Nenhum pedido finalizado hoje.</div>`;
+          openModal(`Pedidos finalizados (${completedOrders.length})`, body, "completedOrders");
+        });
       }
 
       function showOrderDetails(sale) {
