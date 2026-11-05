@@ -1049,17 +1049,27 @@
             digitalFulfillment = "delivery";
             digitalPaymentMethod = "cash_on_delivery";
             if (publicOrdering.acceptingOrders) {
-              const { data: checkoutCapabilities, error: checkoutCapabilitiesError } = await supabaseClient.functions.invoke("create-cash-order", {
+              const paymentMethods = new Set();
+              const { data: cashCapabilities, error: cashCapabilitiesError } = await supabaseClient.functions.invoke("create-cash-order", { method: "GET" });
+              if (cashCapabilitiesError) {
+                console.warn("Não foi possível verificar a finalização em dinheiro:", cashCapabilitiesError);
+              } else if (Array.isArray(cashCapabilities?.paymentMethods)) {
+                cashCapabilities.paymentMethods
+                  .filter(method => ["cash_on_delivery", "cash_on_pickup"].includes(method))
+                  .forEach(method => paymentMethods.add(method));
+              }
+
+              const { data: pixCapabilities, error: pixCapabilitiesError } = await supabaseClient.functions.invoke("create-cash-order", {
                 body: { action: "payment_methods", businessId: publicBusinessId }
               });
-              if (checkoutCapabilitiesError) {
-                console.warn("Não foi possível verificar as formas de pagamento disponíveis:", checkoutCapabilitiesError);
-              } else if (Array.isArray(checkoutCapabilities?.paymentMethods)) {
-                supportedDigitalPaymentMethods = checkoutCapabilities.paymentMethods.filter(method =>
-                  typeof method === "string"
-                  && ["cash_on_delivery", "cash_on_pickup", "pix"].includes(method)
-                );
+              if (pixCapabilitiesError) {
+                console.warn("Pix online indisponível até atualizar a função de pedidos no Supabase:", pixCapabilitiesError);
+              } else if (Array.isArray(pixCapabilities?.paymentMethods)) {
+                pixCapabilities.paymentMethods
+                  .filter(method => ["cash_on_delivery", "cash_on_pickup", "pix"].includes(method))
+                  .forEach(method => paymentMethods.add(method));
               }
+              supportedDigitalPaymentMethods = [...paymentMethods];
             }
           }
           renderPublicMenu();
