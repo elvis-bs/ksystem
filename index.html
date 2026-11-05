@@ -1631,7 +1631,9 @@
         const newOrders = sales.filter(sale => (sale.status || "Recebido") === "Recebido");
         const completedOrders = sales.filter(sale => sale.status === "Concluído" && localDateKey(sale.createdAt) === today);
         const pendingOrders = sales.filter(sale => sale.onlineOrderId && sale.paymentMethod === "pix" && sale.paymentStatus === "pending");
-        const cancelledOrders = [...sales].filter(sale => sale.status === "Cancelado").sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        const cancelledOrders = [...sales]
+          .filter(sale => sale.status === "Cancelado" && localDateKey(sale.createdAt) === today)
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         const card = sale => {
           const createdAt = new Date(sale.createdAt);
           const elapsedMinutes = Math.max(0, Math.floor((Date.now() - createdAt.getTime()) / 60000));
