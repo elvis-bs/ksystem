@@ -630,6 +630,11 @@
             category: product.category,
             active: true,
             price: number(product.price),
+            ingredients: product.category === "lanche"
+              ? (product.recipe || [])
+                .map(item => sourceState.ingredients.find(ingredient => ingredient.id === item.ingredientId)?.name)
+                .filter(Boolean)
+              : [],
             sizes: (product.sizes || []).map(option => ({
               name: option.name,
               price: number(option.price),
@@ -1913,8 +1918,11 @@
           const options = productOptions(product);
           const prices = options.map(option => number(option.price));
           const priceLabel = prices.length > 1 ? `A partir de ${money(Math.min(...prices))}` : money(prices[0]);
+          const sandwichDescription = product.ingredients?.length
+            ? `Vai no lanche: ${product.ingredients.map(escapeHtml).join(", ")}`
+            : "Ingredientes não informados";
           return `<details class="digital-product-card" data-public-product="${escapeHtml(product.id)}">
-            <summary class="digital-product-summary"><div><h3>${categoryIcon(product.category)} ${escapeHtml(product.name)}</h3><p>${product.category === "pizza" ? `${options.length} tamanho(s) · escolha o tamanho e depois os sabores` : product.category === "bebida" ? "Bebida gelada" : "Feito na hora"}</p></div><strong>${priceLabel}</strong></summary>
+            <summary class="digital-product-summary"><div><h3>${categoryIcon(product.category)} ${escapeHtml(product.name)}</h3><p>${product.category === "pizza" ? `${options.length} tamanho(s) · escolha o tamanho e depois os sabores` : product.category === "bebida" ? "Bebida gelada" : sandwichDescription}</p></div><strong>${priceLabel}</strong></summary>
             <div class="digital-product-options"><div class="field"><label>Opção / tamanho</label><select data-public-option>${product.category === "pizza" ? `<option value="">Escolha o tamanho</option>` : ""}${options.map((option, index) => `<option value="${index}">${escapeHtml(option.name)} · ${money(option.price)}</option>`).join("")}</select></div>
               ${product.category === "pizza" ? `<div data-pizza-flavor-container></div><div data-pizza-border-container></div>` : ""}
               ${(product.addons || []).length ? `<div class="option-group"><span class="section-label">Adicionais deste produto (opcional)</span><div class="sale-addons">${product.addons.map((addon, index) => `<label class="addon-choice"><input type="checkbox" data-public-addon="${index}">${escapeHtml(addon.name)} + ${money(addon.price)}</label>`).join("")}</div></div>` : ""}
