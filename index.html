@@ -259,7 +259,7 @@
     .order-details-total { display: flex; justify-content: space-between; margin-top: 7px; font-size: 15px; font-weight: 800; }
     .order-details-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 15px; }
     #modalForm[data-type="orderDetails"] .modal-footer { display: none; }
-    .orders-cancelled { margin-top: 15px; }
+    .orders-cancelled, .orders-completed { margin-top: 15px; }
     .customer-item { overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
     .customer-item-top { display: flex; align-items: center; gap: 8px; padding: 5px 7px 5px 13px; }
     .customer-summary { display: flex; min-width: 0; flex: 1; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 3px; border: 0; color: var(--ink); background: transparent; text-align: left; }
@@ -1683,10 +1683,9 @@
         const statusColumns = [
           { status: "Recebido", label: "Novos" },
           { status: "Em preparo", label: "Preparando" },
-          { status: "Saiu para entrega", label: "Na entrega" },
-          { status: "Concluído", label: "Finalizados" }
+          { status: "Saiu para entrega", label: "Na entrega" }
         ];
-        const activeStatuses = statusColumns.slice(0, 3).map(column => column.status);
+        const activeStatuses = statusColumns.map(column => column.status);
         const sales = allSales();
         const today = localDateKey(new Date());
         const activeOrders = sales.filter(sale => activeStatuses.includes(sale.status || "Recebido"));
@@ -1722,10 +1721,9 @@
           </article>`;
         };
         const columns = statusColumns.map(column => {
-          const orders = [...sales].filter(sale =>
-            (sale.status || "Recebido") === column.status
-            && (column.status !== "Concluído" || localDateKey(sale.createdAt) === today)
-          ).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+          const orders = [...sales]
+            .filter(sale => (sale.status || "Recebido") === column.status)
+            .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
           return `<section class="orders-column"><div class="orders-column-head"><h2>${column.label}</h2><span class="orders-column-count">${orders.length}</span></div><div class="orders-column-list">${orders.map(card).join("") || `<div class="orders-empty">Nenhum pedido nesta etapa.</div>`}</div></section>`;
         }).join("");
         document.getElementById("pageContent").innerHTML = `
@@ -1738,6 +1736,7 @@
           </section>
           ${pendingOrders.length ? `<div class="callout" style="margin-bottom:14px"><span>ⓘ</span><div><b>${pendingOrders.length} pedido(s) aguardando Pix</b>Esses pedidos só entram na fila de preparo após confirmação do pagamento.</div></div>` : ""}
           <div class="orders-board">${columns}</div>
+          ${completedOrders.length ? `<details class="orders-completed"><summary class="button">Pedidos finalizados (${completedOrders.length})</summary><div class="orders-board" style="grid-template-columns:minmax(230px, 1fr);margin-top:10px"><section class="orders-column"><div class="orders-column-list">${completedOrders.map(card).join("")}</div></section></div></details>` : ""}
           ${cancelledOrders.length ? `<details class="orders-cancelled"><summary class="button">Pedidos cancelados (${cancelledOrders.length})</summary><div class="orders-board" style="grid-template-columns:minmax(230px, 1fr);margin-top:10px"><section class="orders-column"><div class="orders-column-list">${cancelledOrders.map(card).join("")}</div></section></div></details>` : ""}`;
       }
 
