@@ -247,6 +247,7 @@
     .order-card-actions .button { min-height: 32px; width: 100%; padding: 0 8px; font-size: 10px; }
     .order-card-actions .order-status-select { min-width: 0; width: 100%; }
     .orders-empty { padding: 18px 8px; border: 1px dashed #d6dbd2; border-radius: 9px; color: var(--muted); background: rgba(255,255,255,.55); text-align: center; font-size: 10px; }
+    .order-card-actions .button.receipt-button { border-color: #dce5da; color: var(--green); background: #f5f8f3; }
     .orders-cancelled { margin-top: 15px; }
     .customer-item { overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
     .customer-item-top { display: flex; align-items: center; gap: 8px; padding: 5px 7px 5px 13px; }
@@ -540,6 +541,7 @@
           { id: "pizza-size-media", name: "Média", flavorLimit: 2 },
           { id: "pizza-size-grande", name: "Grande", flavorLimit: 3 }
         ],
+        receiptSettings: { storeName: "", phone: "", address: "", cnpj: "", footer: "Obrigado pela preferência!" },
         onlineOrdering: { published: false, enabled: false, deliveryFee: 0, pickupEnabled: false, pickupAddress: "" },
         customers: [],
         sales: [],
@@ -580,6 +582,7 @@
       let financeDateFilter = localDateKey(new Date());
       let financeSearch = "";
       let financeKindFilter = "all";
+      let lastRegisteredSaleId = null;
       let editingId = null;
       let editingType = null;
 
@@ -604,6 +607,10 @@
             ...parsed,
             pizzaSizes: normalizePizzaSizes(parsed.pizzaSizes, products),
             pizzaPricingMode: parsed.pizzaPricingMode === "highest" ? "highest" : "size",
+            receiptSettings: {
+              ...JSON.parse(JSON.stringify(seedData.receiptSettings)),
+              ...(parsed.receiptSettings || {})
+            },
             onlineOrdering: {
               published: parsed.onlineOrdering?.published === true || parsed.onlineOrdering?.enabled === true,
               enabled: parsed.onlineOrdering?.enabled === true,
@@ -625,6 +632,10 @@
 
       function saveState() {
         try {
+          state.receiptSettings = {
+            ...JSON.parse(JSON.stringify(seedData.receiptSettings)),
+            ...(state.receiptSettings || {})
+          };
           localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         } catch (error) {
           console.error("Não foi possível salvar os dados:", error);
@@ -735,6 +746,53 @@
         return [...state.sales, ...onlineOrders.map(onlineOrderSale)];
       }
 
+      function printReceipt(sale) {
+        if (!sale) {
+          showToast("Não foi possível encontrar os dados deste pedido para imprimir.");
+          return;
+        }
+        const settings = { ...seedData.receiptSettings, ...(state.receiptSettings || {}) };
+        const receiptWindow = window.open("", "_blank", "width=420,height=720");
+        if (!receiptWindow) {
+          showToast("Permita janelas pop-up para imprimir o cupom.");
+          return;
+        }
+        const orderCode = String(sale.onlineOrderId || sale.id || "").slice(-5).toUpperCase();
+        const orderItems = Array.isArray(sale.items) ? sale.items : [];
+        const itemSubtotal = orderItems.reduce((sum, item) => sum + saleLineTotal(item), 0);
+        const itemRows = orderItems.map(item => {
+          const quantity = Math.max(1, number(item.quantity));
+          const lineTotal = saleLineTotal(item);
+          const details = [
+            item.optionName && item.optionName !== "Padrão" ? item.optionName : "",
+            item.border?.name && item.border.name !== "Sem borda" ? item.border.name : "",
+            ...(item.addons || []).map(addon => addon.name)
+          ].filter(Boolean);
+          return `<div class="receipt-item"><div class="receipt-row"><span>${quantity} × ${escapeHtml(item.name || "Produto")}</span><strong>${money(lineTotal)}</strong></div>${details.length ? `<p class="receipt-item-details">${escapeHtml(details.join(" · "))}</p>` : ""}</div>`;
+        }).join("");
+        const location = sale.fulfillment === "pickup"
+          ? sale.pickupAddress || settings.address
+          : sale.address || "";
+        const deliveryFee = Math.max(0, number(sale.deliveryFee));
+        const total = number(sale.total) || itemSubtotal + deliveryFee;
+        const createdAt = new Date(sale.createdAt);
+        const dateLabel = Number.isNaN(createdAt.getTime()) ? "Data não informada" : createdAt.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+        const receiptHtml = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Cupom ${escapeHtml(orderCode)}</title><style>
+          @page{size:80mm auto;margin:3mm}*{box-sizing:border-box}body{width:74mm;margin:0;color:#000;font-family:Arial,sans-serif;font-size:10px}.receipt-center{text-align:center}h1{margin:0 0 4px;font-size:17px}p{margin:3px 0;line-height:1.35}.receipt-rule{margin:8px 0;border-top:1px dashed #000}.receipt-row{display:flex;justify-content:space-between;gap:8px;margin:3px 0}.receipt-item{margin:6px 0}.receipt-item-details{margin:2px 0 0 15px;font-size:9px}.receipt-total{font-size:13px;font-weight:700}.receipt-footer{margin-top:10px;text-align:center;white-space:pre-wrap}.receipt-disclaimer{margin-top:10px;text-align:center;font-size:8px}
+          </style></head><body><main class="receipt">
+          <header class="receipt-center"><h1>${escapeHtml(settings.storeName || "Meu estabelecimento")}</h1>${settings.phone ? `<p>${escapeHtml(settings.phone)}</p>` : ""}${settings.address ? `<p>${escapeHtml(settings.address)}</p>` : ""}${settings.cnpj ? `<p>CNPJ: ${escapeHtml(settings.cnpj)}</p>` : ""}</header>
+          <div class="receipt-rule"></div><div class="receipt-center"><strong>${sale.onlineOrderId ? "PEDIDO ONLINE" : "VENDA"}</strong><p>Pedido #${escapeHtml(orderCode)}</p><p>${escapeHtml(dateLabel)}</p></div>
+          <div class="receipt-rule"></div><p><strong>Cliente:</strong> ${escapeHtml(sale.customerName || "Balcão")}</p>${sale.customerPhone ? `<p><strong>Telefone:</strong> ${escapeHtml(sale.customerPhone)}</p>` : ""}${sale.fulfillment ? `<p><strong>Recebimento:</strong> ${sale.fulfillment === "pickup" ? "Retirada no local" : "Entrega"}</p>` : ""}${location ? `<p><strong>${sale.fulfillment === "pickup" ? "Retirar em" : "Endereço"}:</strong> ${escapeHtml(location)}</p>` : ""}
+          <div class="receipt-rule"></div>${itemRows || "<p>Itens não informados.</p>"}<div class="receipt-rule"></div><div class="receipt-row"><span>Subtotal</span><span>${money(itemSubtotal)}</span></div>${deliveryFee ? `<div class="receipt-row"><span>Taxa de entrega</span><span>${money(deliveryFee)}</span></div>` : ""}<div class="receipt-row receipt-total"><span>TOTAL</span><span>${money(total)}</span></div>
+          <div class="receipt-rule"></div><p><strong>Pagamento:</strong> ${escapeHtml(sale.payment || "Não informado")}</p>${sale.notes ? `<p><strong>Observação:</strong> ${escapeHtml(sale.notes)}</p>` : ""}<footer class="receipt-footer">${escapeHtml(settings.footer || "")}</footer><p class="receipt-disclaimer">Cupom de pedido — não é documento fiscal.</p></main></body></html>`;
+        receiptWindow.document.open();
+        receiptWindow.document.write(receiptHtml);
+        receiptWindow.document.close();
+        receiptWindow.focus();
+        receiptWindow.print();
+        receiptWindow.close();
+      }
+
       async function refreshOnlineOrders() {
         if (!currentUser || !onlineMenuReady) return;
         const { data, error } = await supabaseClient
@@ -825,6 +883,10 @@
           if (insertError) throw insertError;
           localStorage.setItem(LEGACY_IMPORT_KEY, "true");
         }
+        state.receiptSettings = {
+          ...JSON.parse(JSON.stringify(seedData.receiptSettings)),
+          ...(state.receiptSettings || {})
+        };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         const { error: publicMenuError } = await supabaseClient
           .from("public_menus")
@@ -1240,7 +1302,7 @@
           </div>`).join("") : `<div class="empty-state">Adicione produtos para começar a venda.</div>`;
         const total = saleCart.reduce((sum, item) => sum + saleLineTotal(item), 0);
         document.getElementById("pageContent").innerHTML = `
-          <div class="page-heading"><div><div class="eyebrow">${standalonePdv ? "Ponto de venda" : "Caixa do delivery"}</div>${standalonePdv ? `<div class="pdv-title"><span class="stat-icon">＋</span><h1>PDV</h1></div>` : `<h1>Vendas e pedidos</h1>`}<p class="subtitle">${standalonePdv ? "Registre vendas rapidamente no ponto de atendimento." : "Monte um pedido, escolha o cliente e registre a venda."}</p></div>${standalonePdv ? `<span class="pill ${currentCashSession() ? "" : "orange"}">${currentCashSession() ? "Caixa aberto" : "Caixa fechado"}</span>` : `<div class="filters"><button class="button" data-action="open-pdv">Abrir PDV ↗</button><button class="button" data-page="clientes">♙ Cadastrar cliente</button></div>`}</div>
+          <div class="page-heading"><div><div class="eyebrow">${standalonePdv ? "Ponto de venda" : "Caixa do delivery"}</div>${standalonePdv ? `<div class="pdv-title"><span class="stat-icon">＋</span><h1>PDV</h1></div>` : `<h1>Vendas e pedidos</h1>`}<p class="subtitle">${standalonePdv ? "Registre vendas rapidamente no ponto de atendimento." : "Monte um pedido, escolha o cliente e registre a venda."}</p></div>${standalonePdv ? `<div class="filters"><span class="pill ${currentCashSession() ? "" : "orange"}">${currentCashSession() ? "Caixa aberto" : "Caixa fechado"}</span>${lastRegisteredSaleId ? `<button type="button" class="button small" data-action="print-receipt" data-id="${escapeHtml(lastRegisteredSaleId)}">Imprimir último cupom</button>` : ""}</div>` : `<div class="filters"><button class="button" data-action="open-pdv">Abrir PDV ↗</button><button class="button" data-page="clientes">♙ Cadastrar cliente</button></div>`}</div>
           <section class="sale-grid">
             <div class="sale-builder">
               <article class="panel"><div class="panel-heading"><h2>Adicionar produtos</h2><span>${products.length} produto${products.length === 1 ? " disponível" : "s disponíveis"}</span></div>
@@ -1256,7 +1318,7 @@
               </article>
               ${standalonePdv ? "" : `<article class="panel"><div class="panel-heading"><h2>Pedidos de hoje</h2><span>${history.length} pedido${history.length === 1 ? "" : "s"}</span></div>
                 ${!currentCashSession() ? `<div class="callout" style="margin:0 0 12px"><span>ⓘ</span><div><b>Caixa fechado</b>Abra o caixa para registrar vendas e receber pedidos. <button class="button small" data-page="caixa">Abrir caixa</button></div></div>` : ""}
-                ${history.length ? `<div class="table-wrap"><table><thead><tr><th>Pedido</th><th>Cliente</th><th>Itens</th><th>Total</th><th>Pagamento</th><th>Recebimento</th><th>Status</th></tr></thead><tbody>${history.map(sale => `<tr><td>#${escapeHtml(sale.id.slice(-5))}<br><span class="helper">${new Date(sale.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span></td><td>${escapeHtml(sale.customerName || "Balcão")}</td><td>${sale.items.reduce((sum, item) => sum + number(item.quantity), 0)}</td><td>${money(sale.total)}</td><td>${escapeHtml(sale.payment)}</td><td>${sale.paid ? `<span class="pill">Pago</span>` : sale.payment === "Crediário" ? `<button class="button small" data-page="financeiro">Em aberto</button>` : sale.onlineOrderId ? `<span class="pill orange">${sale.paymentStatus === "pending" ? "Aguardando Pix" : "Pix não aprovado"}</span>` : `<button class="button small" data-action="receive-sale" data-id="${sale.id}" ${currentCashSession() ? "" : "disabled"}>Receber</button>`}</td><td>${sale.onlineOrderId && !sale.paid ? `<span class="pill orange">${sale.paymentStatus === "pending" ? "Aguardando Pix" : "Cancelado"}</span>` : `<select class="order-status-select" data-sale-status="${escapeHtml(sale.id)}" aria-label="Status do pedido">${["Recebido", "Em preparo", "Saiu para entrega", "Concluído", "Cancelado"].map(status => `<option ${sale.status === status ? "selected" : ""}>${status}</option>`).join("")}</select>`}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">Nenhum pedido registrado hoje. Consulte vendas de outros dias em Relatórios.</div>`}
+                ${history.length ? `<div class="table-wrap"><table><thead><tr><th>Pedido</th><th>Cliente</th><th>Itens</th><th>Total</th><th>Pagamento</th><th>Recebimento</th><th>Status</th></tr></thead><tbody>${history.map(sale => `<tr><td>#${escapeHtml(sale.id.slice(-5))}<br><span class="helper">${new Date(sale.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span><br><button type="button" class="button small" data-action="print-receipt" data-id="${escapeHtml(sale.id)}">Imprimir cupom</button></td><td>${escapeHtml(sale.customerName || "Balcão")}</td><td>${(sale.items || []).reduce((sum, item) => sum + number(item.quantity), 0)}</td><td>${money(sale.total)}</td><td>${escapeHtml(sale.payment || "Não informado")}</td><td>${sale.paid ? `<span class="pill">Pago</span>` : sale.payment === "Crediário" ? `<button class="button small" data-page="financeiro">Em aberto</button>` : sale.onlineOrderId ? `<span class="pill orange">${sale.paymentStatus === "pending" ? "Aguardando Pix" : "Pix não aprovado"}</span>` : `<button class="button small" data-action="receive-sale" data-id="${escapeHtml(sale.id)}" ${currentCashSession() ? "" : "disabled"}>Receber</button>`}</td><td>${sale.onlineOrderId && !sale.paid ? `<span class="pill orange">${sale.paymentStatus === "pending" ? "Aguardando Pix" : "Pix não aprovado"}</span>` : `<select class="order-status-select" data-sale-status="${escapeHtml(sale.id)}" aria-label="Status do pedido">${["Recebido", "Em preparo", "Saiu para entrega", "Concluído", "Cancelado"].map(status => `<option ${sale.status === status ? "selected" : ""}>${status}</option>`).join("")}</select>`}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">Nenhum pedido registrado hoje. Consulte vendas de outros dias em Relatórios.</div>`}
               </article>`}
             </div>
             <article class="panel"><div class="panel-heading"><h2>Resumo do pedido</h2><span>${saleCart.reduce((sum, item) => sum + number(item.quantity), 0)} item(ns)</span></div>
@@ -1478,6 +1540,7 @@
           if (isCredit) state.financeEntries.pop();
           return;
         }
+        lastRegisteredSaleId = sale.id;
         saleCart = [];
         renderSales();
         showToast(isCredit ? "Nota fiada registrada no contas a receber." : "Venda registrada com sucesso.");
@@ -1587,7 +1650,7 @@
             ${sale.fulfillment ? `<div class="order-card-meta"><span>${sale.fulfillment === "pickup" ? "Retirada no local" : "Entrega"}${sale.deliveryFee ? ` · taxa ${money(sale.deliveryFee)}` : ""}</span><span>${sale.paid ? "Pix pago" : sale.paymentMethod === "pix" ? "Aguardando Pix" : escapeHtml(sale.payment || "Pagamento na entrega")}</span></div>` : `<div class="order-card-meta"><span>${escapeHtml(sale.payment || "Pagamento pendente")}</span><span>${sale.paid ? "Pago" : "Pendente"}</span></div>`}
             ${sale.address ? `<div class="order-card-contact">${sale.fulfillment === "pickup" ? "Retirada em" : "Endereço"}: ${escapeHtml(sale.address)}</div>` : sale.pickupAddress ? `<div class="order-card-contact">Retirada em: ${escapeHtml(sale.pickupAddress)}</div>` : ""}
             ${sale.notes ? `<div class="order-card-contact">Obs.: ${escapeHtml(sale.notes)}</div>` : ""}
-            ${sale.onlineOrderId && sale.paymentMethod === "pix" && !sale.paid ? `<div class="order-card-actions"><span class="pill orange">${sale.paymentStatus === "pending" ? "Aguardando confirmação do Pix" : "Pagamento não aprovado"}</span></div>` : `<div class="order-card-actions">${nextStatus ? `<button type="button" class="button primary" data-action="advance-order" data-id="${escapeHtml(sale.id)}" data-status="${nextStatus}">${nextLabel} →</button>` : ""}<select class="order-status-select" data-sale-status="${escapeHtml(sale.id)}" aria-label="Alterar status do pedido">${statusOptions(sale.status || "Recebido")}</select></div>`}
+            ${sale.onlineOrderId && sale.paymentMethod === "pix" && !sale.paid ? `<div class="order-card-actions"><span class="pill orange">${sale.paymentStatus === "pending" ? "Aguardando confirmação do Pix" : "Pagamento não aprovado"}</span><button type="button" class="button receipt-button" data-action="print-receipt" data-id="${escapeHtml(sale.id)}">Imprimir cupom</button></div>` : `<div class="order-card-actions">${nextStatus ? `<button type="button" class="button primary" data-action="advance-order" data-id="${escapeHtml(sale.id)}" data-status="${nextStatus}">${nextLabel} →</button>` : ""}<select class="order-status-select" data-sale-status="${escapeHtml(sale.id)}" aria-label="Alterar status do pedido">${statusOptions(sale.status || "Recebido")}</select><button type="button" class="button receipt-button" data-action="print-receipt" data-id="${escapeHtml(sale.id)}">Imprimir cupom</button></div>`}
           </article>`;
         };
         const columns = statusColumns.map(column => {
@@ -2529,15 +2592,26 @@
       }
 
       function renderSettings() {
+        const receiptSettings = { ...seedData.receiptSettings, ...(state.receiptSettings || {}) };
         document.getElementById("pageContent").innerHTML = `
-          <div class="page-heading"><div><div class="eyebrow">Personalize seu sistema</div><h1>Configurações</h1><p class="subtitle">Ative apenas as categorias que fazem parte do seu delivery.</p></div></div>
+          <div class="page-heading"><div><div class="eyebrow">Personalize seu sistema</div><h1>Configurações</h1><p class="subtitle">Ajuste seu cardápio e os dados que aparecem nos cupons dos pedidos.</p></div></div>
           <div class="settings-list">
             <div class="setting-item"><div><strong>Trabalho com pizzas</strong><p>Mostra a categoria de pizzas no cardápio e permite cadastrar tamanhos, ficha técnica e adicionais.</p></div><label class="switch" aria-label="Ativar categoria de pizzas"><input id="pizzaToggle" type="checkbox" ${state.pizzaEnabled ? "checked" : ""}><span></span></label></div>
             ${state.pizzaEnabled ? `<div class="setting-item"><div><strong>Preço de pizzas com mais de um sabor</strong><p>Por tamanho: usa o preço do primeiro sabor na lista; mantenha os sabores com o mesmo preço nesse tamanho. Pelo sabor: cobra o maior preço entre os sabores.</p></div><div class="field pizza-price-control"><label for="pizzaPricingMode">Forma de cobrança</label><select id="pizzaPricingMode"><option value="size" ${state.pizzaPricingMode !== "highest" ? "selected" : ""}>Preço por tamanho</option><option value="highest" ${state.pizzaPricingMode === "highest" ? "selected" : ""}>Preço do sabor mais caro</option></select></div></div>` : ""}
             <div class="setting-item"><div><strong>Categoria de lanches</strong><p>Fichas técnicas com ingredientes, custo de produção e adicionais opcionais.</p></div><span class="pill">Sempre disponível</span></div>
             <div class="setting-item"><div><strong>Categoria de bebidas</strong><p>Informe o custo de compra de cada bebida para acompanhar sua margem.</p></div><span class="pill">Sempre disponível</span></div>
           </div>
-          <div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b>Seus dados ficam neste aparelho</b>Este protótipo salva as informações no armazenamento local do navegador. Para usar em vários celulares ou receber pedidos, será necessário conectar um servidor e um banco de dados.</div></div>`;
+          <section class="panel" style="margin-top:16px"><div class="panel-heading"><div><h2>Dados da loja no cupom</h2><p class="helper">Esses dados aparecem nos cupons impressos em bobina térmica de 80 mm.</p></div></div>
+            <form class="form-grid" id="receiptSettingsForm">
+              <div class="field full"><label for="receiptStoreName">Nome da loja</label><input id="receiptStoreName" name="storeName" maxlength="80" value="${escapeHtml(receiptSettings.storeName)}" placeholder="Nome do seu estabelecimento"></div>
+              <div class="field"><label for="receiptPhone">Telefone / WhatsApp</label><input id="receiptPhone" name="phone" type="tel" maxlength="30" value="${escapeHtml(receiptSettings.phone)}"></div>
+              <div class="field"><label for="receiptCnpj">CNPJ (opcional)</label><input id="receiptCnpj" name="cnpj" maxlength="24" value="${escapeHtml(receiptSettings.cnpj)}"></div>
+              <div class="field full"><label for="receiptAddress">Endereço</label><input id="receiptAddress" name="address" maxlength="180" value="${escapeHtml(receiptSettings.address)}"></div>
+              <div class="field full"><label for="receiptFooter">Mensagem no rodapé</label><input id="receiptFooter" name="footer" maxlength="120" value="${escapeHtml(receiptSettings.footer)}" placeholder="Obrigado pela preferência!"></div>
+              <div class="field full"><button class="button primary" type="submit">Salvar dados do cupom</button></div>
+            </form>
+          </section>
+          <div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b>Sobre o cupom</b>O cupom organiza os detalhes do pedido para impressão e não substitui um documento fiscal.</div></div>`;
         document.getElementById("pizzaToggle").addEventListener("change", event => {
           const previousValue = state.pizzaEnabled;
           state.pizzaEnabled = event.target.checked;
@@ -2562,6 +2636,26 @@
           render();
           showToast("Forma de cobrança das pizzas atualizada.");
         });
+        document.getElementById("receiptSettingsForm").addEventListener("submit", saveReceiptSettings);
+      }
+
+      function saveReceiptSettings(event) {
+        event.preventDefault();
+        const data = new FormData(event.currentTarget);
+        const previousSettings = state.receiptSettings;
+        state.receiptSettings = {
+          storeName: String(data.get("storeName") || "").trim(),
+          phone: String(data.get("phone") || "").trim(),
+          address: String(data.get("address") || "").trim(),
+          cnpj: String(data.get("cnpj") || "").trim(),
+          footer: String(data.get("footer") || "").trim()
+        };
+        if (!saveState()) {
+          state.receiptSettings = previousSettings;
+          return;
+        }
+        renderSettings();
+        showToast("Dados da loja para o cupom salvos.");
       }
 
       function openModal(title, bodyHtml, type, id = null) {
@@ -2957,6 +3051,10 @@
         if (action.dataset.action === "advance-order") {
           const sale = allSales().find(item => item.id === id);
           if (sale) advanceOrder(sale, action.dataset.status);
+        }
+        if (action.dataset.action === "print-receipt") {
+          const sale = allSales().find(item => item.id === id);
+          printReceipt(sale);
         }
         if (action.dataset.action === "print-report") window.print();
         if (action.dataset.action === "new-product") productForm();
