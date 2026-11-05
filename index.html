@@ -1613,32 +1613,8 @@
         onSuccess?.();
       }
 
-      function orderPreparationWhatsAppUrl(sale) {
-        let phone = String(sale.customerPhone || "").replace(/\D/g, "").replace(/^0+/, "");
-        if (phone.length === 10 || phone.length === 11) phone = `55${phone}`;
-        if (phone.length < 12 || phone.length > 15) return "";
-        const orderNumber = String(sale.id || "").slice(-5);
-        const message = `Olá, ${sale.customerName || "tudo bem"}! 🍕 Seu pedido #${orderNumber} já começou a ser preparado com carinho. Obrigado por escolher a gente! 💚`;
-        return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
-      }
-
       function advanceOrder(sale, status) {
-        const shouldNotifyCustomer = status === "Em preparo";
-        const whatsappUrl = shouldNotifyCustomer ? orderPreparationWhatsAppUrl(sale) : "";
-        const whatsappWindow = whatsappUrl ? window.open("about:blank", "_blank") : null;
-        if (whatsappWindow) whatsappWindow.opener = null;
-
-        changeSaleStatus(sale, status, () => {
-          if (!shouldNotifyCustomer) return;
-          if (!whatsappUrl) {
-            showToast("Status atualizado, mas o pedido não tem um WhatsApp válido.");
-          } else if (!whatsappWindow) {
-            showToast("Status atualizado. O navegador bloqueou a abertura do WhatsApp.");
-          } else {
-            whatsappWindow.location.href = whatsappUrl;
-            showToast("WhatsApp aberto com a mensagem pronta. Toque em Enviar para avisar o cliente.");
-          }
-        }, () => whatsappWindow?.close());
+        changeSaleStatus(sale, status);
       }
 
       function renderOrders() {
