@@ -2338,6 +2338,7 @@
             <form class="sale-checkout" id="digitalCheckout"><div class="form-grid">
               <div class="field"><label for="digitalName">Seu nome</label><input id="digitalName" name="name" required maxlength="70"></div>
               <div class="field"><label for="digitalPhone">WhatsApp / telefone</label><input id="digitalPhone" name="phone" type="tel" required maxlength="25"></div>
+              <div class="field full" id="digitalEmailField" ${digitalPaymentMethod === "pix" ? "" : "hidden"}><label for="digitalEmail">E-mail para o pagamento Pix</label><input id="digitalEmail" name="email" type="email" maxlength="254" ${digitalPaymentMethod === "pix" ? "required" : ""}></div>
               <div class="field full" id="digitalAddressField" ${digitalFulfillment === "pickup" ? "hidden" : ""}><label for="digitalAddress">Endereço de entrega</label><input id="digitalAddress" name="address" ${digitalFulfillment === "pickup" ? "" : "required"} maxlength="180" placeholder="Rua, número, bairro e complemento"></div>
               <div class="field full"><label for="digitalNotes">Observações do pedido</label><input id="digitalNotes" name="notes" maxlength="160" placeholder="Ponto de referência, sem cebola..."></div>
             </div>
@@ -2384,7 +2385,13 @@
           });
           const paymentSelect = document.getElementById("digitalPaymentMethod");
           paymentSelect.value = digitalPaymentMethod;
-          paymentSelect.addEventListener("change", () => { digitalPaymentMethod = paymentSelect.value; });
+          paymentSelect.addEventListener("change", () => {
+            digitalPaymentMethod = paymentSelect.value;
+            const emailField = document.getElementById("digitalEmailField");
+            const emailInput = document.getElementById("digitalEmail");
+            emailField.hidden = digitalPaymentMethod !== "pix";
+            emailInput.required = digitalPaymentMethod === "pix";
+          });
           document.getElementById("digitalCheckout").addEventListener("submit", submitDigitalOrder);
         }
       }
