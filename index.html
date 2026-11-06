@@ -554,6 +554,8 @@
       let mercadoPagoStatus = { configured: false, connected: false, sellerId: "" };
       let onlineOrders = [];
       let onlineOrderRefreshTimer = null;
+      let orderAlertEnabled = false;
+      let orderAlertAudioContext = null;
       let publicBusinessId = "";
       let publicOrdering = { deliveryFee: 0, pickupEnabled: false, pickupAddress: "", acceptingOrders: false };
       let publicMenuLoadError = "";
@@ -850,7 +852,58 @@
         }, 250);
       }
 
-      async function refreshOnlineOrders() {
+      function orderCanTriggerAlert(order) {
+        return order.status === "Recebido"
+          && (order.order_data?.paymentMethod !== "pix" || order.payment_status === "approved");
+      }
+
+      function playOrderAlertSound() {
+        if (!orderAlertAudioContext || orderAlertAudioContext.state !== "running") {
+          throw new Error("O áudio de alerta não está ativo.");
+        }
+        const startAt = orderAlertAudioContext.currentTime;
+        [[880, 0], [1174, 0.17]].forEach(([frequency, offset]) => {
+          const oscillator = orderAlertAudioContext.createOscillator();
+          const volume = orderAlertAudioContext.createGain();
+          oscillator.type = "sine";
+          oscillator.frequency.value = frequency;
+          volume.gain.setValueAtTime(0.0001, startAt + offset);
+          volume.gain.exponentialRampToValueAtTime(0.18, startAt + offset + 0.02);
+          volume.gain.exponentialRampToValueAtTime(0.0001, startAt + offset + 0.16);
+          oscillator.connect(volume);
+          volume.connect(orderAlertAudioContext.destination);
+          oscillator.start(startAt + offset);
+          oscillator.stop(startAt + offset + 0.17);
+        });
+      }
+
+      async function toggleOrderAlert() {
+        if (orderAlertEnabled) {
+          orderAlertEnabled = false;
+          renderOrders();
+          showToast("Alerta sonoro desativado.");
+          return;
+        }
+        const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextConstructor) {
+          showToast("Seu navegador não oferece suporte a alertas sonoros.");
+          return;
+        }
+        try {
+          if (!orderAlertAudioContext) orderAlertAudioContext = new AudioContextConstructor();
+          await orderAlertAudioContext.resume();
+          if (orderAlertAudioContext.state !== "running") throw new Error("O navegador não liberou a reprodução de áudio.");
+          orderAlertEnabled = true;
+          playOrderAlertSound();
+          renderOrders();
+          showToast("Alerta sonoro ativado para esta sessão.");
+        } catch (error) {
+          console.error("Não foi possível ativar o alerta sonoro de pedidos:", error);
+          showToast("Não foi possível ativar o som. Verifique as permissões de áudio do navegador.");
+        }
+      }
+
+      async function refreshOnlineOrders(notifyNewOrders = false) {
         if (!currentUser || !onlineMenuReady) return;
         const { data, error } = await supabaseClient
           .from("online_orders")
@@ -861,7 +914,18 @@
           showToast("Não foi possível atualizar os pedidos online.");
           return;
         }
+        const previousAlertableOrders = new Set(onlineOrders.filter(orderCanTriggerAlert).map(order => order.id));
         onlineOrders = data || [];
+        if (notifyNewOrders && orderAlertEnabled && onlineOrders.some(order => orderCanTriggerAlert(order) && !previousAlertableOrders.has(order.id))) {
+          try {
+            playOrderAlertSound();
+          } catch (alertError) {
+            console.error("Não foi possível tocar o alerta de novo pedido:", alertError);
+            orderAlertEnabled = false;
+            if (currentPage === "pedidos") renderOrders();
+            showToast("O navegador bloqueou o som. Ative o alerta novamente.");
+          }
+        }
       }
 
       function setSyncStatus(message) {
@@ -1025,7 +1089,7 @@
         if (onlineOrderRefreshTimer) clearInterval(onlineOrderRefreshTimer);
         onlineOrderRefreshTimer = setInterval(async () => {
           if (!currentUser || !onlineMenuReady || document.hidden || !["pedidos", "vendas", "caixa", "relatorio-caixa"].includes(currentPage)) return;
-          await refreshOnlineOrders();
+          await refreshOnlineOrders(true);
           render();
         }, 15000);
       }
@@ -1832,7 +1896,7 @@
           return `<section class="orders-column"><div class="orders-column-head"><h2>${column.label}</h2><span class="orders-column-count">${orders.length}</span></div><div class="orders-column-list">${orders.map(card).join("") || `<div class="orders-empty">Nenhum pedido nesta etapa.</div>`}</div></section>`;
         }).join("");
         document.getElementById("pageContent").innerHTML = `
-          <div class="page-heading"><div><div class="eyebrow">Acompanhe a operação</div><h1>Pedidos</h1><p class="subtitle">Veja cada pedido por etapa e atualize o andamento com um toque.</p></div><div class="page-heading-actions"><button class="button rounded" type="button" data-completed-orders>Pedidos finalizados (${completedOrders.length})</button><button class="button" data-page="vendas">＋ Nova venda</button></div></div>
+          <div class="page-heading"><div><div class="eyebrow">Acompanhe a operação</div><h1>Pedidos</h1><p class="subtitle">Veja cada pedido por etapa e atualize o andamento com um toque.</p></div><div class="page-heading-actions"><button class="button ${orderAlertEnabled ? "primary" : ""}" type="button" data-toggle-order-alert>${orderAlertEnabled ? "♫ Som ativo · Desativar" : "♫ Ativar som de pedidos"}</button><button class="button rounded" type="button" data-completed-orders>Pedidos finalizados (${completedOrders.length})</button><button class="button" data-page="vendas">＋ Nova venda</button></div></div>
           <section class="orders-summary">
             <article class="orders-summary-card"><span>Em andamento</span><strong>${activeOrders.length}</strong></article>
             <article class="orders-summary-card"><span>Novos</span><strong>${newOrders.length}</strong></article>
@@ -1847,6 +1911,7 @@
             : `<div class="empty-state">Nenhum pedido finalizado hoje.</div>`;
           openModal(`Pedidos finalizados (${completedOrders.length})`, body, "completedOrders");
         });
+        document.querySelector("[data-toggle-order-alert]").addEventListener("click", toggleOrderAlert);
       }
 
       function showOrderDetails(sale) {
