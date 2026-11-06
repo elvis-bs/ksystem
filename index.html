@@ -279,7 +279,7 @@
     .cash-hero .button { border-color: #ffffff55; color: #fff; background: #ffffff12; }
     .cash-hero-cash { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 11px; padding-top: 10px; border-top: 1px solid #ffffff35; }
     .cash-hero-cash strong { margin: 0; font-size: 15px; letter-spacing: 0; }
-    .cash-metrics { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin: 14px 0; }
+    .cash-metrics { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin: 14px 0; }
     .cash-metric { padding: 15px; border: 1px solid var(--line); border-radius: 11px; background: #fff; }
     .cash-metric span { color: var(--muted); font-size: 10px; }
     .cash-metric strong { display: block; margin-top: 7px; font-size: 17px; }
@@ -540,7 +540,7 @@
       const SUPABASE_URL = "https://jnqwtqixklmuxaeppkry.supabase.co";
       const SUPABASE_PUBLIC_KEY = "sb_publishable_aw3z7ZcPxJ4bhTWfQTWJuw_1GaWkb7J";
       const supabaseClient = window.supabase?.createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY);
-      const LEGACY_IMPORT_KEY = "bora-delivery-legacy-imported";
+      const businessStorageKey = userId => `${STORAGE_KEY}:${userId}`;
       let currentUser = null;
       let syncQueue = Promise.resolve();
       let authMode = "signin";
@@ -616,9 +616,9 @@
       let editingId = null;
       let editingType = null;
 
-      function loadState() {
+      function loadState(storageKey = STORAGE_KEY) {
         try {
-          const saved = localStorage.getItem(STORAGE_KEY);
+          const saved = localStorage.getItem(storageKey);
           if (!saved) return JSON.parse(JSON.stringify(seedData));
           const parsed = JSON.parse(saved);
           if (!Array.isArray(parsed.products) || !Array.isArray(parsed.ingredients)) throw new Error("Dados salvos inválidos");
@@ -667,7 +667,7 @@
             ...JSON.parse(JSON.stringify(seedData.receiptSettings)),
             ...(state.receiptSettings || {})
           };
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+          localStorage.setItem(currentUser ? businessStorageKey(currentUser.id) : STORAGE_KEY, JSON.stringify(state));
         } catch (error) {
           console.error("Não foi possível salvar os dados:", error);
           showToast("Não foi possível salvar. Verifique o espaço do navegador.");
@@ -920,28 +920,23 @@
             onlineOrderPayments: Array.isArray(parsed.onlineOrderPayments) ? parsed.onlineOrderPayments : [],
             financeEntries: Array.isArray(parsed.financeEntries) ? parsed.financeEntries : []
           };
-          localStorage.setItem(LEGACY_IMPORT_KEY, "true");
         } else {
-          const hasLegacyData = localStorage.getItem(STORAGE_KEY) !== null;
-          if (hasLegacyData && localStorage.getItem(LEGACY_IMPORT_KEY) !== "true") {
-            if (!confirm("Encontramos dados deste delivery salvos neste navegador. Deseja importá-los para esta conta do Supabase?")) {
-              state = JSON.parse(JSON.stringify(seedData));
-            }
-          } else {
-            state = JSON.parse(JSON.stringify(seedData));
-          }
+          state = {
+            ...JSON.parse(JSON.stringify(seedData)),
+            ingredients: [],
+            products: []
+          };
           const { error: insertError } = await supabaseClient.from("business_data").insert({
             user_id: user.id,
             data: state
           });
           if (insertError) throw insertError;
-          localStorage.setItem(LEGACY_IMPORT_KEY, "true");
         }
         state.receiptSettings = {
           ...JSON.parse(JSON.stringify(seedData.receiptSettings)),
           ...(state.receiptSettings || {})
         };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        localStorage.setItem(businessStorageKey(user.id), JSON.stringify(state));
         const { error: publicMenuError } = await supabaseClient
           .from("public_menus")
           .select("user_id")
@@ -1306,21 +1301,66 @@
               payment: payment.method || "A combinar",
               receiptAmount: number(payment.amount)
             })));
-        return [...directReceipts, ...receivablePayments];
+        const otherReceivablePayments = state.financeEntries
+          .filter(entry => entry.kind === "receivable" && !entry.saleId)
+          .flatMap(entry => (entry.payments || [])
+            .filter(payment => payment.cashSessionId === sessionId)
+            .map(payment => ({
+              id: payment.id,
+              payment: payment.method || "A combinar",
+              receiptAmount: number(payment.amount)
+            })));
+        return [...directReceipts, ...receivablePayments, ...otherReceivablePayments];
       }
 
       function financeBalance(entry) {
         return Math.max(0, roundMoney(number(entry.amount) - number(entry.paidAmount)));
       }
 
-      function cashFinanceMovement(sessionId) {
-        return state.financeEntries.reduce((total, entry) => {
-          if (entry.kind === "receivable" && entry.saleId) return total;
-          return total + (entry.payments || []).reduce((entryTotal, payment) => {
-            if (payment.cashSessionId !== sessionId || payment.method !== "Dinheiro") return entryTotal;
-            return entryTotal + (entry.kind === "receivable" ? number(payment.amount) : -number(payment.amount));
-          }, 0);
-        }, 0);
+      function cashRegisterMovementTotals(sessionId) {
+        const movements = state.cashSessions.find(session => session.id === sessionId)?.cashMovements || [];
+        return movements.reduce((totals, movement) => {
+          if (movement.type === "addition") totals.additions += number(movement.amount);
+          if (movement.type === "withdrawal") totals.withdrawals += number(movement.amount);
+          return totals;
+        }, { additions: 0, withdrawals: 0 });
+      }
+
+      function cashSessionPaymentTotals(sessionId) {
+        const receipts = cashSessionReceipts(sessionId);
+        const methods = ["Dinheiro", "Pix", "Cartão de crédito", "Cartão de débito", "Transferência", "A combinar"];
+        for (const receipt of receipts) {
+          const method = receipt.payment || "A combinar";
+          if (!methods.includes(method)) methods.push(method);
+        }
+        return methods.map(payment => ({
+          payment,
+          amount: roundMoney(receipts
+            .filter(receipt => (receipt.payment || "A combinar") === payment)
+            .reduce((sum, receipt) => sum + number(receipt.receiptAmount), 0))
+        }));
+      }
+
+      function cashSessionTotalReceived(sessionId) {
+        return roundMoney(cashSessionReceipts(sessionId)
+          .reduce((sum, receipt) => sum + number(receipt.receiptAmount), 0));
+      }
+
+      function cashSessionPhysicalCashExpected(sessionId) {
+        const session = state.cashSessions.find(item => item.id === sessionId);
+        if (!session) return 0;
+        const cashReceipts = cashSessionReceipts(sessionId)
+          .filter(receipt => receipt.payment === "Dinheiro")
+          .reduce((sum, receipt) => sum + number(receipt.receiptAmount), 0);
+        const movements = cashRegisterMovementTotals(sessionId);
+        return roundMoney(number(session.openingAmount) + cashReceipts + movements.additions - movements.withdrawals);
+      }
+
+      function cashSessionExpected(sessionId) {
+        const session = state.cashSessions.find(item => item.id === sessionId);
+        if (!session) return 0;
+        const movements = cashRegisterMovementTotals(sessionId);
+        return roundMoney(number(session.openingAmount) + cashSessionTotalReceived(sessionId) + movements.additions - movements.withdrawals);
       }
 
       function customerReceivables(customerId) {
@@ -1962,8 +2002,8 @@
           ${isReceivable ? `<div class="field" style="margin-top:12px"><label for="financeCustomer">Cliente</label><select id="financeCustomer" name="customerId" required><option value="">Selecione um cliente</option>${customerOptions}</select></div>` : `<div class="field" style="margin-top:12px"><label for="financeParty">${isExpense ? "Categoria / favorecido" : "Fornecedor / favorecido"}</label><input id="financeParty" name="partyName" maxlength="80" required value="${escapeHtml(entry?.partyName || "")}" placeholder="${isExpense ? "Ex.: entrega, aluguel, embalagem" : "Ex.: fornecedor"}"></div>`}
           <div class="field" style="margin-top:12px"><label for="financeAmount">Valor total (R$)</label><input id="financeAmount" name="amount" type="number" min="${entry && !isExpense ? number(entry.paidAmount).toFixed(2) : "0.01"}" step="0.01" required value="${entry ? number(entry.amount).toFixed(2) : ""}"></div>
           ${isExpense ? entry
-            ? `<p class="helper" style="margin-top:12px">Forma de pagamento registrada: ${escapeHtml(paymentMethod)}. O histórico será mantido.</p>`
-            : `<div class="field" style="margin-top:12px"><label for="expensePaymentMethod">Forma de pagamento</label><select id="expensePaymentMethod" name="method" required><option>Dinheiro</option><option>Pix</option><option>Cartão de crédito</option><option>Cartão de débito</option><option>Transferência</option></select>${currentCashSession() ? "" : `<p class="helper">Para lançar despesa paga em dinheiro, abra o caixa.</p>`}</div>`
+            ? `<p class="helper" style="margin-top:12px">Forma de pagamento registrada: ${escapeHtml(paymentMethod)}. Despesas não alteram o saldo do caixa; registre uma sangria se retirar dinheiro.</p>`
+            : `<div class="field" style="margin-top:12px"><label for="expensePaymentMethod">Forma de pagamento</label><select id="expensePaymentMethod" name="method" required><option>Dinheiro</option><option>Pix</option><option>Cartão de crédito</option><option>Cartão de débito</option><option>Transferência</option></select><p class="helper">Despesas ficam no fluxo financeiro e não alteram o caixa. Para retirar dinheiro do caixa, registre uma sangria.</p></div>`
             : `<div class="field" style="margin-top:12px"><label for="financeDueDate">Vencimento (opcional)</label><input id="financeDueDate" name="dueDate" type="date" value="${escapeHtml(entry?.dueDate || "")}"></div>`}`;
         const title = entry ? "Editar lançamento" : isExpense ? "Lançar despesa" : isReceivable ? "Nova conta a receber" : "Nova conta a pagar";
         openModal(title, body, entry ? "financeEntryEdit" : "financeEntry", entry ? entry.id : kind);
@@ -1978,13 +2018,8 @@
         const method = isExpense ? String(data.get("method") || "") : "";
         const description = String(data.get("description") || "").trim();
         const partyName = customer?.name || String(data.get("partyName") || "").trim();
-        const session = currentCashSession();
         if (!description || !amount || (kind === "receivable" && !customer) || (!customer && !partyName)) {
           showToast("Informe a descrição, a pessoa ou categoria e um valor válido para o lançamento.");
-          return;
-        }
-        if (isExpense && method === "Dinheiro" && !session) {
-          showToast("Abra o caixa para lançar uma despesa paga em dinheiro.");
           return;
         }
         const createdAt = new Date().toISOString();
@@ -2004,7 +2039,7 @@
             amount,
             method,
             date: createdAt,
-            cashSessionId: method === "Dinheiro" ? session.id : null
+            cashSessionId: null
           }] : []
         };
         state.financeEntries.push(entry);
@@ -2107,7 +2142,7 @@
           amount,
           method,
           date: new Date().toISOString(),
-          cashSessionId: method === "Dinheiro" || linkedSale ? session?.id || null : null
+          cashSessionId: session?.id || null
         };
         const previousPaidAmount = entry.paidAmount;
         const previousSalePaid = linkedSale?.paid;
@@ -2622,14 +2657,65 @@
 
       function openCashForm(closeSession = false) {
         const session = currentCashSession();
-        const cashSales = session
-          ? cashSessionReceipts(session.id).filter(receipt => receipt.payment === "Dinheiro").reduce((sum, receipt) => sum + number(receipt.receiptAmount), 0)
-          : 0;
-        const expected = session ? roundMoney(session.openingAmount + cashSales + cashFinanceMovement(session.id)) : 0;
+        const expected = session ? cashSessionExpected(session.id) : 0;
+        const physicalCashExpected = session ? cashSessionPhysicalCashExpected(session.id) : 0;
+        const received = session ? cashSessionTotalReceived(session.id) : 0;
+        const paymentRows = session
+          ? cashSessionPaymentTotals(session.id).filter(item => item.amount > 0)
+          : [];
         const body = closeSession
-          ? `<p class="helper">Dinheiro esperado no caixa: <strong>${money(expected)}</strong> (fundo inicial + vendas e baixas de contas em dinheiro).</p><div class="field" style="margin-top:14px"><label for="cashCounted">Dinheiro contado no fechamento (R$)</label><input id="cashCounted" name="counted" type="number" min="0" step="0.01" value="${expected.toFixed(2)}" required></div><div class="field" style="margin-top:12px"><label for="cashCloseNotes">Observações</label><input id="cashCloseNotes" name="notes" maxlength="160" placeholder="Diferenças ou ocorrências"></div>`
+          ? `<p class="helper">Total recebido no turno (dinheiro, Pix, cartões e outras formas): <strong>${money(received)}</strong></p><div class="cost-summary" style="margin-top:10px">${paymentRows.length ? paymentRows.map(item => `<div class="cost-row"><span>${escapeHtml(item.payment)}</span><strong>${money(item.amount)}</strong></div>`).join("") : `<div class="helper">Nenhum recebimento registrado neste turno.</div>`}</div><p class="helper" style="margin-top:12px">Total esperado no fechamento (fundo inicial + todos os recebimentos + adições − sangrias): <strong>${money(expected)}</strong></p><p class="helper" style="margin-top:8px">Referência de dinheiro físico na gaveta: ${money(physicalCashExpected)}. Para conferir o total do caixa, some o dinheiro contado aos valores de Pix e cartões do turno.</p><div class="field" style="margin-top:14px"><label for="cashCounted">Total conferido no fechamento (dinheiro + Pix + cartões e outras formas) (R$)</label><input id="cashCounted" name="counted" type="number" min="0" step="0.01" value="${expected.toFixed(2)}" required></div><div class="field" style="margin-top:12px"><label for="cashCloseNotes">Observações</label><input id="cashCloseNotes" name="notes" maxlength="160" placeholder="Diferenças ou ocorrências"></div>`
           : `<div class="field"><label for="cashOpening">Valor inicial em dinheiro (R$)</label><input id="cashOpening" name="openingAmount" type="number" min="0" step="0.01" value="0" required></div><div class="field" style="margin-top:12px"><label for="cashOpenNotes">Observações</label><input id="cashOpenNotes" name="notes" maxlength="160" placeholder="Fundo de troco, operador..."></div>`;
         openModal(closeSession ? "Fechar caixa" : "Abrir caixa", body, closeSession ? "closeCash" : "openCash", session?.id || null);
+      }
+
+      function openCashMovementForm(type) {
+        const session = currentCashSession();
+        if (!session) {
+          showToast("Abra o caixa antes de registrar uma sangria ou adicionar dinheiro.");
+          return;
+        }
+        const isWithdrawal = type === "withdrawal";
+        const body = `<div class="field"><label for="cashMovementAmount">Valor (R$)</label><input id="cashMovementAmount" name="amount" type="number" min="0.01" step="0.01" required></div><div class="field" style="margin-top:12px"><label for="cashMovementDescription">Descrição</label><input id="cashMovementDescription" name="description" maxlength="120" required placeholder="${isWithdrawal ? "Ex.: pagamento ou retirada" : "Ex.: reforço de troco"}"></div>`;
+        openModal(isWithdrawal ? "Registrar sangria" : "Adicionar dinheiro ao caixa", body, "cashMovement", isWithdrawal ? "withdrawal" : "addition");
+      }
+
+      function saveCashMovement(form) {
+        const session = currentCashSession();
+        const data = new FormData(form);
+        const amount = roundMoney(number(data.get("amount")));
+        const description = String(data.get("description") || "").trim();
+        const type = editingId;
+        if (!session || !["withdrawal", "addition"].includes(type)) {
+          showToast("Não há caixa aberto para registrar este movimento.");
+          return;
+        }
+        if (amount <= 0 || !description) {
+          showToast("Informe um valor maior que zero e uma descrição.");
+          return;
+        }
+        const hadMovements = Array.isArray(session.cashMovements);
+        if (!hadMovements) session.cashMovements = [];
+        if (type === "withdrawal" && amount > cashSessionPhysicalCashExpected(session.id)) {
+          if (!hadMovements) delete session.cashMovements;
+          showToast("A sangria não pode ser maior que o dinheiro esperado no caixa.");
+          return;
+        }
+        session.cashMovements.push({
+          id: `cash-movement-${Date.now()}`,
+          type,
+          amount,
+          description,
+          createdAt: new Date().toISOString()
+        });
+        if (!saveState()) {
+          if (hadMovements) session.cashMovements.pop();
+          else delete session.cashMovements;
+          return;
+        }
+        closeModal();
+        renderCash();
+        showToast(type === "withdrawal" ? "Sangria registrada." : "Dinheiro adicionado ao caixa.");
       }
 
       function saveCashSession(form, closeSession) {
@@ -2640,20 +2726,22 @@
             showToast("Não há caixa aberto para fechar.");
             return;
           }
-          const cashSales = cashSessionReceipts(session.id)
-            .filter(receipt => receipt.payment === "Dinheiro")
-            .reduce((sum, receipt) => sum + number(receipt.receiptAmount), 0);
-          const expected = roundMoney(session.openingAmount + cashSales + cashFinanceMovement(session.id));
+          const expected = cashSessionExpected(session.id);
+          const receivedByMethod = cashSessionPaymentTotals(session.id);
           session.closedAt = new Date().toISOString();
           session.expectedCash = expected;
           session.countedCash = number(data.get("counted"));
           session.difference = roundMoney(session.countedCash - expected);
+          session.receivedTotalAtClose = cashSessionTotalReceived(session.id);
+          session.receivedByMethodAtClose = receivedByMethod;
           session.closeNotes = String(data.get("notes") || "").trim();
           if (!saveState()) {
             delete session.closedAt;
             delete session.expectedCash;
             delete session.countedCash;
             delete session.difference;
+            delete session.receivedTotalAtClose;
+            delete session.receivedByMethodAtClose;
             delete session.closeNotes;
             return;
           }
@@ -2687,23 +2775,29 @@
         const cashSales = sessionSales
           .filter(receipt => receipt.payment === "Dinheiro")
           .reduce((sum, receipt) => sum + number(receipt.receiptAmount), 0);
-        const cashMovements = session ? cashFinanceMovement(session.id) : 0;
-        const expected = roundMoney((session?.openingAmount || 0) + cashSales + cashMovements);
+        const cashMovements = session ? cashRegisterMovementTotals(session.id) : { additions: 0, withdrawals: 0 };
+        const expected = session ? cashSessionExpected(session.id) : 0;
         const totalReceived = sessionSales.reduce((sum, receipt) => sum + number(receipt.receiptAmount), 0);
-        const paymentTotals = ["Dinheiro", "Pix", "Cartão de crédito", "Cartão de débito", "Transferência"].map(payment => ({
-          payment,
-          amount: sessionSales
-            .filter(receipt => receipt.payment === payment)
-            .reduce((sum, receipt) => sum + number(receipt.receiptAmount), 0)
-        }));
+        const paymentTotals = session ? cashSessionPaymentTotals(session.id) : [];
+        const paymentSummary = items => {
+          const totals = items.filter(item => item.amount > 0);
+          return totals.length
+            ? totals.map(item => `<div class="cost-row"><span>${escapeHtml(item.payment)}</span><strong>${money(item.amount)}</strong></div>`).join("")
+            : `<div class="helper">Nenhum recebimento registrado.</div>`;
+        };
         document.getElementById("pageContent").innerHTML = `
-          <div class="page-heading"><div><div class="eyebrow">Controle financeiro</div><h1>Caixa</h1><p class="subtitle">Abra o turno, registre vendas pagas e confira o valor contado no fechamento.</p></div></div>
-          ${session ? `<section class="cash-hero"><div><span>Caixa aberto desde ${new Date(session.openedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span><strong>${money(totalReceived)}</strong><span>Total recebido no turno</span><div class="cash-hero-cash"><span>Dinheiro esperado no caixa</span><strong>${money(expected)}</strong></div></div><button class="button" data-action="close-cash">Fechar caixa</button></section>
-            <section class="cash-metrics"><article class="cash-metric"><span>Fundo inicial</span><strong>${money(session.openingAmount)}</strong></article><article class="cash-metric"><span>Vendas em dinheiro</span><strong>${money(cashSales)}</strong></article><article class="cash-metric"><span>Outros movimentos em dinheiro</span><strong>${money(cashMovements)}</strong></article><article class="cash-metric"><span>Vendas pagas no turno</span><strong>${money(totalReceived)}</strong></article></section>
-            <article class="panel"><div class="panel-heading"><h2>Vendas por forma de pagamento</h2><span>${sessionSales.length} recebimento(s)</span></div><div class="cost-summary">${paymentTotals.map(item => `<div class="cost-row"><span>${escapeHtml(item.payment)}</span><strong>${money(item.amount)}</strong></div>`).join("")}</div></article>` :
+          <div class="page-heading"><div><div class="eyebrow">Controle financeiro</div><h1>Caixa</h1><p class="subtitle">Confira o total do turno com dinheiro, Pix e cartões, além dos movimentos de caixa.</p></div></div>
+          ${session ? `<section class="cash-hero"><div><span>Caixa aberto desde ${new Date(session.openedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span><strong>${money(expected)}</strong><span>Total esperado no caixa (dinheiro + Pix + cartões + fundo + adições − sangrias)</span><div class="cash-hero-cash"><span>Referência de dinheiro físico na gaveta</span><strong>${money(cashSessionPhysicalCashExpected(session.id))}</strong></div></div><div class="filters"><button class="button" data-action="cash-addition">＋ Adicionar dinheiro</button><button class="button" data-action="cash-withdrawal">− Sangria</button><button class="button" data-action="close-cash">Fechar caixa</button></div></section>
+            <section class="cash-metrics"><article class="cash-metric"><span>Fundo inicial</span><strong>${money(session.openingAmount)}</strong></article><article class="cash-metric"><span>Entradas em dinheiro</span><strong>${money(cashSales)}</strong></article><article class="cash-metric"><span>Reforços</span><strong>${money(cashMovements.additions)}</strong></article><article class="cash-metric"><span>Sangrias</span><strong>${money(cashMovements.withdrawals)}</strong></article></section>
+            <article class="panel"><div class="panel-heading"><h2>Entradas por forma de pagamento</h2><span>${sessionSales.length} recebimento(s)</span></div><div class="cost-summary">${paymentSummary(paymentTotals)}</div></article>
+            ${session.cashMovements?.length ? `<article class="panel" style="margin-top:14px"><div class="panel-heading"><h2>Movimentos de dinheiro em caixa</h2><span>${session.cashMovements.length} movimento(s)</span></div><div class="cost-summary">${[...session.cashMovements].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map(movement => `<div class="cost-row"><span>${movement.type === "withdrawal" ? "Sangria" : "Adição"} · ${escapeHtml(movement.description)}<br><span class="helper">${new Date(movement.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span></span><strong>${movement.type === "withdrawal" ? "−" : "+"}${money(movement.amount)}</strong></div>`).join("")}</div></article>` : ""}` :
             `<section class="panel" style="text-align:center;padding:35px"><div class="stat-icon" style="margin:0 auto 13px;width:44px;height:44px">▣</div><h2 style="margin:0;font-size:17px">Nenhum caixa aberto</h2><p class="subtitle">Informe o valor inicial do troco para começar a registrar vendas.</p><button class="button primary" style="margin-top:12px" data-action="open-cash">Abrir caixa</button></section>`}
           <article class="panel" style="margin-top:14px"><div class="panel-heading"><h2>Histórico de caixas</h2><span>${sessions.length} turno(s)</span></div>
-            ${sessions.length ? `<div class="table-wrap"><table><thead><tr><th>Abertura</th><th>Fechamento</th><th>Fundo inicial</th><th>Esperado</th><th>Contado</th><th>Diferença</th><th>Status</th></tr></thead><tbody>${sessions.map(item => `<tr><td>${new Date(item.openedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</td><td>${item.closedAt ? new Date(item.closedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—"}</td><td>${money(item.openingAmount)}</td><td>${item.closedAt ? money(item.expectedCash) : "—"}</td><td>${item.closedAt ? money(item.countedCash) : "—"}</td><td class="${number(item.difference) < 0 ? "margin-cell low" : "margin-cell"}">${item.closedAt ? money(item.difference) : "—"}</td><td><span class="pill ${item.closedAt ? "orange" : ""}">${item.closedAt ? "Fechado" : "Aberto"}</span></td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">Os turnos abertos e fechados serão listados aqui.</div>`}
+            ${sessions.length ? `<div class="table-wrap"><table><thead><tr><th>Abertura</th><th>Fechamento</th><th>Recebido no turno</th><th>Entradas por forma</th><th>Total esperado</th><th>Total conferido</th><th>Diferença</th><th>Status</th></tr></thead><tbody>${sessions.map(item => {
+              const receivedByMethod = item.receivedByMethodAtClose || cashSessionPaymentTotals(item.id);
+              const receivedTotal = item.receivedTotalAtClose ?? cashSessionTotalReceived(item.id);
+              return `<tr><td>${new Date(item.openedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</td><td>${item.closedAt ? new Date(item.closedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—"}</td><td>${money(receivedTotal)}</td><td>${receivedByMethod.filter(method => method.amount > 0).map(method => `${escapeHtml(method.payment)}: ${money(method.amount)}`).join("<br>") || "—"}</td><td>${item.closedAt ? money(item.expectedCash) : money(cashSessionExpected(item.id))}</td><td>${item.closedAt ? money(item.countedCash) : "—"}</td><td class="${number(item.difference) < 0 ? "margin-cell low" : "margin-cell"}">${item.closedAt ? money(item.difference) : "—"}</td><td><span class="pill ${item.closedAt ? "orange" : ""}">${item.closedAt ? "Fechado" : "Aberto"}</span></td></tr>`;
+            }).join("")}</tbody></table></div>` : `<div class="empty-state">Os turnos abertos e fechados serão listados aqui.</div>`}
           </article>`;
       }
 
@@ -2722,17 +2816,15 @@
           : [];
         const rows = sessions.map(session => {
           const sales = cashSessionReceipts(session.id);
-          const cashSales = sales
-            .filter(receipt => receipt.payment === "Dinheiro")
-            .reduce((sum, receipt) => sum + number(receipt.receiptAmount), 0);
-          const cashMovements = cashFinanceMovement(session.id);
-          const expected = roundMoney(number(session.openingAmount) + cashSales + cashMovements);
+          const cashMovements = cashRegisterMovementTotals(session.id);
+          const expected = cashSessionExpected(session.id);
           return {
             session,
             sales,
-            cashSales,
             cashMovements,
             expected: session.closedAt ? number(session.expectedCash) : expected,
+            receivedTotal: session.receivedTotalAtClose ?? cashSessionTotalReceived(session.id),
+            receivedByMethod: session.receivedByMethodAtClose || cashSessionPaymentTotals(session.id),
             counted: session.closedAt ? number(session.countedCash) : null,
             difference: session.closedAt ? number(session.difference) : null
           };
@@ -2747,13 +2839,14 @@
           payment,
           total: allSales.filter(receipt => receipt.payment === payment).reduce((sum, receipt) => sum + number(receipt.receiptAmount), 0)
         }));
-        const sessionRows = rows.map(({ session, sales, cashSales, cashMovements, expected, counted, difference }) => `
+        const sessionRows = rows.map(({ session, cashMovements, expected, receivedTotal, receivedByMethod, counted, difference }) => `
           <tr>
             <td>${new Date(session.openedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</td>
             <td>${session.closedAt ? new Date(session.closedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—"}</td>
-            <td>${money(session.openingAmount)}</td>
-            <td>${money(cashSales)}</td>
-            <td>${money(cashMovements)}</td>
+            <td>${money(receivedTotal)}</td>
+            <td>${receivedByMethod.filter(item => item.amount > 0).map(item => `${escapeHtml(item.payment)}: ${money(item.amount)}`).join("<br>") || "—"}</td>
+            <td>${money(cashMovements.additions)}</td>
+            <td>${money(cashMovements.withdrawals)}</td>
             <td>${money(expected)}</td>
             <td>${counted === null ? "—" : money(counted)}</td>
             <td class="${difference !== null && difference < 0 ? "margin-cell low" : "margin-cell"}">${difference === null ? "—" : money(difference)}</td>
@@ -2763,11 +2856,11 @@
           <div class="page-heading"><div><div class="eyebrow">Financeiro</div><h1>Relatório de caixa</h1><p class="subtitle">Confira vendas por turno, dinheiro esperado e diferenças de fechamento.</p></div><button class="button" data-action="print-report">Imprimir relatório</button></div>
           <form class="report-filters" id="cashReportFilters"><div class="field"><label for="cashReportStart">De</label><input id="cashReportStart" name="start" type="date" value="${start}" required></div><div class="field"><label for="cashReportEnd">Até</label><input id="cashReportEnd" name="end" type="date" value="${end}" required></div><button class="button primary" type="submit">Aplicar período</button></form>
           ${!validRange ? `<div class="callout"><span>!</span><div><b>Período inválido</b>A data inicial precisa ser anterior à data final.</div></div>` : ""}
-          <p class="helper" style="margin:12px 0">Os turnos são agrupados pela data de abertura. Vendas pagas continuam no caixa mesmo se o pedido for cancelado; registre o estorno como movimento financeiro.</p>
+          <p class="helper" style="margin:12px 0">Os turnos são agrupados pela data de abertura. O total esperado inclui recebimentos em todas as formas, fundo inicial, adições e sangrias. Despesas financeiras não alteram o caixa; sangrias reduzem o total esperado e o dinheiro físico disponível.</p>
           <section class="stats" style="margin-top:15px">
-            <article class="stat-card"><div class="stat-top"><span>Vendas nos turnos</span><span class="stat-icon">↗</span></div><div class="stat-value">${money(totalSales)}</div><div class="stat-note">${allSales.length} recebimento(s) pago(s)</div></article>
-            <article class="stat-card"><div class="stat-top"><span>Dinheiro esperado</span><span class="stat-icon">▣</span></div><div class="stat-value">${money(totalExpected)}</div><div class="stat-note">inclui fundo, vendas e baixas em dinheiro</div></article>
-            <article class="stat-card"><div class="stat-top"><span>Dinheiro contado</span><span class="stat-icon">＋</span></div><div class="stat-value">${money(totalCounted)}</div><div class="stat-note">${closedRows.length} turno(s) fechado(s)</div></article>
+            <article class="stat-card"><div class="stat-top"><span>Total recebido nos turnos</span><span class="stat-icon">↗</span></div><div class="stat-value">${money(totalSales)}</div><div class="stat-note">${allSales.length} recebimento(s), todas as formas</div></article>
+            <article class="stat-card"><div class="stat-top"><span>Total esperado no caixa</span><span class="stat-icon">▣</span></div><div class="stat-value">${money(totalExpected)}</div><div class="stat-note">dinheiro + Pix + cartões + fundo + adições − sangrias</div></article>
+            <article class="stat-card"><div class="stat-top"><span>Total conferido</span><span class="stat-icon">＋</span></div><div class="stat-value">${money(totalCounted)}</div><div class="stat-note">dinheiro + Pix + cartões nos ${closedRows.length} turno(s) fechado(s)</div></article>
             <article class="stat-card"><div class="stat-top"><span>Diferença dos fechamentos</span><span class="stat-icon">↕</span></div><div class="stat-value">${money(totalDifference)}</div><div class="stat-note">soma das diferenças registradas</div></article>
           </section>
           <section class="dashboard-grid">
@@ -2779,7 +2872,7 @@
             </article>
           </section>
           <article class="panel" style="margin-top:14px"><div class="panel-heading"><h2>Detalhamento por turno</h2><span>${rows.length} turno(s)</span></div>
-            ${rows.length ? `<div class="table-wrap"><table><thead><tr><th>Abertura</th><th>Fechamento</th><th>Fundo inicial</th><th>Vendas em dinheiro</th><th>Contas em dinheiro (+ entrada / − saída)</th><th>Esperado</th><th>Contado</th><th>Diferença</th><th>Status</th></tr></thead><tbody>${sessionRows}</tbody></table></div>` : `<div class="empty-state">Nenhum turno de caixa no período selecionado.</div>`}
+            ${rows.length ? `<div class="table-wrap"><table><thead><tr><th>Abertura</th><th>Fechamento</th><th>Total recebido</th><th>Entradas por forma</th><th>Adições</th><th>Sangrias</th><th>Total esperado</th><th>Total conferido</th><th>Diferença</th><th>Status</th></tr></thead><tbody>${sessionRows}</tbody></table></div>` : `<div class="empty-state">Nenhum turno de caixa no período selecionado.</div>`}
           </article>`;
         document.getElementById("cashReportFilters").addEventListener("submit", event => {
           event.preventDefault();
@@ -3399,6 +3492,8 @@
         }
         if (action.dataset.action === "open-cash") openCashForm();
         if (action.dataset.action === "close-cash") openCashForm(true);
+        if (action.dataset.action === "cash-addition") openCashMovementForm("addition");
+        if (action.dataset.action === "cash-withdrawal") openCashMovementForm("withdrawal");
         if (action.dataset.action === "receive-sale") receiveSale(state.sales.find(sale => sale.id === id));
         if (action.dataset.action === "toggle-today-sales") {
           showTodaySales = !showTodaySales;
@@ -3490,6 +3585,7 @@
         if (form.dataset.type === "customer") saveCustomer(form);
         if (form.dataset.type === "openCash") saveCashSession(form, false);
         if (form.dataset.type === "closeCash") saveCashSession(form, true);
+        if (form.dataset.type === "cashMovement") saveCashMovement(form);
         if (form.dataset.type === "receivePayment") saveReceivedPayment(form);
         if (form.dataset.type === "financeEntry") saveFinanceEntry(form);
         if (form.dataset.type === "financeEntryEdit") saveFinanceEntryEdit(form);
@@ -3497,8 +3593,9 @@
       });
       document.addEventListener("keydown", event => { if (event.key === "Escape") closeModal(); });
       window.addEventListener("storage", event => {
-        if (event.key !== STORAGE_KEY || !event.newValue) return;
-        state = loadState();
+        const storageKey = currentUser ? businessStorageKey(currentUser.id) : STORAGE_KEY;
+        if (event.key !== storageKey || !event.newValue) return;
+        state = loadState(storageKey);
         if (new URLSearchParams(location.search).has("cardapio")) {
           digitalCart = digitalCart.filter(item => activeSaleProducts().some(product => product.id === item.productId));
           renderPublicMenu();
