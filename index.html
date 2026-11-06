@@ -133,6 +133,11 @@
     .filter-btn.active { border-color: var(--green); color: #fff; background: var(--green); }
     .search { width: 210px; min-height: 36px; padding: 0 11px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: 11px; outline: none; }
     .search:focus, input:focus, select:focus { border-color: #6b9478; box-shadow: 0 0 0 3px rgba(36,92,67,.09); outline: none; }
+    .cash-history-details > summary { cursor: pointer; list-style: none; margin-bottom: 0; }
+    .cash-history-details > summary::-webkit-details-marker { display: none; }
+    .cash-history-details > summary::after { color: var(--green); content: "Exibir lista +"; font-size: 11px; font-weight: 700; }
+    .cash-history-details[open] > summary { margin-bottom: 16px; }
+    .cash-history-details[open] > summary::after { content: "Ocultar lista −"; }
     .product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 10px; align-items: start; }
     .product-card { padding: 12px; }
     .product-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
@@ -2793,13 +2798,37 @@
             <article class="panel"><div class="panel-heading"><h2>Entradas por forma de pagamento</h2><span>${sessionSales.length} recebimento(s)</span></div><div class="cost-summary">${paymentSummary(paymentTotals)}</div></article>
             ${session.cashMovements?.length ? `<article class="panel" style="margin-top:14px"><div class="panel-heading"><h2>Movimentos de dinheiro em caixa</h2><span>${session.cashMovements.length} movimento(s)</span></div><div class="cost-summary">${[...session.cashMovements].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map(movement => `<div class="cost-row"><span>${movement.type === "withdrawal" ? "Sangria" : "Adição"} · ${escapeHtml(movement.description)}<br><span class="helper">${new Date(movement.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span></span><strong>${movement.type === "withdrawal" ? "−" : "+"}${money(movement.amount)}</strong></div>`).join("")}</div></article>` : ""}` :
             `<section class="panel" style="text-align:center;padding:35px"><div class="stat-icon" style="margin:0 auto 13px;width:44px;height:44px">▣</div><h2 style="margin:0;font-size:17px">Nenhum caixa aberto</h2><p class="subtitle">Informe o valor inicial do troco para começar a registrar vendas.</p><button class="button primary" style="margin-top:12px" data-action="open-cash">Abrir caixa</button></section>`}
-          <article class="panel" style="margin-top:14px"><div class="panel-heading"><h2>Histórico de caixas</h2><span>${sessions.length} turno(s)</span></div>
-            ${sessions.length ? `<div class="table-wrap"><table><thead><tr><th>Abertura</th><th>Fechamento</th><th>Recebido no turno</th><th>Entradas por forma</th><th>Total esperado</th><th>Total conferido</th><th>Diferença</th><th>Status</th></tr></thead><tbody>${sessions.map(item => {
+          <article class="panel" style="margin-top:14px"><div class="panel-heading"><h2>Histórico de caixas</h2><span id="cashHistoryCount">${sessions.length} turno(s)</span></div>
+            <div class="toolbar"><input class="search" id="cashHistorySearch" type="search" placeholder="Pesquisar por data, pagamento ou status..." aria-label="Pesquisar histórico de caixas" ${sessions.length ? "" : "disabled"}></div>
+            ${sessions.length ? `<details class="cash-history-details" id="cashHistoryDetails"><summary class="panel-heading"><span>Turnos de caixa</span></summary><div class="table-wrap"><table><thead><tr><th>Abertura</th><th>Fechamento</th><th>Recebido no turno</th><th>Entradas por forma</th><th>Total esperado</th><th>Total conferido</th><th>Diferença</th><th>Status</th></tr></thead><tbody>${sessions.map(item => {
               const receivedByMethod = item.receivedByMethodAtClose || cashSessionPaymentTotals(item.id);
               const receivedTotal = item.receivedTotalAtClose ?? cashSessionTotalReceived(item.id);
-              return `<tr><td>${new Date(item.openedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</td><td>${item.closedAt ? new Date(item.closedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—"}</td><td>${money(receivedTotal)}</td><td>${receivedByMethod.filter(method => method.amount > 0).map(method => `${escapeHtml(method.payment)}: ${money(method.amount)}`).join("<br>") || "—"}</td><td>${item.closedAt ? money(item.expectedCash) : money(cashSessionExpected(item.id))}</td><td>${item.closedAt ? money(item.countedCash) : "—"}</td><td class="${number(item.difference) < 0 ? "margin-cell low" : "margin-cell"}">${item.closedAt ? money(item.difference) : "—"}</td><td><span class="pill ${item.closedAt ? "orange" : ""}">${item.closedAt ? "Fechado" : "Aberto"}</span></td></tr>`;
-            }).join("")}</tbody></table></div>` : `<div class="empty-state">Os turnos abertos e fechados serão listados aqui.</div>`}
+              const openedAt = new Date(item.openedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+              const closedAt = item.closedAt ? new Date(item.closedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—";
+              const paymentMethods = receivedByMethod.filter(method => method.amount > 0);
+              const expectedTotal = item.closedAt ? money(item.expectedCash) : money(cashSessionExpected(item.id));
+              const countedTotal = item.closedAt ? money(item.countedCash) : "—";
+              const difference = item.closedAt ? money(item.difference) : "—";
+              const status = item.closedAt ? "Fechado" : "Aberto";
+              const searchText = [openedAt, closedAt, status, ...paymentMethods.map(method => method.payment), receivedTotal, expectedTotal, countedTotal, difference].join(" ");
+              return `<tr data-cash-history-row data-search="${escapeHtml(searchText)}"><td>${openedAt}</td><td>${closedAt}</td><td>${money(receivedTotal)}</td><td>${paymentMethods.map(method => `${escapeHtml(method.payment)}: ${money(method.amount)}`).join("<br>") || "—"}</td><td>${expectedTotal}</td><td>${countedTotal}</td><td class="${number(item.difference) < 0 ? "margin-cell low" : "margin-cell"}">${difference}</td><td><span class="pill ${item.closedAt ? "orange" : ""}">${status}</span></td></tr>`;
+            }).join("")}</tbody></table><div class="empty-state" id="cashHistoryNoResults" hidden>Nenhum caixa encontrado com essa pesquisa.</div></div></details>` : `<div class="empty-state">Os turnos abertos e fechados serão listados aqui.</div>`}
           </article>`;
+        const cashHistorySearch = document.getElementById("cashHistorySearch");
+        const cashHistoryDetails = document.getElementById("cashHistoryDetails");
+        if (cashHistorySearch && cashHistoryDetails) cashHistorySearch.addEventListener("input", () => {
+          const query = cashHistorySearch.value.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
+          const rows = [...cashHistoryDetails.querySelectorAll("[data-cash-history-row]")];
+          let visibleRows = 0;
+          rows.forEach(row => {
+            const matches = row.dataset.search.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").includes(query);
+            row.hidden = !matches;
+            if (matches) visibleRows += 1;
+          });
+          cashHistoryDetails.open = Boolean(query) || cashHistoryDetails.open;
+          document.getElementById("cashHistoryCount").textContent = query ? `${visibleRows} de ${sessions.length} turno(s)` : `${sessions.length} turno(s)`;
+          document.getElementById("cashHistoryNoResults").hidden = !query || visibleRows > 0;
+        });
       }
 
       function renderCashReports() {
