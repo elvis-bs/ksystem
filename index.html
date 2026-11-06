@@ -1380,7 +1380,7 @@
       }
 
       function render() {
-        const labels = { inicio: "Visão geral", vendas: "Vendas e pedidos", pedidos: "Acompanhar pedidos", cardapio: "Cardápio digital", caixa: "Caixa", financeiro: "Fluxo financeiro", "relatorio-caixa": "Relatório de caixa", relatorios: "Relatórios", clientes: "Clientes", produtos: "Produtos e cardápio", insumos: "Insumos e custos", configuracoes: "Configurações", mais: "Mais opções" };
+        const labels = { inicio: "Visão geral", vendas: "Vendas e pedidos", pedidos: "Acompanhar pedidos", cardapio: "Cardápio digital", caixa: "Caixa", financeiro: "Fluxo financeiro", "relatorio-caixa": "Relatório de caixa", relatorios: "Relatórios", clientes: "Clientes", produtos: "Produtos e cardápio", insumos: "Insumos e custos", configuracoes: "Configurações", "configuracoes-fiscais": "Configurações fiscais", mais: "Mais opções" };
         const params = new URLSearchParams(location.search);
         if (params.has("cardapio")) {
           document.body.classList.add("public-menu");
@@ -1401,7 +1401,7 @@
         document.body.classList.toggle("pdv-mode", standalonePdv);
         if (standalonePdv) currentPage = "vendas";
         document.getElementById("crumbTitle").textContent = standalonePdv ? "PDV" : labels[currentPage];
-        document.querySelectorAll("[data-page]").forEach(button => button.classList.toggle("active", button.dataset.page === currentPage));
+        document.querySelectorAll("[data-page]").forEach(button => button.classList.toggle("active", button.dataset.page === currentPage || (currentPage === "configuracoes-fiscais" && button.dataset.page === "configuracoes")));
         if (currentPage === "inicio") renderDashboard();
         if (currentPage === "vendas") renderSales();
         if (currentPage === "pedidos") renderOrders();
@@ -1415,6 +1415,7 @@
         if (currentPage === "produtos") renderProducts();
         if (currentPage === "insumos") renderIngredients();
         if (currentPage === "configuracoes") renderSettings();
+        if (currentPage === "configuracoes-fiscais") renderFiscalSettings();
       }
 
       function renderDashboard() {
@@ -3036,6 +3037,7 @@
         const receiptSettings = { ...seedData.receiptSettings, ...(state.receiptSettings || {}) };
         document.getElementById("pageContent").innerHTML = `
           <div class="page-heading"><div><div class="eyebrow">Personalize seu sistema</div><h1>Configurações</h1><p class="subtitle">Ajuste seu cardápio e os dados que aparecem nos cupons dos pedidos.</p></div></div>
+          <div class="setting-item"><div><strong>Configurações fiscais</strong><p>Área para organizar os dados fiscais do estabelecimento. Ainda não altera vendas nem emite documentos fiscais.</p></div><button class="button" type="button" data-page="configuracoes-fiscais">Abrir página →</button></div>
           <div class="settings-list">
             <div class="setting-item"><div><strong>Trabalho com pizzas</strong><p>Mostra a categoria de pizzas no cardápio e permite cadastrar tamanhos, ficha técnica e adicionais.</p></div><label class="switch" aria-label="Ativar categoria de pizzas"><input id="pizzaToggle" type="checkbox" ${state.pizzaEnabled ? "checked" : ""}><span></span></label></div>
             ${state.pizzaEnabled ? `<div class="setting-item"><div><strong>Preço de pizzas com mais de um sabor</strong><p>Por tamanho: usa o preço do primeiro sabor na lista; mantenha os sabores com o mesmo preço nesse tamanho. Pelo sabor: cobra o maior preço entre os sabores.</p></div><div class="field pizza-price-control"><label for="pizzaPricingMode">Forma de cobrança</label><select id="pizzaPricingMode"><option value="size" ${state.pizzaPricingMode !== "highest" ? "selected" : ""}>Preço por tamanho</option><option value="highest" ${state.pizzaPricingMode === "highest" ? "selected" : ""}>Preço do sabor mais caro</option></select></div></div>` : ""}
@@ -3078,6 +3080,17 @@
           showToast("Forma de cobrança das pizzas atualizada.");
         });
         document.getElementById("receiptSettingsForm").addEventListener("submit", saveReceiptSettings);
+      }
+
+      function renderFiscalSettings() {
+        document.getElementById("pageContent").innerHTML = `
+          <div class="page-heading"><div><div class="eyebrow">Configurações do sistema</div><h1>Configurações fiscais</h1><p class="subtitle">Uma área para reunir as informações fiscais do estabelecimento.</p></div><button class="button" type="button" data-page="configuracoes">← Voltar às configurações</button></div>
+          <div class="callout" style="margin-bottom:16px"><span>ⓘ</span><div><b>Disponível em breve</b>Esta página é apenas uma estrutura inicial. Nenhuma informação fiscal é salva e ela não interfere nas vendas, nos cupons ou no funcionamento do sistema.</div></div>
+          <div class="settings-list">
+            <section class="panel"><div class="panel-heading"><div><h2>Dados fiscais da empresa</h2><p class="helper">Informações de identificação para uma futura configuração fiscal.</p></div><span class="pill orange">Em preparação</span></div><div class="empty-state">CNPJ, inscrição estadual, regime tributário e endereço fiscal poderão ser configurados aqui.</div></section>
+            <section class="panel"><div class="panel-heading"><div><h2>Tributação</h2><p class="helper">Parâmetros tributários dos produtos e das operações.</p></div><span class="pill orange">Em preparação</span></div><div class="empty-state">As regras fiscais serão definidas em uma etapa futura, sem alterar os cadastros atuais.</div></section>
+            <section class="panel"><div class="panel-heading"><div><h2>Documentos fiscais</h2><p class="helper">Configuração de emissão e comunicação com serviços fiscais.</p></div><span class="pill orange">Em preparação</span></div><div class="empty-state">A emissão de documentos fiscais ainda não está disponível nesta página.</div></section>
+          </div>`;
       }
 
       function saveReceiptSettings(event) {
