@@ -41,6 +41,8 @@ Não coloque essas credenciais no código nem no cardápio público. Cadastre a 
 7. Em **Configurações**, cadastre os horários semanais e o fuso da loja. Escolha **Usar horário automático** ou abra/feche a loja manualmente. Os horários começam desativados até serem cadastrados.
 8. Abra o caixa e aguarde o status **Sincronizado**. Novos pedidos só são aceitos com o caixa aberto, os pedidos online ativados e a loja aberta pelo horário ou manualmente. A escolha manual permanece até trocar o modo.
 
+O cardápio mostra a loja aberta ou fechada e, quando fechada, a próxima abertura prevista pelos horários cadastrados. A previsão não garante que a loja abrirá: se o caixa continuar fechado ou os pedidos estiverem desativados, o cardápio permanece fechado e mostra o próximo horário programado.
+
 ## Como o Pix funciona
 
 - O cliente escolhe Pix online no checkout, informa um e-mail e recebe o QR Code e o código Pix copia e cola.

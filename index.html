@@ -300,6 +300,10 @@
     .digital-menu-highlights { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
     .digital-menu-highlight { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px solid #dce5da; border-radius: 30px; color: #394b3c; background: #ffffffc9; font-size: 10px; font-weight: 650; }
     .digital-menu-highlight span { color: var(--green); font-size: 12px; }
+    .digital-menu-highlight.store-open, .digital-menu-highlight.store-open span { color: #17653b; }
+    .digital-menu-highlight.store-open { border-color: #9acda9; background: #e6f5e9; }
+    .digital-menu-highlight.store-closed, .digital-menu-highlight.store-closed span { color: #a12626; }
+    .digital-menu-highlight.store-closed { border-color: #e8aaaa; background: #fff0ef; }
     .digital-product-card { overflow: hidden; border: 1px solid #e7eae3; border-radius: 15px; background: #fff; box-shadow: 0 3px 11px #20231f08; transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
     .digital-product-card:hover { border-color: #cbd9ca; box-shadow: 0 8px 20px #20231f0d; transform: translateY(-1px); }
     .digital-product-summary { display: grid; grid-template-columns: 90px minmax(0, 1fr); align-items: center; gap: 16px; min-height: 128px; padding: 14px; cursor: pointer; list-style: none; }
@@ -559,6 +563,7 @@
       let publicBusinessId = "";
       let publicOrdering = { deliveryFee: 0, pickupEnabled: false, pickupAddress: "", acceptingOrders: false };
       let publicStoreOpen = false;
+      let publicNextOpening = null;
       let publicMenuLoadError = "";
       let digitalFulfillment = "delivery";
       let digitalPaymentMethod = "";
@@ -1127,8 +1132,10 @@
         const methods = !error && Array.isArray(data?.paymentMethods)
           ? data.paymentMethods.filter(method => ["cash_on_delivery", "cash_on_pickup", "pix"].includes(method)) : [];
         const open = !menuError && !!publication && !error && data?.storeOpen === true && publicOrdering.acceptingOrders;
-        const changed = settingsChanged || publicStoreOpen !== open || JSON.stringify(supportedDigitalPaymentMethods) !== JSON.stringify(methods);
+        const nextOpening = !menuError && publication && !error && typeof data?.nextOpening === "string" ? data.nextOpening : null;
+        const changed = settingsChanged || publicStoreOpen !== open || publicNextOpening !== nextOpening || JSON.stringify(supportedDigitalPaymentMethods) !== JSON.stringify(methods);
         publicStoreOpen = open;
+        publicNextOpening = nextOpening;
         supportedDigitalPaymentMethods = methods;
         if (changed) {
           const form = document.getElementById("digitalCheckout");
@@ -2438,7 +2445,6 @@
           digitalPaymentMethod = paymentOptions[0]?.value || "";
         }
         const canPlaceOrders = publicStoreOpen && paymentOptions.length > 0;
-        const storeSettings = normalizedStoreSettings(state.storeSettings);
         const items = shownProducts.map(product => {
           const options = productOptions(product);
           const prices = options.map(option => number(option.price));
@@ -2461,9 +2467,8 @@
         const deliveryFee = digitalFulfillment === "delivery" ? publicOrdering.deliveryFee : 0;
         const total = roundMoney(subtotal + deliveryFee);
         document.getElementById("pageContent").innerHTML = `
-          <header class="digital-hero"><div class="digital-hero-copy"><div class="eyebrow">BORA! DELIVERY · CARDÁPIO DIGITAL</div><h1>${publicStoreOpen ? "Peça algo gostoso." : "Confira nosso cardápio."}</h1><p>${publicStoreOpen ? "Escolha seus favoritos e receba seu pedido do seu jeito." : "Conheça nossos produtos e preços."}</p><div class="digital-menu-highlights"><span class="digital-menu-highlight"><span>◷</span>Entrega · ${publicOrdering.deliveryFee ? money(publicOrdering.deliveryFee) : "grátis"}</span>${publicOrdering.pickupEnabled ? `<span class="digital-menu-highlight"><span>⌖</span>Retirada no local</span>` : ""}<span class="digital-menu-highlight"><span>●</span>${publicStoreOpen ? "Loja aberta" : "Loja fechada"}</span></div></div><span class="digital-hero-mark" aria-hidden="true">🍽️</span></header>
-          <section style="margin-top:18px"><h2 style="font-size:16px;margin:0 0 8px">Horário de funcionamento</h2><div class="helper">${storeSettings.hours.map((entry, index) => `<div>${storeDays[index]}: ${entry.enabled ? `${entry.open} às ${entry.close}${entry.close < entry.open ? " (dia seguinte)" : ""}` : "Fechado"}</div>`).join("")}</div><p class="helper">Fuso: ${escapeHtml(storeSettings.timeZone.replace("America/", "").replaceAll("_", " "))}</p></section>
-          ${!publicStoreOpen ? `<div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b>Loja fechada para pedidos</b>O cardápio está disponível para consulta.</div></div>` : !canPlaceOrders ? `<div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b>Finalização online indisponível</b>Tente novamente mais tarde.</div></div>` : ""}
+          <header class="digital-hero"><div class="digital-hero-copy"><div class="eyebrow">BORA! DELIVERY · CARDÁPIO DIGITAL</div><h1>${publicStoreOpen ? "Peça algo gostoso." : "Confira nosso cardápio."}</h1><p>${publicStoreOpen ? "Escolha seus favoritos e receba seu pedido do seu jeito." : "Conheça nossos produtos e preços."}</p><div class="digital-menu-highlights"><span class="digital-menu-highlight"><span>◷</span>Entrega · ${publicOrdering.deliveryFee ? money(publicOrdering.deliveryFee) : "grátis"}</span>${publicOrdering.pickupEnabled ? `<span class="digital-menu-highlight"><span>⌖</span>Retirada no local</span>` : ""}<span class="digital-menu-highlight ${publicStoreOpen ? "store-open" : "store-closed"}"><span aria-hidden="true">●</span>${publicStoreOpen ? "Loja aberta" : "Loja fechada"}</span></div></div><span class="digital-hero-mark" aria-hidden="true">🍽️</span></header>
+          ${!publicStoreOpen ? `<div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b>Loja fechada para pedidos</b>${publicNextOpening ? `Próxima abertura prevista: ${escapeHtml(publicNextOpening)}.` : "O cardápio está disponível para consulta."}</div></div>` : !canPlaceOrders ? `<div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b>Finalização online indisponível</b>Tente novamente mais tarde.</div></div>` : ""}
           ${!canPlaceOrders && currentOrderConfirmation ? renderDigitalOrderConfirmation() : ""}
           ${groups.length ? `<nav class="filters category-tabs" aria-label="Categorias do cardápio">${categoryButtons}</nav><section class="digital-menu-section"><div class="panel-heading"><h2>${categoryIcon(digitalCategory)} ${categoryName(digitalCategory)}s</h2><span>${shownProducts.length} produto(s)</span></div><div class="digital-menu-list">${items}</div></section>` : `<div class="empty-state" style="margin-top:13px">O cardápio está temporariamente sem produtos disponíveis.</div>`}
           ${canPlaceOrders ? `<section class="panel" id="digitalCart" tabindex="-1" style="margin-top:22px"><div class="panel-heading"><h2>Seu pedido</h2><span id="digitalCartCount">${digitalCart.length} item(ns)</span></div><div id="digitalCartSummary">${digitalCart.length ? digitalCart.map((item, index) => `<div class="sale-cart-row"><div><strong>${escapeHtml(item.name)}${item.optionName !== "Padrão" ? ` · ${escapeHtml(item.optionName)}` : ""} × ${item.quantity}</strong><small>${[item.border?.name, ...item.addons.map(addon => addon.name)].filter(Boolean).join(" · ") || "Sem adicionais"}</small></div><span>${money(saleLineTotal(item))}</span><span></span><button type="button" class="icon-button" data-action="remove-digital-item" data-index="${index}">×</button></div>`).join("") : `<div class="empty-state">Adicione um produto ao pedido.</div>`}</div>
