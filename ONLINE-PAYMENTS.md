@@ -54,6 +54,14 @@ O **link real Elvis na Chapa**, disponível separadamente na página **Cardápio
 
 Neste link, o cliente pode escrever uma observação de até 160 caracteres para cada produto adicionado à sacola. Ela vale para todas as unidades da quantidade escolhida e aparece na sacola, conferência, pedido e cupom. Pedidos de ingredientes extras são sujeitos à confirmação da loja e não alteram o preço automaticamente; os adicionais cobrados devem ser selecionados entre os cadastrados. A observação geral do pedido continua disponível. A função `create-cash-order` deve ser publicada antes do site para habilitar as observações por produto.
 
+## Fotos dos lanches
+
+Antes de publicar o site com envio de fotos, execute [product-photos.sql](./product-photos.sql) no SQL Editor do Supabase. Ele cria um bucket público para as fotos do cardápio e restringe uploads e remoções à pasta do usuário autenticado. As fotos desse bucket são públicas para quem tiver o endereço; não use o bucket para imagens privadas.
+
+Em **Produtos e cardápio**, edite ou cadastre um lanche e escolha uma foto JPG, PNG ou WebP de até 10 MB. O navegador reduz a imagem para no máximo 1200 pixels no lado maior e 512 KB, converte para JPEG e envia ao Supabase. É possível substituir ou remover a foto. As alterações só ficam disponíveis no cardápio depois da sincronização. Sem foto, o visual Elvis mantém uma imagem ilustrativa e o cardápio original usa o ícone de lanche.
+
+Fotos antigas são removidas depois que o produto e o cardápio são sincronizados. Se a sincronização ou remoção falhar, uma foto antiga pode permanecer no Storage; verifique o aviso e o bucket antes de remover arquivos manualmente. Acompanhe o armazenamento e a transferência de dados na página **Usage** da organização no Supabase. Excluir imagens ainda referenciadas pode quebrar a exibição no cardápio.
+
 ## Como o Pix funciona
 
 - O cliente escolhe Pix online no checkout, informa um e-mail e recebe o QR Code e o código Pix copia e cola.

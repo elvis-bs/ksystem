@@ -76,8 +76,11 @@ body.elvis-preview .filter-btn { color: #f5efdf; background: #28251f; border-col
 body.elvis-preview .filter-btn.active { color: #151411; background: #ffbd46; border-color: #ffbd46; }
 body.elvis-preview .field label, body.elvis-preview .section-label { color: #f5efdf; }
 body.elvis-preview .field input, body.elvis-preview .field select, body.elvis-preview .field textarea { color: #f5efdf; background: #28251f; border-color: #ffffff35; }
+body.elvis-preview .button, body.elvis-preview .icon-button { color: #20231f; }
 body.elvis-preview .button.primary { color: #151411; background: #ffbd46; border-color: #ffbd46; }
+body.elvis-preview .button:disabled { opacity: .65; }
 body.elvis-preview .callout { color: #f5efdf; background: #28251f; border-color: #8b612a; }
+body.elvis-preview .callout b { color: #f5efdf; }
 body.elvis-preview .empty-state { color: #c8c0b1; border-color: #ffffff35; }
 body.elvis-preview .sale-cart-row small, body.elvis-preview .panel-heading span { color: #c8c0b1; }
 body.elvis-preview .preview-tools { display: grid; gap: 8px; margin: 20px 0 8px; }

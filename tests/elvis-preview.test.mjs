@@ -4,6 +4,7 @@ import test from "node:test";
 import vm from "node:vm";
 
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+const previewCss = readFileSync(new URL("../assets/elvis-preview/preview.css", import.meta.url), "utf8");
 
 function publicFunction(name, nextName) {
   const start = html.indexOf(`      ${name}`);
@@ -11,6 +12,13 @@ function publicFunction(name, nextName) {
   assert.ok(start >= 0 && end > start, `Could not find ${name}`);
   return html.slice(start, end);
 }
+
+test("Elvis menu keeps readable text on default buttons and payment notices", () => {
+  assert.match(previewCss, /body\.elvis-preview \.button, body\.elvis-preview \.icon-button\s*\{\s*color:\s*#20231f;/);
+  assert.match(previewCss, /body\.elvis-preview \.button\.primary\s*\{\s*color:\s*#151411;\s*background:\s*#ffbd46;/);
+  assert.match(previewCss, /body\.elvis-preview \.callout b\s*\{\s*color:\s*#f5efdf;/);
+  assert.match(html, /preview\.css\?v=4/);
+});
 
 test("public menu publishes only the configured store name from receipt settings", () => {
   const source = publicFunction("function publicMenuSnapshot(", "async function syncPublicMenu(");
@@ -27,6 +35,24 @@ test("public menu publishes only the configured store name from receipt settings
   assert.equal(snapshot.receiptSettings, undefined);
   assert.equal(snapshot.storeSettings.phone, undefined);
   assert.equal(context.publicMenuSnapshot({ products: [] }).storeName, "");
+});
+
+test("public menu publishes product photo paths without affecting legacy products", () => {
+  const source = publicFunction("function publicMenuSnapshot(", "function productPhotoUrl(");
+  const context = {
+    seedData: { onlineOrdering: {} }, normalizePizzaSizes: () => [], normalizedStoreSettings: () => ({}), number: Number
+  };
+  vm.createContext(context);
+  vm.runInContext(source, context);
+  const products = [
+    { id: "p1", category: "lanche", active: true, price: 18, photoPath: "photo.jpg" },
+    { id: "p2", category: "lanche", active: true, price: 20 },
+    { id: "p3", category: "bebida", active: true, price: 5, photoPath: "private.jpg" }
+  ];
+  const snapshot = context.publicMenuSnapshot({ products, ingredients: [] });
+  assert.equal(snapshot.products[0].photoPath, "photo.jpg");
+  assert.equal(snapshot.products[1].photoPath, "");
+  assert.equal(snapshot.products[2].photoPath, "");
 });
 
 test("both Elvis views display the escaped configured name and a generic fallback", () => {

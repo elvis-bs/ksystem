@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f7f7f4">
-  <link rel="stylesheet" href="assets/elvis-preview/preview.css?v=3">
+  <link rel="stylesheet" href="assets/elvis-preview/preview.css?v=4">
   <title>Bora! Gestão — custos e cardápio</title>
   <style>
     :root {
@@ -310,6 +310,7 @@
     .digital-product-summary { display: grid; grid-template-columns: 90px minmax(0, 1fr); align-items: center; gap: 16px; min-height: 128px; padding: 14px; cursor: pointer; list-style: none; }
     .digital-product-summary::-webkit-details-marker { display: none; }
     .digital-product-art { width: 90px; height: 96px; display: grid; place-items: center; border-radius: 12px; background: linear-gradient(145deg, #fff4e7, #f8e6cf); font-size: 43px; }
+    .digital-product-art img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
     .digital-product-card[data-category="pizza"] .digital-product-art { background: linear-gradient(145deg, #fff0e6, #f8dbbd); }
     .digital-product-card[data-category="bebida"] .digital-product-art { background: linear-gradient(145deg, #eaf5fa, #dceef4); }
     .digital-product-info { min-width: 0; }
@@ -550,6 +551,9 @@
       const SUPABASE_URL = "https://jnqwtqixklmuxaeppkry.supabase.co";
       const SUPABASE_PUBLIC_KEY = "sb_publishable_aw3z7ZcPxJ4bhTWfQTWJuw_1GaWkb7J";
       const supabaseClient = window.supabase?.createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY);
+      const PHOTO_BUCKET = "product-photos";
+      const PHOTO_MAX_BYTES = 512 * 1024;
+      let photoSaving = false;
       const businessStorageKey = userId => `${STORAGE_KEY}:${userId}`;
       let currentUser = null;
       let syncQueue = Promise.resolve();
@@ -728,10 +732,12 @@
             if (error) throw error;
             if (onlineMenuReady) await syncPublicMenu(userId, snapshot);
             setSyncStatus("Sincronizado");
+            return true;
           }).catch(error => {
             console.error("Não foi possível sincronizar os dados com o Supabase:", error);
             setSyncStatus("Falha na sincronização");
             showToast("Alteração salva neste navegador, mas não sincronizou. Verifique a conexão e o SQL do Supabase.");
+            return false;
           });
         }
         return true;
@@ -753,6 +759,7 @@
             category: product.category,
             active: true,
             price: number(product.price),
+            photoPath: product.category === "lanche" && typeof product.photoPath === "string" ? product.photoPath : "",
             ingredients: product.category === "lanche"
               ? (product.recipe || [])
                 .map(item => sourceState.ingredients.find(ingredient => ingredient.id === item.ingredientId)?.name)
@@ -767,6 +774,11 @@
             addons: (product.addons || []).map(addon => ({ name: addon.name, price: number(addon.price) }))
           }))
         };
+      }
+
+      function productPhotoUrl(path) {
+        if (typeof path !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[0-9a-f-]{36}\.jpg$/i.test(path)) return "";
+        return `${SUPABASE_URL}/storage/v1/object/public/${PHOTO_BUCKET}/${path}`;
       }
 
       async function syncPublicMenu(userId, sourceState) {
@@ -2802,8 +2814,10 @@
           const sandwichDescription = product.ingredients?.length
             ? `Vai no lanche: ${product.ingredients.map(escapeHtml).join(", ")}`
             : "Ingredientes não informados";
+          const photoUrl = product.category === "lanche" ? productPhotoUrl(product.photoPath) : "";
+          const fallbackPhoto = elvisVisual && product.category === "lanche" ? `assets/elvis-preview/${shownProducts.indexOf(product) % 2 ? "burger-loaded.jpg?v=2" : "burger-classic.jpg?v=2"}` : "";
           return `<details class="digital-product-card" data-category="${escapeHtml(product.category)}" data-public-product="${escapeHtml(product.id)}">
-            <summary class="digital-product-summary"><span class="digital-product-art" aria-hidden="true">${elvisVisual && product.category === "lanche" ? `<img src="assets/elvis-preview/${shownProducts.indexOf(product) % 2 ? "burger-loaded.jpg?v=2" : "burger-classic.jpg?v=2"}" alt="">` : categoryIcon(product.category)}</span><div class="digital-product-info"><h3>${escapeHtml(product.name)}</h3><p>${product.category === "pizza" ? `${options.length} tamanho(s) · escolha o tamanho e depois os sabores` : product.category === "bebida" ? "Bebida gelada" : sandwichDescription}</p><div class="digital-product-bottom"><strong class="digital-product-price">${priceLabel}</strong><span class="digital-product-action">${elvisVisual && !canPlaceOrders ? "Consultar" : product.category === "pizza" ? "Escolher tamanho +" : elvisVisual ? "Escolher +" : "Adicionar +"}</span></div></div>${elvisVisual ? `<button type="button" class="preview-favorite" aria-label="${elvisFavorites.has(product.id) ? "Remover dos favoritos" : "Adicionar aos favoritos"}: ${escapeHtml(product.name)}" aria-pressed="${elvisFavorites.has(product.id)}">${elvisFavorites.has(product.id) ? "♥" : "♡"}</button>` : ""}</summary>
+            <summary class="digital-product-summary"><span class="digital-product-art" aria-hidden="true">${photoUrl ? `<img src="${escapeHtml(photoUrl)}" alt="" loading="lazy" data-product-photo><span hidden>${categoryIcon(product.category)}</span>` : fallbackPhoto ? `<img src="${fallbackPhoto}" alt="" loading="lazy">` : categoryIcon(product.category)}</span><div class="digital-product-info"><h3>${escapeHtml(product.name)}</h3><p>${product.category === "pizza" ? `${options.length} tamanho(s) · escolha o tamanho e depois os sabores` : product.category === "bebida" ? "Bebida gelada" : sandwichDescription}</p><div class="digital-product-bottom"><strong class="digital-product-price">${priceLabel}</strong><span class="digital-product-action">${elvisVisual && !canPlaceOrders ? "Consultar" : product.category === "pizza" ? "Escolher tamanho +" : elvisVisual ? "Escolher +" : "Adicionar +"}</span></div></div>${elvisVisual ? `<button type="button" class="preview-favorite" aria-label="${elvisFavorites.has(product.id) ? "Remover dos favoritos" : "Adicionar aos favoritos"}: ${escapeHtml(product.name)}" aria-pressed="${elvisFavorites.has(product.id)}">${elvisFavorites.has(product.id) ? "♥" : "♡"}</button>` : ""}</summary>
             <div class="digital-product-options"><div class="field"><label>Opção / tamanho</label><select data-public-option>${product.category === "pizza" ? `<option value="">Escolha o tamanho</option>` : ""}${options.map((option, index) => `<option value="${index}">${escapeHtml(option.name)} · ${money(option.price)}</option>`).join("")}</select></div>
               ${product.category === "pizza" ? `<div data-pizza-flavor-container></div><div data-pizza-border-container></div>` : ""}
               ${elvisVisual && canPlaceOrders && product.category === "lanche" && product.ingredients?.length ? `<div class="option-group"><span class="section-label">Retirar ingredientes (opcional)</span><p class="helper">Marque os ingredientes que você não deseja. O preço não muda.</p><div class="sale-addons">${product.ingredients.map((ingredient, index) => `<label class="addon-choice"><input type="checkbox" data-preview-remove-ingredient="${index}">Sem ${escapeHtml(ingredient)}</label>`).join("")}</div></div>` : ""}
@@ -2827,7 +2841,7 @@
           ${(elvisVisual || !canPlaceOrders) && currentOrderConfirmation ? `<div id="digitalConfirmation" tabindex="-1">${renderDigitalOrderConfirmation()}</div>` : ""}
           ${elvisVisual ? `<div class="preview-menu-layout" id="previewMenu"><div class="preview-menu-main"><h2 class="preview-menu-title">CARDÁPIO</h2>` : ""}
           ${elvisVisual && groups.length ? `<div class="preview-tools"><label for="previewSearch" class="preview-visually-hidden">Buscar produto</label><input id="previewSearch" type="search" placeholder="Buscar produto ou ingrediente" value="${escapeHtml(elvisSearch)}"><div class="preview-tool-row"><button type="button" class="button" id="previewFavorites" aria-pressed="${elvisFavoritesOnly}">♥ Favoritos</button><label for="previewSort">Ordenar</label><select id="previewSort"><option value="menu">Ordem do cardápio</option><option value="low">Menor preço</option><option value="high">Maior preço</option></select></div></div>` : ""}
-          ${groups.length ? `<nav class="filters category-tabs" aria-label="Categorias do cardápio">${categoryButtons}</nav><section class="digital-menu-section"><div class="panel-heading"><h2>${categoryIcon(digitalCategory)} ${categoryName(digitalCategory)}s</h2><span id="previewResultCount">${shownProducts.length} produto(s)</span></div>${elvisVisual && digitalCategory === "lanche" ? `<p class="preview-image-note">Fotos ilustrativas</p>` : ""}<div class="digital-menu-list">${items}</div>${elvisVisual ? `<div class="empty-state" id="previewNoResults" hidden>Nenhum produto encontrado nesta categoria.</div>` : ""}</section>` : `<div class="empty-state" style="margin-top:13px">O cardápio está temporariamente sem produtos disponíveis.</div>`}
+          ${groups.length ? `<nav class="filters category-tabs" aria-label="Categorias do cardápio">${categoryButtons}</nav><section class="digital-menu-section"><div class="panel-heading"><h2>${categoryIcon(digitalCategory)} ${categoryName(digitalCategory)}s</h2><span id="previewResultCount">${shownProducts.length} produto(s)</span></div>${elvisVisual && digitalCategory === "lanche" && shownProducts.some(product => !productPhotoUrl(product.photoPath)) ? `<p class="preview-image-note">Produtos sem foto usam imagens ilustrativas.</p>` : ""}<div class="digital-menu-list">${items}</div>${elvisVisual ? `<div class="empty-state" id="previewNoResults" hidden>Nenhum produto encontrado nesta categoria.</div>` : ""}</section>` : `<div class="empty-state" style="margin-top:13px">O cardápio está temporariamente sem produtos disponíveis.</div>`}
           ${elvisVisual ? `</div><aside class="preview-order-side" aria-label="Resumo do pedido"><h2>SEU PEDIDO</h2>${digitalCart.length && canPlaceOrders ? `<p>${digitalCart.reduce((sum, item) => sum + item.quantity, 0)} item(ns) na sacola</p><p>Subtotal <strong>${money(subtotal)}</strong></p><p>Entrega <strong>${digitalFulfillment === "delivery" ? money(deliveryFee) : "Grátis"}</strong></p><p>Total <strong>${money(total)}</strong></p><button id="previewSidebarButton" type="button" class="button primary">Continuar pedido →</button>` : `<div class="preview-empty-bag"><span>♧</span><b>${canPlaceOrders ? "Sacola vazia" : publicStoreOpen ? "Finalização indisponível" : "Loja fechada"}</b><p>${canPlaceOrders ? "Escolha um produto para começar." : "Confira nosso cardápio."}</p></div><button type="button" class="button primary" disabled>Continuar pedido →</button>`}<small>${elvisPreview ? "Prévia sem pedido ou pagamento real." : "Pedidos e pagamentos reais."}</small></aside></div>` : ""}
           ${canPlaceOrders ? `<section class="panel" id="digitalCart" tabindex="-1" style="margin-top:22px"><div class="panel-heading"><h2>Seu pedido</h2><span id="digitalCartCount">${digitalCart.length} item(ns)</span></div>${elvisVisual ? `<p id="previewStepLabel"></p><div id="previewCartStep">` : ""}<div id="digitalCartSummary">${digitalCart.length ? digitalCart.map((item, index) => `<div class="sale-cart-row"><div><strong>${escapeHtml(item.name)}${item.optionName !== "Padrão" ? ` · ${escapeHtml(item.optionName)}` : ""} × ${item.quantity}</strong><small>${escapeHtml([item.border?.name, ...item.addons.map(addon => addon.name), ...(elvisVisual ? (item.removedIngredients || []).map(name => `Sem ${name}`) : []), ...(elvisVisual && item.notes ? [`Obs.: ${item.notes}`] : [])].filter(Boolean).join(" · ") || "Sem adicionais")}</small></div><span>${money(saleLineTotal(item))}</span><span></span><button type="button" class="icon-button" data-action="remove-digital-item" data-index="${index}">×</button></div>`).join("") : `<div class="empty-state">Adicione um produto ao pedido.</div>`}</div>
             <div class="field" style="margin-top:13px"><label for="digitalFulfillment">Como prefere receber?</label><select id="digitalFulfillment" ${currentOrderConfirmation ? "disabled" : ""}><option value="delivery">Entrega · ${money(publicOrdering.deliveryFee)}</option>${publicOrdering.pickupEnabled ? `<option value="pickup">Retirada no local · grátis</option>` : ""}</select></div>
@@ -2848,8 +2862,8 @@
             <div>${!elvisVisual && currentOrderConfirmation ? renderDigitalOrderConfirmation() : ""}</div>
             </form>
           </section>${digitalCart.length ? `<div class="public-cart-bar"><a class="button primary" href="#digitalCart"><span class="public-cart-count"><span>${elvisVisual ? digitalCart.reduce((sum, item) => sum + item.quantity, 0) : digitalCart.length}</span>Ver pedido</span><strong>${money(total)} <span aria-hidden="true">→</span></strong></a></div>` : ""}` : ""}
-          ${elvisVisual ? `<footer class="preview-footer"><span>Imagens ilustrativas</span><button type="button" class="button" id="previewInfoButton">Sobre esta versão</button><button type="button" class="button" id="previewSettingsButton">${elvisPreview ? "Personalizar prévia" : "Ajustar animação"}</button></footer>
-          <dialog id="previewInfo" aria-labelledby="previewInfoTitle"><h2 id="previewInfoTitle">Sobre esta versão</h2><p>${elvisPreview ? "Esta prévia usa os produtos, preços e disponibilidade publicados pela loja. A sacola e a finalização servem apenas para teste: nenhum pedido ou pagamento é enviado." : "Este cardápio usa os produtos e preços publicados pela loja. Os pedidos e pagamentos são reais. As imagens dos lanches são ilustrativas."}</p><button type="button" class="button" data-preview-close-dialog>Fechar</button></dialog>
+          ${elvisVisual ? `<footer class="preview-footer"><span>Produtos sem foto usam imagens ilustrativas.</span><button type="button" class="button" id="previewInfoButton">Sobre esta versão</button><button type="button" class="button" id="previewSettingsButton">${elvisPreview ? "Personalizar prévia" : "Ajustar animação"}</button></footer>
+          <dialog id="previewInfo" aria-labelledby="previewInfoTitle"><h2 id="previewInfoTitle">Sobre esta versão</h2><p>${elvisPreview ? "Esta prévia usa os produtos, preços e disponibilidade publicados pela loja. A sacola e a finalização servem apenas para teste: nenhum pedido ou pagamento é enviado." : "Este cardápio usa os produtos e preços publicados pela loja. Os pedidos e pagamentos são reais. Produtos sem foto usam imagens ilustrativas."}</p><button type="button" class="button" data-preview-close-dialog>Fechar</button></dialog>
           <dialog id="previewSettings" aria-labelledby="previewSettingsTitle"><h2 id="previewSettingsTitle">Personalizar prévia</h2><p>O funcionamento, o endereço e a taxa de entrega vêm das configurações reais da loja e não são alterados aqui.</p><label><input id="previewMotion" type="checkbox"> Animação do hambúrguer nesta visita</label><p class="helper">A preferência de movimento reduzido do aparelho também é respeitada.</p><button type="button" class="button" data-preview-close-dialog>Fechar</button></dialog>` : ""}`;
         if (elvisVisual && !elvisHeroShown) {
           const lastLayer = document.querySelector(".elvis-layer:last-child");
@@ -3681,6 +3695,10 @@
       }
 
       function closeModal() {
+        if (photoSaving) {
+          showToast("Aguarde a foto terminar de salvar.");
+          return;
+        }
         document.getElementById("modalBackdrop").classList.remove("open");
         document.body.style.overflow = "";
       }
@@ -3699,6 +3717,10 @@
           <div class="field full"><label for="productName">${category === "pizza" ? "Nome do sabor" : "Nome do produto"}</label><input id="productName" name="name" required maxlength="70" value="${escapeHtml(product?.name || "")}" placeholder="${category === "pizza" ? "Ex.: Calabresa" : "Ex.: X-Burger da Casa"}"></div>
           ${categoryField}
           <div class="field"><label for="productActive">Disponibilidade</label><select id="productActive" name="active"><option value="true" ${product?.active !== false ? "selected" : ""}>Ativo no cardápio</option><option value="false" ${product?.active === false ? "selected" : ""}>Pausado</option></select></div>
+        </div>
+        <div class="form-section" id="productPhotoSection" ${category !== "lanche" ? "hidden" : ""}>
+          <div class="field"><label for="productPhoto">Foto do lanche (opcional)</label><input id="productPhoto" name="photo" type="file" accept="image/jpeg,image/png,image/webp"><p class="helper">JPG, PNG ou WebP, até 10 MB. A foto será reduzida antes de ser enviada ao Supabase.</p></div>
+          ${productPhotoUrl(product?.photoPath) ? `<img src="${escapeHtml(productPhotoUrl(product.photoPath))}" alt="Foto atual do lanche" style="width:120px;height:100px;object-fit:cover;border-radius:8px"><label><input type="checkbox" name="removePhoto"> Remover foto atual</label>` : ""}
         </div>
         <div id="productSpecificFields"></div>`;
         const title = forcedCategory === "pizza"
@@ -3735,6 +3757,7 @@
       }
 
       function updateProductFields(category, product = null, cached = null) {
+        document.getElementById("productPhotoSection").hidden = category !== "lanche";
         const ingredientOptions = cached?.ingredientOptions ?? state.ingredients.map(item => `<option value="${item.id}">${escapeHtml(item.name)} (${escapeHtml(item.unit)})</option>`).join("");
         let recipeRows = cached?.recipeRows;
         if (recipeRows === undefined) recipeRows = product?.recipe?.length ? product.recipe.map(item => `<div class="recipe-row"><select name="recipeIngredient" required aria-label="Insumo">${ingredientOptions}</select><input name="recipeQuantity" type="number" min="0.0001" step="any" required value="${number(item.quantity)}" placeholder="Qtd." aria-label="Quantidade"><button type="button" class="row-remove" data-remove-row aria-label="Remover ingrediente">×</button></div>`).join("") : "";
@@ -3811,7 +3834,51 @@
         openModal(ingredient ? "Editar insumo" : "Novo insumo", body, "ingredient", ingredient?.id || null);
       }
 
-      function saveProduct(form) {
+      async function compressProductPhoto(file) {
+        if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) throw new Error("Escolha uma imagem JPG, PNG ou WebP.");
+        if (file.size > 10 * 1024 * 1024) throw new Error("A imagem original deve ter no máximo 10 MB.");
+        const url = URL.createObjectURL(file);
+        try {
+          const image = new Image();
+          image.src = url;
+          await image.decode();
+          if (!image.naturalWidth || !image.naturalHeight || image.naturalWidth * image.naturalHeight > 40_000_000) {
+            throw new Error("A imagem tem dimensões inválidas ou muito grandes.");
+          }
+          const canvas = document.createElement("canvas");
+          const scale = Math.min(1, 1200 / Math.max(image.naturalWidth, image.naturalHeight));
+          canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+          canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+          const context = canvas.getContext("2d");
+          if (!context) throw new Error("Não foi possível preparar a imagem neste navegador.");
+          context.fillStyle = "#fff";
+          context.fillRect(0, 0, canvas.width, canvas.height);
+          context.drawImage(image, 0, 0, canvas.width, canvas.height);
+          for (const quality of [0.82, 0.7, 0.55, 0.4]) {
+            const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", quality));
+            if (!blob) throw new Error("Não foi possível converter a imagem.");
+            if (blob.size <= PHOTO_MAX_BYTES) return blob;
+          }
+          throw new Error("Não foi possível reduzir a foto para 512 KB. Escolha uma imagem menor.");
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      }
+
+      async function deleteProductPhoto(path, userId) {
+        if (!path || !productPhotoUrl(path) || !path.startsWith(`${userId}/`)) return true;
+        try {
+          const { error } = await supabaseClient.storage.from(PHOTO_BUCKET).remove([path]);
+          if (error) throw error;
+          return true;
+        } catch (error) {
+          console.error("Não foi possível remover a foto antiga:", error);
+          showToast("Produto salvo, mas a foto antiga não pôde ser removida do armazenamento.");
+          return false;
+        }
+      }
+
+      async function saveProduct(form) {
         const data = new FormData(form);
         const category = data.get("category");
         const recipe = [...document.querySelectorAll("#recipeRows .recipe-row")].map(row => ({
@@ -3830,6 +3897,8 @@
           active: data.get("active") === "true",
           addons
         };
+        const previousProduct = state.products.find(item => item.id === product.id);
+        if (previousProduct?.photoPath) product.photoPath = previousProduct.photoPath;
         if (category === "bebida") {
           product.cost = number(data.get("drinkCost"));
           product.price = number(data.get("price"));
@@ -3863,16 +3932,66 @@
             product.price = number(data.get("price"));
           }
         }
+        const photoFile = category === "lanche" ? form.querySelector("#productPhoto").files[0] : null;
+        const removePhoto = category === "lanche" && data.has("removePhoto");
+        if (photoFile && removePhoto) {
+          showToast("Escolha uma nova foto ou marque para remover a atual, não os dois.");
+          return;
+        }
+        const oldPhoto = previousProduct?.photoPath || "";
+        const photoChanged = Boolean(photoFile || (removePhoto && oldPhoto));
+        if (photoChanged && (!currentUser || !supabaseClient || !onlineMenuReady)) {
+          showToast("Não foi possível salvar a foto: entre na conta e verifique a sincronização do cardápio.");
+          return;
+        }
+        let uploadedPhoto = "";
+        const photoUserId = currentUser?.id;
+        const submitButton = form.querySelector("button[type='submit']");
+        if (photoChanged) {
+          photoSaving = true;
+          submitButton.disabled = true;
+          try {
+            if (photoFile) {
+              const blob = await compressProductPhoto(photoFile);
+              uploadedPhoto = `${photoUserId}/${crypto.randomUUID()}.jpg`;
+              const { error } = await supabaseClient.storage.from(PHOTO_BUCKET).upload(uploadedPhoto, blob, {
+                contentType: "image/jpeg", cacheControl: "3600", upsert: false
+              });
+              if (error) throw error;
+              product.photoPath = uploadedPhoto;
+            } else {
+              delete product.photoPath;
+            }
+          } catch (error) {
+            console.error("Não foi possível enviar a foto do lanche:", error);
+            showToast(error.message ? `Não foi possível enviar a foto: ${error.message}` : "Não foi possível enviar a foto. Verifique a conexão e o Supabase Storage.");
+            photoSaving = false;
+            submitButton.disabled = false;
+            return;
+          }
+        }
         const previousState = JSON.stringify(state);
         const index = state.products.findIndex(item => item.id === product.id);
         if (index >= 0) state.products[index] = product;
         else state.products.push(product);
         if (!saveState()) {
           state = JSON.parse(previousState);
+          if (uploadedPhoto) await deleteProductPhoto(uploadedPhoto, photoUserId);
+          photoSaving = false;
+          submitButton.disabled = false;
           return;
         }
+        const synced = photoChanged ? await syncQueue : true;
+        photoSaving = false;
+        submitButton.disabled = false;
         closeModal();
         render();
+        if (!synced) {
+          showToast("Produto salvo apenas neste navegador; a foto não foi sincronizada. Verifique a conexão.");
+          return;
+        }
+        if (photoChanged && oldPhoto && oldPhoto !== product.photoPath && !state.products.some(item => item.photoPath === oldPhoto)
+          && !await deleteProductPhoto(oldPhoto, photoUserId)) return;
         showToast(editingId ? "Produto atualizado." : "Produto cadastrado.");
       }
 
@@ -3959,6 +4078,14 @@
           showToast("Não foi possível sair da conta.");
         }
       });
+
+      document.addEventListener("error", event => {
+        const image = event.target;
+        if (!(image instanceof HTMLImageElement) || !image.hasAttribute("data-product-photo")) return;
+        console.warn("Não foi possível carregar a foto de um produto.");
+        image.hidden = true;
+        if (image.nextElementSibling) image.nextElementSibling.hidden = false;
+      }, true);
 
       document.addEventListener("click", event => {
         if (!event.target.closest(".customer-autocomplete")) {
@@ -4130,10 +4257,22 @@
         if (action.dataset.action === "delete-product") {
           const product = state.products.find(item => item.id === id);
           if (product && confirm(`Excluir "${product.name}" do cardápio?`)) {
+            const previousProducts = state.products;
             state.products = state.products.filter(item => item.id !== id);
-            saveState();
+            if (!saveState()) {
+              state.products = previousProducts;
+              return;
+            }
             render();
             showToast("Produto excluído.");
+            const userId = currentUser?.id;
+            if (product.photoPath && userId && onlineMenuReady) {
+              syncQueue.then(synced => {
+                if (synced && !state.products.some(item => item.photoPath === product.photoPath)) {
+                  return deleteProductPhoto(product.photoPath, userId);
+                }
+              });
+            }
           }
         }
         if (action.dataset.action === "new-ingredient") ingredientForm();
