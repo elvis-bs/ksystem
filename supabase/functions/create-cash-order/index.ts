@@ -49,6 +49,31 @@ function safeProductName(product: JsonRecord): string {
   return text(product.name, 100);
 }
 
+function storeIsOpen(settings: JsonRecord | undefined, now = new Date()): boolean {
+  if (settings?.mode === "open") return true;
+  if (settings?.mode === "closed") return false;
+  const hours = Array.isArray(settings?.hours) ? settings.hours as JsonRecord[] : [];
+  const timeZone = ["America/Sao_Paulo", "America/Manaus", "America/Rio_Branco", "America/Noronha"].includes(String(settings?.timeZone))
+    ? String(settings?.timeZone) : "America/Sao_Paulo";
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(now);
+  const part = (type: string) => parts.find(item => item.type === type)?.value || "";
+  const day = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(part("weekday"));
+  const minute = Number(part("hour")) * 60 + Number(part("minute"));
+  const minutes = (value: unknown) => {
+    if (typeof value !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return -1;
+    const [hour, minuteValue] = value.split(":").map(Number);
+    return hour * 60 + minuteValue;
+  };
+  const matches = (entry: JsonRecord | undefined, previous: boolean) => {
+    if (!entry || entry.enabled !== true) return false;
+    const start = minutes(entry.open);
+    const end = minutes(entry.close);
+    if (start < 0 || end < 0 || start === end) return false;
+    return previous ? start > end && minute < end : minute >= start && (start > end || minute < end);
+  };
+  return day >= 0 && (matches(hours[day], false) || matches(hours[(day + 6) % 7], true));
+}
+
 Deno.serve(async request => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (request.method === "GET") {
@@ -65,6 +90,20 @@ Deno.serve(async request => {
     const businessId = text(body.businessId, 50);
     if (!/^[0-9a-f-]{36}$/i.test(businessId)) return jsonResponse({ error: "Invalid store." }, 400);
     const client = adminClient();
+    const { data: business, error: businessError } = await client
+      .from("business_data")
+      .select("data")
+      .eq("user_id", businessId)
+      .maybeSingle();
+    if (businessError) throw businessError;
+    const businessData = business?.data as JsonRecord | undefined;
+    const sessions = businessData?.cashSessions;
+    const cashOpen = Array.isArray(sessions) && sessions.some(session => session && !session.closedAt);
+    if (!cashOpen || !storeIsOpen(businessData?.storeSettings as JsonRecord | undefined)) {
+      return body.action === "payment_methods"
+        ? jsonResponse({ paymentMethods: [], storeOpen: false })
+        : jsonResponse({ error: "A loja está fechada para pedidos no momento." }, 409);
+    }
     if (body.action === "payment_methods") {
       const { data: publication, error: menuError } = await client
         .from("public_menus")
@@ -74,7 +113,7 @@ Deno.serve(async request => {
         .maybeSingle();
       if (menuError) throw menuError;
       if (!publication || (publication.menu as JsonRecord).acceptingOrders !== true) {
-        return jsonResponse({ paymentMethods: [] });
+        return jsonResponse({ paymentMethods: [], storeOpen: false });
       }
 
       const paymentMethods = ["cash_on_delivery"];
@@ -93,7 +132,7 @@ Deno.serve(async request => {
         if (connectionError) throw connectionError;
         if (connection) paymentMethods.push("pix");
       }
-      return jsonResponse({ paymentMethods });
+      return jsonResponse({ paymentMethods, storeOpen: true });
     }
 
     const customer = body.customer as JsonRecord;

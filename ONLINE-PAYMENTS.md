@@ -38,11 +38,14 @@ Não coloque essas credenciais no código nem no cardápio público. Cadastre a 
 4. Publique o site no GitHub Pages e entre no Bora! Gestão.
 5. Abra **Cardápio digital** e clique em **Conectar conta Mercado Pago**. Autorize a conta que receberá os pagamentos.
 6. Publique o cardápio e ative **Aceitar pedidos online**.
+7. Em **Configurações**, cadastre os horários semanais e o fuso da loja. Escolha **Usar horário automático** ou abra/feche a loja manualmente. Os horários começam desativados até serem cadastrados.
+8. Abra o caixa e aguarde o status **Sincronizado**. Novos pedidos só são aceitos com o caixa aberto, os pedidos online ativados e a loja aberta pelo horário ou manualmente. A escolha manual permanece até trocar o modo.
 
 ## Como o Pix funciona
 
 - O cliente escolhe Pix online no checkout, informa um e-mail e recebe o QR Code e o código Pix copia e cola.
 - O servidor valida produtos, adicionais, taxa, total e disponibilidade antes de criar a cobrança Pix no Mercado Pago.
 - O cardápio consulta o status do pagamento; o webhook também atualiza o pedido. Apenas pagamentos aprovados são marcados como recebidos.
-- O pedido online não atualiza o caixa automaticamente; registre o recebimento no sistema conforme o fluxo financeiro da loja.
+- Pagamentos Pix aprovados são associados ao caixa aberto na data da confirmação. Para pedidos em dinheiro, registre o recebimento no sistema.
+- Um código Pix criado antes do fechamento ainda pode ser pago depois que o caixa fechar. Confira os pedidos Pix pendentes e concilie pagamentos posteriores; o fechamento não cancela cobranças já geradas.
 - Para usar somente dinheiro, não é necessário conectar o Mercado Pago.

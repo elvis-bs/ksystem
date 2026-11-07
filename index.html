@@ -558,6 +558,7 @@
       let orderAlertAudioContext = null;
       let publicBusinessId = "";
       let publicOrdering = { deliveryFee: 0, pickupEnabled: false, pickupAddress: "", acceptingOrders: false };
+      let publicStoreOpen = false;
       let publicMenuLoadError = "";
       let digitalFulfillment = "delivery";
       let digitalPaymentMethod = "";
@@ -577,6 +578,7 @@
           { id: "pizza-size-grande", name: "Grande", flavorLimit: 3 }
         ],
         receiptSettings: { storeName: "", phone: "", address: "", cnpj: "", footer: "Obrigado pela preferência!" },
+        storeSettings: { mode: "auto", timeZone: "America/Sao_Paulo", hours: Array.from({ length: 7 }, () => ({ enabled: false, open: "18:00", close: "23:00" })) },
         onlineOrdering: { published: false, enabled: false, deliveryFee: 0, pickupEnabled: false, pickupAddress: "" },
         customers: [],
         sales: [],
@@ -622,6 +624,21 @@
       let showTodaySales = false;
       let editingId = null;
       let editingType = null;
+
+      const storeDays = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
+      const storeTimeZones = ["America/Sao_Paulo", "America/Manaus", "America/Rio_Branco", "America/Noronha"];
+
+      function normalizedStoreSettings(settings) {
+        return {
+          mode: ["auto", "open", "closed"].includes(settings?.mode) ? settings.mode : "auto",
+          timeZone: storeTimeZones.includes(settings?.timeZone) ? settings.timeZone : "America/Sao_Paulo",
+          hours: seedData.storeSettings.hours.map((fallback, index) => {
+            const entry = settings?.hours?.[index];
+            const validTime = value => typeof value === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+            return { enabled: entry?.enabled === true, open: validTime(entry?.open) ? entry.open : fallback.open, close: validTime(entry?.close) ? entry.close : fallback.close };
+          })
+        };
+      }
 
       function loadState(storageKey = STORAGE_KEY) {
         try {
@@ -709,6 +726,7 @@
           pizzaPricingMode: sourceState.pizzaPricingMode === "highest" ? "highest" : "size",
           pizzaSizes: normalizePizzaSizes(sourceState.pizzaSizes, sourceState.products),
           acceptingOrders: onlineOrdering.enabled === true,
+          storeSettings: normalizedStoreSettings(sourceState.storeSettings),
           pickupAddress: onlineOrdering.pickupAddress || "",
           products: sourceState.products.filter(product => product.active && (product.category !== "pizza" || sourceState.pizzaEnabled)).map(product => ({
             id: product.id,
@@ -1094,6 +1112,34 @@
         }, 15000);
       }
 
+      async function refreshPublicAvailability() {
+        const { data: publication, error: menuError } = await supabaseClient.from("public_menus")
+          .select("menu,published").eq("user_id", publicBusinessId).eq("published", true).maybeSingle();
+        const settingsChanged = !menuError && publication && JSON.stringify(state.storeSettings) !== JSON.stringify(publication.menu.storeSettings);
+        if (!menuError && publication) {
+          state.storeSettings = publication.menu.storeSettings;
+          publicOrdering.acceptingOrders = publication.menu.acceptingOrders === true;
+        }
+        const { data, error } = await supabaseClient.functions.invoke("create-cash-order", {
+          body: { action: "payment_methods", businessId: publicBusinessId }
+        });
+        if (error) console.warn("Não foi possível verificar a disponibilidade da loja:", error);
+        const methods = !error && Array.isArray(data?.paymentMethods)
+          ? data.paymentMethods.filter(method => ["cash_on_delivery", "cash_on_pickup", "pix"].includes(method)) : [];
+        const open = !menuError && !!publication && !error && data?.storeOpen === true && publicOrdering.acceptingOrders;
+        const changed = settingsChanged || publicStoreOpen !== open || JSON.stringify(supportedDigitalPaymentMethods) !== JSON.stringify(methods);
+        publicStoreOpen = open;
+        supportedDigitalPaymentMethods = methods;
+        if (changed) {
+          const form = document.getElementById("digitalCheckout");
+          if (form) {
+            const draft = new FormData(form);
+            Object.keys(digitalCustomerDraft).forEach(key => { digitalCustomerDraft[key] = String(draft.get(key) || ""); });
+          }
+          renderPublicMenu();
+        }
+      }
+
       async function initializeAuth() {
         const params = new URLSearchParams(location.search);
         if (params.has("cardapio")) {
@@ -1136,29 +1182,9 @@
             };
             digitalFulfillment = "delivery";
             digitalPaymentMethod = "cash_on_delivery";
-            if (publicOrdering.acceptingOrders) {
-              const paymentMethods = new Set();
-              const { data: cashCapabilities, error: cashCapabilitiesError } = await supabaseClient.functions.invoke("create-cash-order", { method: "GET" });
-              if (cashCapabilitiesError) {
-                console.warn("Não foi possível verificar a finalização em dinheiro:", cashCapabilitiesError);
-              } else if (Array.isArray(cashCapabilities?.paymentMethods)) {
-                cashCapabilities.paymentMethods
-                  .filter(method => ["cash_on_delivery", "cash_on_pickup"].includes(method))
-                  .forEach(method => paymentMethods.add(method));
-              }
-
-              const { data: pixCapabilities, error: pixCapabilitiesError } = await supabaseClient.functions.invoke("create-cash-order", {
-                body: { action: "payment_methods", businessId: publicBusinessId }
-              });
-              if (pixCapabilitiesError) {
-                console.warn("Pix online indisponível até atualizar a função de pedidos no Supabase:", pixCapabilitiesError);
-              } else if (Array.isArray(pixCapabilities?.paymentMethods)) {
-                pixCapabilities.paymentMethods
-                  .filter(method => ["cash_on_delivery", "cash_on_pickup", "pix"].includes(method))
-                  .forEach(method => paymentMethods.add(method));
-              }
-              supportedDigitalPaymentMethods = [...paymentMethods];
-            }
+            await refreshPublicAvailability();
+            setInterval(() => { if (!document.hidden) refreshPublicAvailability(); }, 30000);
+            document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshPublicAvailability(); });
           }
           renderPublicMenu();
           return;
@@ -2411,7 +2437,8 @@
         if (!paymentOptions.some(option => option.value === digitalPaymentMethod)) {
           digitalPaymentMethod = paymentOptions[0]?.value || "";
         }
-        const canPlaceOrders = publicOrdering.acceptingOrders && paymentOptions.length > 0;
+        const canPlaceOrders = publicStoreOpen && paymentOptions.length > 0;
+        const storeSettings = normalizedStoreSettings(state.storeSettings);
         const items = shownProducts.map(product => {
           const options = productOptions(product);
           const prices = options.map(option => number(option.price));
@@ -2434,8 +2461,10 @@
         const deliveryFee = digitalFulfillment === "delivery" ? publicOrdering.deliveryFee : 0;
         const total = roundMoney(subtotal + deliveryFee);
         document.getElementById("pageContent").innerHTML = `
-          <header class="digital-hero"><div class="digital-hero-copy"><div class="eyebrow">BORA! DELIVERY · CARDÁPIO DIGITAL</div><h1>${publicOrdering.acceptingOrders ? "Peça algo gostoso." : "Confira nosso cardápio."}</h1><p>${publicOrdering.acceptingOrders ? "Escolha seus favoritos e receba seu pedido do seu jeito." : "Conheça nossos produtos e preços."}</p><div class="digital-menu-highlights"><span class="digital-menu-highlight"><span>◷</span>Entrega · ${publicOrdering.deliveryFee ? money(publicOrdering.deliveryFee) : "grátis"}</span>${publicOrdering.pickupEnabled ? `<span class="digital-menu-highlight"><span>⌖</span>Retirada no local</span>` : ""}${publicOrdering.acceptingOrders ? `<span class="digital-menu-highlight"><span>✓</span>${supportedDigitalPaymentMethods.includes("pix") ? "Pix online ou dinheiro" : "Pagamento em dinheiro"}</span>` : `<span class="digital-menu-highlight"><span>●</span>Cardápio para consulta</span>`}</div></div><span class="digital-hero-mark" aria-hidden="true">🍽️</span></header>
-          ${!publicOrdering.acceptingOrders ? `<div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b>Cardápio disponível para consulta</b>A loja ainda não está aceitando pedidos. A finalização será liberada após a ativação dos pedidos no painel da loja.</div></div>` : !canPlaceOrders ? `<div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b>Finalização online indisponível</b>A loja ainda não configurou o recebimento de pedidos no servidor.</div></div>` : ""}
+          <header class="digital-hero"><div class="digital-hero-copy"><div class="eyebrow">BORA! DELIVERY · CARDÁPIO DIGITAL</div><h1>${publicStoreOpen ? "Peça algo gostoso." : "Confira nosso cardápio."}</h1><p>${publicStoreOpen ? "Escolha seus favoritos e receba seu pedido do seu jeito." : "Conheça nossos produtos e preços."}</p><div class="digital-menu-highlights"><span class="digital-menu-highlight"><span>◷</span>Entrega · ${publicOrdering.deliveryFee ? money(publicOrdering.deliveryFee) : "grátis"}</span>${publicOrdering.pickupEnabled ? `<span class="digital-menu-highlight"><span>⌖</span>Retirada no local</span>` : ""}<span class="digital-menu-highlight"><span>●</span>${publicStoreOpen ? "Loja aberta" : "Loja fechada"}</span></div></div><span class="digital-hero-mark" aria-hidden="true">🍽️</span></header>
+          <section style="margin-top:18px"><h2 style="font-size:16px;margin:0 0 8px">Horário de funcionamento</h2><div class="helper">${storeSettings.hours.map((entry, index) => `<div>${storeDays[index]}: ${entry.enabled ? `${entry.open} às ${entry.close}${entry.close < entry.open ? " (dia seguinte)" : ""}` : "Fechado"}</div>`).join("")}</div><p class="helper">Fuso: ${escapeHtml(storeSettings.timeZone.replace("America/", "").replaceAll("_", " "))}</p></section>
+          ${!publicStoreOpen ? `<div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b>Loja fechada para pedidos</b>O cardápio está disponível para consulta.</div></div>` : !canPlaceOrders ? `<div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b>Finalização online indisponível</b>Tente novamente mais tarde.</div></div>` : ""}
+          ${!canPlaceOrders && currentOrderConfirmation ? renderDigitalOrderConfirmation() : ""}
           ${groups.length ? `<nav class="filters category-tabs" aria-label="Categorias do cardápio">${categoryButtons}</nav><section class="digital-menu-section"><div class="panel-heading"><h2>${categoryIcon(digitalCategory)} ${categoryName(digitalCategory)}s</h2><span>${shownProducts.length} produto(s)</span></div><div class="digital-menu-list">${items}</div></section>` : `<div class="empty-state" style="margin-top:13px">O cardápio está temporariamente sem produtos disponíveis.</div>`}
           ${canPlaceOrders ? `<section class="panel" id="digitalCart" tabindex="-1" style="margin-top:22px"><div class="panel-heading"><h2>Seu pedido</h2><span id="digitalCartCount">${digitalCart.length} item(ns)</span></div><div id="digitalCartSummary">${digitalCart.length ? digitalCart.map((item, index) => `<div class="sale-cart-row"><div><strong>${escapeHtml(item.name)}${item.optionName !== "Padrão" ? ` · ${escapeHtml(item.optionName)}` : ""} × ${item.quantity}</strong><small>${[item.border?.name, ...item.addons.map(addon => addon.name)].filter(Boolean).join(" · ") || "Sem adicionais"}</small></div><span>${money(saleLineTotal(item))}</span><span></span><button type="button" class="icon-button" data-action="remove-digital-item" data-index="${index}">×</button></div>`).join("") : `<div class="empty-state">Adicione um produto ao pedido.</div>`}</div>
             <div class="field" style="margin-top:13px"><label for="digitalFulfillment">Como prefere receber?</label><select id="digitalFulfillment" ${currentOrderConfirmation ? "disabled" : ""}><option value="delivery">Entrega · ${money(publicOrdering.deliveryFee)}</option>${publicOrdering.pickupEnabled ? `<option value="pickup">Retirada no local · grátis</option>` : ""}</select></div>
@@ -2606,9 +2635,16 @@
           });
           if (error || !result?.orderId) {
             console.error("Não foi possível criar o pedido online:", error || result?.error);
-            showToast(result?.error || "Não foi possível enviar o pedido. Tente novamente.");
+            let message = result?.error;
+            if (!message && error?.context?.json) {
+              try { message = (await error.context.json()).error; } catch (_) { message = ""; }
+            }
+            showToast(message || "Não foi possível enviar o pedido. Tente novamente.");
             submitButton.disabled = false;
             submitButton.textContent = `Finalizar pedido · ${money(roundMoney(digitalCart.reduce((sum, item) => sum + saleLineTotal(item), 0) + (digitalFulfillment === "delivery" ? publicOrdering.deliveryFee : 0)))}`;
+            if (error?.context?.status === 409) {
+              await refreshPublicAvailability();
+            }
             return;
           }
           currentOrderConfirmation = String(result.orderId);
@@ -2735,7 +2771,7 @@
           ? cashSessionPaymentTotals(session.id).filter(item => item.amount > 0)
           : [];
         const body = closeSession
-          ? `<p class="helper">Total recebido no turno (dinheiro, Pix, cartões e outras formas): <strong>${money(received)}</strong></p><div class="cost-summary" style="margin-top:10px">${paymentRows.length ? paymentRows.map(item => `<div class="cost-row"><span>${escapeHtml(item.payment)}</span><strong>${money(item.amount)}</strong></div>`).join("") : `<div class="helper">Nenhum recebimento registrado neste turno.</div>`}</div><p class="helper" style="margin-top:12px">Total esperado no fechamento (fundo inicial + todos os recebimentos + adições − sangrias): <strong>${money(expected)}</strong></p><p class="helper" style="margin-top:8px">Referência de dinheiro físico na gaveta: ${money(physicalCashExpected)}. Para conferir o total do caixa, some o dinheiro contado aos valores de Pix e cartões do turno.</p><div class="field" style="margin-top:14px"><label for="cashCounted">Total conferido no fechamento (dinheiro + Pix + cartões e outras formas) (R$)</label><input id="cashCounted" name="counted" type="number" min="0" step="0.01" value="${expected.toFixed(2)}" required></div><div class="field" style="margin-top:12px"><label for="cashCloseNotes">Observações</label><input id="cashCloseNotes" name="notes" maxlength="160" placeholder="Diferenças ou ocorrências"></div>`
+          ? `<p class="helper">Total recebido no turno (dinheiro, Pix, cartões e outras formas): <strong>${money(received)}</strong></p><div class="cost-summary" style="margin-top:10px">${paymentRows.length ? paymentRows.map(item => `<div class="cost-row"><span>${escapeHtml(item.payment)}</span><strong>${money(item.amount)}</strong></div>`).join("") : `<div class="helper">Nenhum recebimento registrado neste turno.</div>`}</div><p class="helper" style="margin-top:12px">Total esperado no fechamento (fundo inicial + todos os recebimentos + adições − sangrias): <strong>${money(expected)}</strong></p><p class="helper" style="margin-top:8px">Referência de dinheiro físico na gaveta: ${money(physicalCashExpected)}. Para conferir o total do caixa, some o dinheiro contado aos valores de Pix e cartões do turno.</p><p class="helper">Confira os pedidos Pix pendentes antes de fechar: um código já gerado ainda pode ser pago após o fechamento.</p><div class="field" style="margin-top:14px"><label for="cashCounted">Total conferido no fechamento (dinheiro + Pix + cartões e outras formas) (R$)</label><input id="cashCounted" name="counted" type="number" min="0" step="0.01" value="${expected.toFixed(2)}" required></div><div class="field" style="margin-top:12px"><label for="cashCloseNotes">Observações</label><input id="cashCloseNotes" name="notes" maxlength="160" placeholder="Diferenças ou ocorrências"></div>`
           : `<div class="field"><label for="cashOpening">Valor inicial em dinheiro (R$)</label><input id="cashOpening" name="openingAmount" type="number" min="0" step="0.01" value="0" required></div><div class="field" style="margin-top:12px"><label for="cashOpenNotes">Observações</label><input id="cashOpenNotes" name="notes" maxlength="160" placeholder="Fundo de troco, operador..."></div>`;
         openModal(closeSession ? "Fechar caixa" : "Abrir caixa", body, closeSession ? "closeCash" : "openCash", session?.id || null);
       }
@@ -3129,8 +3165,16 @@
 
       function renderSettings() {
         const receiptSettings = { ...seedData.receiptSettings, ...(state.receiptSettings || {}) };
+        const storeSettings = normalizedStoreSettings(state.storeSettings);
         document.getElementById("pageContent").innerHTML = `
           <div class="page-heading"><div><div class="eyebrow">Personalize seu sistema</div><h1>Configurações</h1><p class="subtitle">Ajuste seu cardápio e os dados que aparecem nos cupons dos pedidos.</p></div></div>
+          <section class="panel" style="margin-bottom:16px"><div class="panel-heading"><div><h2>Funcionamento da loja</h2><p class="helper">${storeSettings.mode === "auto" ? "Horário automático" : storeSettings.mode === "open" ? "Aberta manualmente" : "Fechada manualmente"} · ${currentCashSession() ? "Caixa aberto" : "Caixa fechado"}</p></div></div>
+            <div class="filters"><button type="button" class="button ${storeSettings.mode === "open" ? "primary" : ""}" data-store-mode="open">Abrir loja</button><button type="button" class="button ${storeSettings.mode === "closed" ? "primary" : ""}" data-store-mode="closed">Fechar loja</button><button type="button" class="button ${storeSettings.mode === "auto" ? "primary" : ""}" data-store-mode="auto">Usar horário automático</button></div>
+            <p class="helper">O caixa precisa estar aberto para receber pedidos, inclusive na abertura manual. A seleção manual permanece até escolher outro modo.</p>
+            <form id="storeHoursForm"><div class="field" style="margin:14px 0"><label for="storeTimeZone">Fuso horário</label><select id="storeTimeZone" name="timeZone">${[["America/Sao_Paulo", "Brasília"], ["America/Manaus", "Manaus"], ["America/Rio_Branco", "Rio Branco"], ["America/Noronha", "Fernando de Noronha"]].map(([value, label]) => `<option value="${value}" ${storeSettings.timeZone === value ? "selected" : ""}>${label}</option>`).join("")}</select></div>
+              ${storeSettings.hours.map((entry, index) => `<div class="form-grid" style="margin-bottom:10px"><label class="field"><span><input type="checkbox" name="day${index}" ${entry.enabled ? "checked" : ""}> ${storeDays[index]}</span></label><div class="field"><label for="open${index}">Abertura</label><input id="open${index}" name="open${index}" type="time" value="${entry.open}" required></div><div class="field"><label for="close${index}">Fechamento</label><input id="close${index}" name="close${index}" type="time" value="${entry.close}" required></div></div>`).join("")}
+              <p class="helper">Para encerrar após a meia-noite, informe um horário de fechamento anterior ao de abertura.</p><button class="button primary" type="submit">Salvar horários</button>
+            </form></section>
           <div class="setting-item"><div><strong>Configurações fiscais</strong><p>Área para organizar os dados fiscais do estabelecimento. Ainda não altera vendas nem emite documentos fiscais.</p></div><button class="button" type="button" data-page="configuracoes-fiscais">Abrir página →</button></div>
           <div class="settings-list">
             <div class="setting-item"><div><strong>Trabalho com pizzas</strong><p>Mostra a categoria de pizzas no cardápio e permite cadastrar tamanhos, ficha técnica e adicionais.</p></div><label class="switch" aria-label="Ativar categoria de pizzas"><input id="pizzaToggle" type="checkbox" ${state.pizzaEnabled ? "checked" : ""}><span></span></label></div>
@@ -3149,6 +3193,27 @@
             </form>
           </section>
           <div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b>Sobre o cupom</b>O cupom organiza os detalhes do pedido para impressão e não substitui um documento fiscal.</div></div>`;
+        document.querySelectorAll("[data-store-mode]").forEach(button => button.addEventListener("click", () => {
+          const previous = state.storeSettings;
+          state.storeSettings = { ...storeSettings, mode: button.dataset.storeMode };
+          if (!saveState()) { state.storeSettings = previous; return; }
+          renderSettings();
+          showToast(button.dataset.storeMode === "open" && !currentCashSession() ? "Abra o caixa para receber pedidos." : "Funcionamento da loja atualizado.");
+        }));
+        document.getElementById("storeHoursForm").addEventListener("submit", event => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          const hours = storeDays.map((day, index) => ({ enabled: data.has(`day${index}`), open: String(data.get(`open${index}`)), close: String(data.get(`close${index}`)) }));
+          if (hours.some(entry => entry.enabled && entry.open === entry.close)) {
+            showToast("A abertura e o fechamento devem ser diferentes.");
+            return;
+          }
+          const previous = state.storeSettings;
+          state.storeSettings = { ...storeSettings, timeZone: String(data.get("timeZone")), hours };
+          if (!saveState()) { state.storeSettings = previous; return; }
+          renderSettings();
+          showToast("Horários da loja salvos.");
+        });
         document.getElementById("pizzaToggle").addEventListener("change", event => {
           const previousValue = state.pizzaEnabled;
           state.pizzaEnabled = event.target.checked;
