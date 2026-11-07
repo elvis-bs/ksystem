@@ -109,7 +109,7 @@ Deno.serve(async request => {
         if (connectionError) throw connectionError;
         if (connection) paymentMethods.push("pix");
       }
-      return jsonResponse({ paymentMethods, storeOpen: true, supportsRemovedIngredients: true });
+      return jsonResponse({ paymentMethods, storeOpen: true, supportsRemovedIngredients: true, supportsItemNotes: true });
     }
 
     const customer = body.customer as JsonRecord;
@@ -228,6 +228,10 @@ Deno.serve(async request => {
         || removedIngredients.some(name => typeof name !== "string" || !ingredients.includes(name))) {
         return jsonResponse({ error: "Um ingrediente selecionado não está disponível. Atualize o cardápio e tente novamente." }, 400);
       }
+      if (rawItem.notes !== undefined && (typeof rawItem.notes !== "string" || rawItem.notes.length > 160)) {
+        return jsonResponse({ error: "A observação do item deve ter até 160 caracteres." }, 400);
+      }
+      const itemNotes = typeof rawItem.notes === "string" ? rawItem.notes.trim() : "";
       const borderCents = cents(border?.price ?? 0);
       const addonsCents = selectedAddons.reduce((sum, addon) => sum + Math.max(0, cents(addon.price)), 0);
       const lineTotalCents = (unitPriceCents + borderCents + addonsCents) * quantity;
@@ -246,7 +250,8 @@ Deno.serve(async request => {
         quantity,
         border: border ? { name: text(border.name, 60), price: borderCents / 100 } : null,
         addons: selectedAddons.map(addon => ({ name: text(addon.name, 60), price: cents(addon.price) / 100 })),
-        removedIngredients: [...new Set(removedIngredients)]
+        removedIngredients: [...new Set(removedIngredients)],
+        notes: itemNotes
       });
     }
 

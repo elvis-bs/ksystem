@@ -31,19 +31,20 @@ body.elvis-preview .main, body.elvis-preview .content { background: transparent;
 body.elvis-preview { background: radial-gradient(ellipse at 32% 28%, #312015 0, #151411 50%); }
 body.elvis-preview .content { width: min(1190px, 100%); max-width: none; padding-top: 0; }
 body.elvis-preview .preview-topbar { min-height: 74px; display: flex; align-items: center; gap: 30px; border-bottom: 1px solid #ffffff15; }
-body.elvis-preview .preview-brand { display: flex; align-items: center; gap: 9px; color: #f5efdf; text-decoration: none; }
-body.elvis-preview .preview-brand-mark { display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid #c89a48; border-radius: 50%; color: #ffbd46; font-size: 24px; }
+body.elvis-preview .preview-brand { display: flex; align-items: center; gap: 9px; min-width: 0; max-width: 65%; color: #f5efdf; text-decoration: none; }
+body.elvis-preview .preview-brand-mark { display: grid; place-items: center; flex: 0 0 38px; width: 38px; height: 38px; border: 1px solid #c89a48; border-radius: 50%; color: #ffbd46; font-size: 24px; }
+body.elvis-preview .preview-brand > span:last-child { min-width: 0; }
 body.elvis-preview .preview-brand b, body.elvis-preview .preview-brand small { display: block; line-height: 1; }
-body.elvis-preview .preview-brand b { font: 800 24px "Elvis Barlow", sans-serif; }
+body.elvis-preview .preview-brand b { font: 800 24px "Elvis Barlow", sans-serif; overflow-wrap: anywhere; }
 body.elvis-preview .preview-brand small { color: #ffbd46; font-size: 8px; letter-spacing: 2px; }
 body.elvis-preview .preview-nav { margin: auto; color: #f5efdf; text-decoration: none; font-size: 12px; }
-body.elvis-preview .preview-top-status { font-size: 10px; letter-spacing: .05em; }
+body.elvis-preview .preview-top-status { flex-shrink: 0; font-size: 10px; letter-spacing: .05em; }
 body.elvis-preview .preview-top-status.store-open { color: #a7e4b7; }
 body.elvis-preview .preview-top-status.store-closed { color: #ffb1a9; }
 body.elvis-preview .elvis-preview-notice { padding: 9px 14px; margin-top: 12px; border: 1px solid #9a6a22; border-radius: 8px; color: #f9e3b4; background: #3a2a12; font-size: 11px; line-height: 1.5; }
 body.elvis-preview .elvis-hero { position: relative; width: min(760px, 100%); aspect-ratio: 3 / 2; margin: 0 auto; overflow: hidden; }
 body.elvis-preview .elvis-logo { position: absolute; z-index: 20; inset: 0 0 auto; width: 100%; filter: drop-shadow(0 5px 0 #09060399); }
-body.elvis-preview .elvis-logo text { font-family: "Elvis Comic", "Comic Sans MS", cursive; font-size: 88px; fill: #ffbd46; stroke: #482307; stroke-width: 9px; stroke-linejoin: round; paint-order: stroke fill; }
+body.elvis-preview .elvis-logo text { font-family: "Elvis Comic", "Comic Sans MS", cursive; font-size: 88px; text-transform: uppercase; fill: #ffbd46; stroke: #482307; stroke-width: 9px; stroke-linejoin: round; paint-order: stroke fill; }
 body.elvis-preview .elvis-burger { position: absolute; left: 16%; top: 32%; width: 68%; height: 61%; }
 body.elvis-preview .elvis-layer { position: absolute; left: 0; top: var(--y); z-index: var(--z); width: 100%; aspect-ratio: 4 / 1; background: url("burger-layers.webp") center calc(var(--cell) * 20%) / 100% 600% no-repeat; transform: translateY(-50%); filter: drop-shadow(0 5px 4px #0008); }
 body.elvis-preview .elvis-burger.animate .elvis-layer { animation: elvis-drop .55s both; animation-delay: calc(var(--cell) * .2s); }

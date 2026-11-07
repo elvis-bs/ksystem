@@ -74,6 +74,6 @@ test("open cash and an active schedule preserve payment availability", async () 
   const handler = createHandler([{}]);
   const response = await handler(request({ action: "payment_methods" }));
   assert.deepEqual(await response.json(), {
-    paymentMethods: ["cash_on_delivery"], storeOpen: true, supportsRemovedIngredients: true
+    paymentMethods: ["cash_on_delivery"], storeOpen: true, supportsRemovedIngredients: true, supportsItemNotes: true
   });
 });
