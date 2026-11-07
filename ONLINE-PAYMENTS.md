@@ -45,7 +45,8 @@ O cardápio mostra a loja aberta ou fechada e, quando fechada, a próxima abertu
 
 Na página **Cardápio digital**, lojas com cardápio publicado podem abrir a **prévia Elvis na Chapa**. Ela usa os produtos e a disponibilidade publicados, mas a finalização é apenas visual: não envia pedidos, não gera Pix e não substitui o cardápio público.
 
-A prévia oferece busca e ordenação dentro da categoria selecionada, favoritos salvos neste navegador por loja, personalização dos produtos disponíveis e uma sacola com etapas de dados e conferência. O menu **Personalizar prévia** controla apenas a animação durante a visita; endereço, taxa e funcionamento continuam vindo das configurações publicadas da loja. Remoção de ingredientes por item e observações por item do HTML de referência não são reproduzidas: a observação disponível é a do pedido inteiro.
+A prévia oferece busca e ordenação dentro da categoria selecionada, favoritos salvos neste navegador por loja, personalização dos produtos disponíveis e uma sacola com etapas de dados e conferência. Nos lanches com ingredientes cadastrados, é possível simular a retirada de ingredientes por item, sem alteração de preço; essa escolha aparece na sacola e na conferência, mas não é enviada à loja. O menu **Personalizar prévia** controla apenas a animação durante a visita; endereço, taxa e funcionamento continuam vindo das configurações publicadas da loja. A observação disponível é a do pedido inteiro.
+As imagens de lanches são ilustrativas, extraídas do HTML de referência; não representam necessariamente os produtos cadastrados.
 
 ## Como o Pix funciona
 

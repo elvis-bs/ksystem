@@ -64,3 +64,34 @@ test("preview product rejects invalid quantity and preserves valid quantity", ()
   assert.equal(context.digitalCart.length, 1);
   assert.equal(context.digitalCart[0].quantity, 2);
 });
+
+test("preview keeps removed ingredients per item without changing the price", () => {
+  const source = publicFunction("function addDigitalItem(", "async function submitDigitalOrder(");
+  const product = { id: "p1", name: "Lanche", category: "lanche", active: true, price: 18, addons: [], ingredients: ["Cebola", "Queijo"] };
+  let selected = [{ dataset: { previewRemoveIngredient: "0" } }];
+  const card = {
+    querySelector(selector) {
+      if (selector === "[data-preview-quantity]") return { value: "1", reportValidity: () => true };
+      if (selector === "[data-public-option]") return { value: "0" };
+      return null;
+    },
+    querySelectorAll: selector => selector === "[data-preview-remove-ingredient]:checked" ? selected : []
+  };
+  const context = {
+    state: { products: [product] }, elvisPreview: true,
+    document: { querySelector: () => card },
+    productOptions: p => [{ name: "Padrão", price: p.price }],
+    number: Number, roundMoney: value => value, productCost: () => 0,
+    digitalCart: [], showToast: () => {}, renderPublicMenu: () => {},
+    currentOrderConfirmation: "", currentPixPayment: null, pixPaymentStatusTimer: null
+  };
+  vm.createContext(context);
+  vm.runInContext(source, context);
+  context.addDigitalItem("p1");
+  selected = [{ dataset: { previewRemoveIngredient: "1" } }];
+  context.addDigitalItem("p1");
+  assert.deepEqual(Array.from(context.digitalCart[0].removedIngredients), ["Cebola"]);
+  assert.deepEqual(Array.from(context.digitalCart[1].removedIngredients), ["Queijo"]);
+  assert.equal(context.digitalCart[0].price, 18);
+  assert.equal(context.digitalCart[1].price, 18);
+});

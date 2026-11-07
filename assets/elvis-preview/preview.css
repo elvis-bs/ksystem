@@ -3,6 +3,17 @@
   src: url("elvis-comic.ttf") format("truetype");
   font-display: swap;
 }
+@font-face {
+  font-family: "Elvis Barlow";
+  src: url("barlow-condensed.ttf") format("truetype");
+  font-weight: 800;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Elvis Sans";
+  src: url("dm-sans.ttf") format("truetype");
+  font-display: swap;
+}
 
 body.elvis-preview {
   --ink: #f5efdf;
@@ -14,10 +25,22 @@ body.elvis-preview {
   --lime: #ffbd46;
   color: #f5efdf;
   background: #151411;
+  font-family: "Elvis Sans", sans-serif;
 }
-body.elvis-preview .main, body.elvis-preview .content { background: #151411; }
-body.elvis-preview .content { max-width: 1050px; }
-body.elvis-preview .elvis-preview-notice { padding: 12px 16px; border: 1px solid #9a6a22; border-radius: 12px; color: #f9e3b4; background: #3a2a12; line-height: 1.5; }
+body.elvis-preview .main, body.elvis-preview .content { background: transparent; }
+body.elvis-preview { background: radial-gradient(ellipse at 32% 28%, #312015 0, #151411 50%); }
+body.elvis-preview .content { width: min(1190px, 100%); max-width: none; padding-top: 0; }
+body.elvis-preview .preview-topbar { min-height: 74px; display: flex; align-items: center; gap: 30px; border-bottom: 1px solid #ffffff15; }
+body.elvis-preview .preview-brand { display: flex; align-items: center; gap: 9px; color: #f5efdf; text-decoration: none; }
+body.elvis-preview .preview-brand-mark { display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid #c89a48; border-radius: 50%; color: #ffbd46; font-size: 24px; }
+body.elvis-preview .preview-brand b, body.elvis-preview .preview-brand small { display: block; line-height: 1; }
+body.elvis-preview .preview-brand b { font: 800 24px "Elvis Barlow", sans-serif; }
+body.elvis-preview .preview-brand small { color: #ffbd46; font-size: 8px; letter-spacing: 2px; }
+body.elvis-preview .preview-nav { margin: auto; color: #f5efdf; text-decoration: none; font-size: 12px; }
+body.elvis-preview .preview-top-status { font-size: 10px; letter-spacing: .05em; }
+body.elvis-preview .preview-top-status.store-open { color: #a7e4b7; }
+body.elvis-preview .preview-top-status.store-closed { color: #ffb1a9; }
+body.elvis-preview .elvis-preview-notice { padding: 9px 14px; margin-top: 12px; border: 1px solid #9a6a22; border-radius: 8px; color: #f9e3b4; background: #3a2a12; font-size: 11px; line-height: 1.5; }
 body.elvis-preview .elvis-hero { position: relative; width: min(760px, 100%); aspect-ratio: 3 / 2; margin: 0 auto; overflow: hidden; }
 body.elvis-preview .elvis-logo { position: absolute; z-index: 20; inset: 0 0 auto; width: 100%; filter: drop-shadow(0 5px 0 #09060399); }
 body.elvis-preview .elvis-logo text { font-family: "Elvis Comic", "Comic Sans MS", cursive; font-size: 88px; fill: #ffbd46; stroke: #482307; stroke-width: 9px; stroke-linejoin: round; paint-order: stroke fill; }
@@ -25,19 +48,22 @@ body.elvis-preview .elvis-burger { position: absolute; left: 16%; top: 32%; widt
 body.elvis-preview .elvis-layer { position: absolute; left: 0; top: var(--y); z-index: var(--z); width: 100%; aspect-ratio: 4 / 1; background: url("burger-layers.webp") center calc(var(--cell) * 20%) / 100% 600% no-repeat; transform: translateY(-50%); filter: drop-shadow(0 5px 4px #0008); }
 body.elvis-preview .elvis-burger.animate .elvis-layer { animation: elvis-drop .55s both; animation-delay: calc(var(--cell) * .2s); }
 body.elvis-preview .elvis-plate { position: absolute; left: 3%; bottom: -7%; width: 94%; height: 20%; border: 2px solid #74674e; border-radius: 50%; background: radial-gradient(ellipse, #3c382d, #111410 75%); box-shadow: 0 12px 0 #080a08, 0 20px 28px #e9683540; }
+body.elvis-preview .preview-flames { position: absolute; left: 1%; bottom: -20%; width: 98%; height: 35%; opacity: .8; }
 @keyframes elvis-drop {
   from { opacity: 0; transform: translateY(calc(-50% - 35vh)); }
   to { opacity: 1; transform: translateY(-50%); }
 }
 body.elvis-preview .elvis-slogan { margin: 0 0 20px; text-align: center; color: #f5efdf; }
-body.elvis-preview .digital-menu-highlights { justify-content: center; margin: 0 0 18px; }
-body.elvis-preview .digital-menu-highlight { color: #f5efdf; border-color: #ffffff24; background: #28251f; font-size: 12px; }
+body.elvis-preview .digital-menu-highlights { display: flex; justify-content: center; margin: 0 0 28px; }
+body.elvis-preview .digital-menu-highlight { flex: 1; justify-content: space-between; min-height: 48px; border-radius: 4px; color: #d3c8b3; border-color: #ffffff24; background: #28251f; font-size: 11px; }
+body.elvis-preview .digital-menu-highlight strong { color: #ffbd46; font: 800 20px "Elvis Barlow", sans-serif; }
 body.elvis-preview .digital-menu-highlight.store-open { color: #a7e4b7; border-color: #438959; background: #193325; }
 body.elvis-preview .digital-menu-highlight.store-open span { color: #a7e4b7; }
 body.elvis-preview .digital-menu-highlight.store-closed { color: #ffb1a9; border-color: #a64c40; background: #3b211d; }
 body.elvis-preview .digital-menu-highlight.store-closed span { color: #ffb1a9; }
 body.elvis-preview .panel, body.elvis-preview .digital-product-card { color: #f5efdf; background: #201e19; border-color: #ffffff24; }
 body.elvis-preview .digital-product-art { background: #322a1d; }
+body.elvis-preview .digital-product-art img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
 body.elvis-preview .digital-product-info h3, body.elvis-preview .panel-heading h2 { color: #f5efdf; }
 body.elvis-preview .digital-product-info p, body.elvis-preview .helper { color: #c8c0b1; }
 body.elvis-preview .digital-product-price, body.elvis-preview .digital-product-action { color: #ffbd46; }
@@ -57,6 +83,26 @@ body.elvis-preview .preview-tools { display: grid; gap: 8px; margin: 20px 0 8px;
 body.elvis-preview .preview-tools input, body.elvis-preview .preview-tools select { width: 100%; padding: 10px; color: #f5efdf; border: 1px solid #ffffff35; border-radius: 8px; background: #28251f; }
 body.elvis-preview .preview-tool-row { display: flex; align-items: center; gap: 10px; }
 body.elvis-preview .preview-tool-row select { width: auto; margin-left: auto; }
+body.elvis-preview .preview-menu-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; align-items: start; gap: 28px; }
+body.elvis-preview .preview-menu-main { min-width: 0; }
+body.elvis-preview .preview-menu-title, body.elvis-preview .preview-order-side h2, body.elvis-preview .digital-product-info h3 { font-family: "Elvis Barlow", sans-serif; font-weight: 800; }
+body.elvis-preview .preview-menu-title { margin: 0; font-size: 36px; }
+body.elvis-preview .preview-image-note { margin: 0 0 9px; color: #b6afa1; font-size: 10px; text-align: right; }
+body.elvis-preview .preview-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+body.elvis-preview .preview-order-side { position: sticky; top: 20px; padding: 20px; border: 1px solid #ffffff14; border-radius: 12px; background: #201e19; }
+body.elvis-preview .preview-order-side h2 { margin: 0 0 24px; font-size: 24px; }
+body.elvis-preview .preview-order-side p { display: flex; justify-content: space-between; gap: 12px; color: #b6afa1; font-size: 12px; }
+body.elvis-preview .preview-order-side strong { color: #ffbd46; }
+body.elvis-preview .preview-order-side .button { width: 100%; margin-top: 14px; }
+body.elvis-preview .preview-order-side small { display: block; margin-top: 15px; color: #b6afa1; font-size: 10px; text-align: center; }
+body.elvis-preview .preview-empty-bag { display: grid; justify-items: center; padding: 22px 0; }
+body.elvis-preview .preview-empty-bag span { color: #ffbd46; font-size: 34px; }
+body.elvis-preview .preview-empty-bag b { font-size: 12px; }
+body.elvis-preview .preview-empty-bag p { text-align: center; }
+body.elvis-preview .digital-product-card:not([open]) .digital-product-summary { grid-template-columns: 130px minmax(0, 1fr); min-height: 144px; }
+body.elvis-preview .digital-product-card:not([open]) .digital-product-art { width: 130px; height: 115px; }
+body.elvis-preview .digital-product-info h3 { font-size: 22px; text-transform: uppercase; }
+body.elvis-preview .digital-product-price { font: 800 20px "Elvis Barlow", sans-serif; }
 body.elvis-preview .preview-tools .button, body.elvis-preview .preview-close-product, body.elvis-preview .preview-close-cart { color: #f5efdf; background: #28251f; border-color: #ffffff35; }
 body.elvis-preview .preview-tools [aria-pressed="true"] { color: #151411; background: #ffbd46; }
 body.elvis-preview .digital-product-card { position: relative; }
@@ -70,10 +116,21 @@ body.elvis-preview #digitalCart.preview-cart-open { display: block; position: fi
 body.elvis-preview .preview-close-cart { float: right; }
 body.elvis-preview #previewCartStep[hidden], body.elvis-preview #previewCustomerStep[hidden], body.elvis-preview #previewReviewStep[hidden] { display: none; }
 body.elvis-preview .preview-step-actions { display: flex; gap: 10px; margin-top: 12px; }
-body.elvis-preview .preview-footer { display: flex; flex-wrap: wrap; gap: 10px; margin: 30px 0 90px; }
+body.elvis-preview .preview-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 70px 0 90px; padding-top: 28px; border-top: 1px solid #ffffff18; }
+body.elvis-preview .preview-footer span { margin-right: auto; color: #b6afa1; font-size: 11px; }
 body.elvis-preview dialog { width: min(460px, calc(100vw - 32px)); padding: 22px; color: #f5efdf; background: #201e19; border: 1px solid #ffffff35; border-radius: 12px; }
 body.elvis-preview dialog::backdrop { background: #000b; }
 body.elvis-preview dialog .button, body.elvis-preview .preview-footer .button { color: #f5efdf; background: #28251f; border-color: #ffffff35; }
 @media (prefers-reduced-motion: reduce) {
   body.elvis-preview .elvis-burger.animate .elvis-layer { animation: none; }
+}
+@media (max-width: 760px) {
+  body.elvis-preview .preview-menu-layout { display: block; }
+  body.elvis-preview .preview-order-side { display: none; }
+  body.elvis-preview .preview-nav { display: none; }
+  body.elvis-preview .preview-top-status { margin-left: auto; }
+  body.elvis-preview .digital-product-card:not([open]) .digital-product-summary { grid-template-columns: 90px minmax(0, 1fr); min-height: 110px; gap: 12px; }
+  body.elvis-preview .digital-product-card:not([open]) .digital-product-art { width: 90px; height: 90px; }
+  body.elvis-preview .digital-product-info h3 { font-size: 18px; }
+  body.elvis-preview .digital-menu-highlights { flex-wrap: wrap; }
 }
