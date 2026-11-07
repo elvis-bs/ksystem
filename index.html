@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f7f7f4">
+  <link rel="stylesheet" href="assets/elvis-preview/preview.css">
   <title>Bora! Gestão — custos e cardápio</title>
   <style>
     :root {
@@ -561,6 +562,8 @@
       let orderAlertEnabled = false;
       let orderAlertAudioContext = null;
       let publicBusinessId = "";
+      const elvisPreview = new URLSearchParams(location.search).get("visual") === "elvis-preview";
+      let elvisHeroShown = false;
       let publicOrdering = { deliveryFee: 0, pickupEnabled: false, pickupAddress: "", acceptingOrders: false };
       let publicStoreOpen = false;
       let publicNextOpening = null;
@@ -1155,6 +1158,7 @@
           document.querySelector(".bottom-nav").hidden = true;
           document.getElementById("signOutButton").hidden = true;
           document.body.classList.add("public-menu");
+          if (elvisPreview) document.body.classList.add("elvis-preview");
           publicBusinessId = params.get("loja") || "";
           if (!supabaseClient || !/^[0-9a-f-]{36}$/i.test(publicBusinessId)) {
             publicMenuLoadError = "Use o link do cardápio gerado pela loja para fazer um pedido.";
@@ -2487,7 +2491,7 @@
               <div class="field full"><label for="pickupAddress">Endereço para retirada</label><input id="pickupAddress" name="pickupAddress" maxlength="180" value="${escapeHtml(onlineOrdering.pickupAddress)}" placeholder="Endereço da loja" ${onlineOrdering.pickupEnabled ? "required" : ""}></div>
               <div class="field full"><button class="button primary" type="submit" ${onlineMenuReady ? "" : "disabled"}>Salvar configurações</button></div>
             </form>
-            ${onlineOrdering.published && onlineMenuReady ? `<div class="toolbar" style="margin-top:14px"><div class="field" style="flex:1"><label for="menuShareUrl">Link público do cardápio</label><input class="search" id="menuShareUrl" style="width:100%" readonly value="${escapeHtml(shareUrl)}"></div><button class="button" type="button" data-action="copy-menu-link">Copiar link</button></div>` : ""}
+            ${onlineOrdering.published && onlineMenuReady ? `<div class="toolbar" style="margin-top:14px"><div class="field" style="flex:1"><label for="menuShareUrl">Link público do cardápio</label><input class="search" id="menuShareUrl" style="width:100%" readonly value="${escapeHtml(shareUrl)}"></div><button class="button" type="button" data-action="copy-menu-link">Copiar link</button><a class="button" href="${escapeHtml(shareUrl)}&amp;visual=elvis-preview" target="_blank" rel="noopener noreferrer">Abrir prévia Elvis na Chapa</a></div><p class="helper">A prévia não substitui o cardápio público e não envia pedidos nem gera cobranças.</p>` : ""}
             ${!onlineCashOrdersReady ? `<div class="callout" style="margin:13px 0 0"><span>ⓘ</span><div><b>Finalização em dinheiro ainda em implantação</b>Publique a função create-cash-order no Supabase para receber pedidos e liberar a finalização. O cardápio continuará disponível para consulta até lá.</div></div>` : ""}
           </article>
           <article class="panel" style="margin-bottom:15px"><div class="panel-heading"><h2>Pix online</h2><span>${mercadoPagoStatus.connected ? "Conectado" : "Mercado Pago"}</span></div><p class="helper">${escapeHtml(mpConnectionMessage)}</p><button class="button ${mercadoPagoStatus.connected ? "" : "primary"}" type="button" id="connectMercadoPago" ${mercadoPagoStatus.configured ? "" : "disabled"}>${mercadoPagoStatus.connected ? "Reconectar Mercado Pago" : "Conectar conta Mercado Pago"}</button></article>
@@ -2561,6 +2565,18 @@
         return `<div class="callout" style="margin-top:14px"><span>ⓘ</span><div style="width:100%"><b>Aguardando pagamento Pix</b><p class="helper">Pedido #${escapeHtml(currentOrderConfirmation.slice(0, 8))}. Escaneie o QR Code ou copie o código Pix no aplicativo do banco. O pedido será confirmado automaticamente após o pagamento.</p>${qrImage}<textarea id="pixCopyCode" class="search" rows="4" readonly style="width:100%;margin-top:8px">${escapeHtml(currentPixPayment.qrCode)}</textarea><button type="button" class="button" data-action="copy-pix-code" style="margin-top:8px">Copiar código Pix</button><p class="helper">Aguardando confirmação do Mercado Pago…</p><button type="button" class="button" data-action="cancel-pix-order" style="margin-top:8px" ${cancelPixInProgress ? "disabled" : ""}>${cancelPixInProgress ? "Cancelando Pix…" : "Cancelar Pix e mudar forma de pagamento"}</button></div></div>`;
       }
 
+      function renderElvisPreviewHero() {
+        const layers = [78, 64, 58, 50, 44, 32].map((y, index) =>
+          `<span class="elvis-layer" style="--cell:${index};--y:${y}%;--z:${index + 3}"></span>`
+        ).join("");
+        return `<div class="elvis-preview-notice"><strong>Prévia visual — sem pedidos reais.</strong> Esta página mostra o cardápio cadastrado, mas não envia pedidos nem gera cobranças.</div>
+          <div class="elvis-hero" role="img" aria-label="Elvis na Chapa: hambúrguer montado em camadas">
+            <svg class="elvis-logo" viewBox="0 0 840 240" aria-hidden="true"><defs><path id="elvis-preview-arc" d="M65 205 Q420 -35 775 205"></path></defs><text><textPath href="#elvis-preview-arc" startOffset="50%" text-anchor="middle">ELVIS NA CHAPA</textPath></text></svg>
+            <div class="elvis-burger ${elvisHeroShown ? "" : "animate"}"><div class="elvis-plate"></div>${layers}</div>
+          </div><p class="elvis-slogan">O melhor lanche da região.</p>
+          <div class="digital-menu-highlights"><span class="digital-menu-highlight">Entrega · ${publicOrdering.deliveryFee ? money(publicOrdering.deliveryFee) : "grátis"}</span>${publicOrdering.pickupEnabled ? `<span class="digital-menu-highlight">Retirada no local</span>` : ""}<span class="digital-menu-highlight ${publicStoreOpen ? "store-open" : "store-closed"}"><span aria-hidden="true">●</span>${publicStoreOpen ? "Loja aberta" : "Loja fechada"}</span></div>`;
+      }
+
       function renderPublicMenu() {
         if (publicMenuLoadError) {
           document.getElementById("pageContent").innerHTML = `<section class="panel" style="margin-top:24px;text-align:center"><div class="stat-icon" style="margin:0 auto 13px;width:44px;height:44px">ⓘ</div><h1 style="font-size:22px">Cardápio indisponível</h1><p class="subtitle">${escapeHtml(publicMenuLoadError)}</p></section>`;
@@ -2589,7 +2605,7 @@
             ? `Vai no lanche: ${product.ingredients.map(escapeHtml).join(", ")}`
             : "Ingredientes não informados";
           return `<details class="digital-product-card" data-category="${escapeHtml(product.category)}" data-public-product="${escapeHtml(product.id)}">
-            <summary class="digital-product-summary"><span class="digital-product-art" aria-hidden="true">${categoryIcon(product.category)}</span><div class="digital-product-info"><h3>${escapeHtml(product.name)}</h3><p>${product.category === "pizza" ? `${options.length} tamanho(s) · escolha o tamanho e depois os sabores` : product.category === "bebida" ? "Bebida gelada" : sandwichDescription}</p><div class="digital-product-bottom"><strong class="digital-product-price">${priceLabel}</strong><span class="digital-product-action">${product.category === "pizza" ? "Escolher tamanho +" : "Adicionar +"}</span></div></div></summary>
+            <summary class="digital-product-summary"><span class="digital-product-art" aria-hidden="true">${categoryIcon(product.category)}</span><div class="digital-product-info"><h3>${escapeHtml(product.name)}</h3><p>${product.category === "pizza" ? `${options.length} tamanho(s) · escolha o tamanho e depois os sabores` : product.category === "bebida" ? "Bebida gelada" : sandwichDescription}</p><div class="digital-product-bottom"><strong class="digital-product-price">${priceLabel}</strong><span class="digital-product-action">${elvisPreview && !canPlaceOrders ? "Consultar" : product.category === "pizza" ? "Escolher tamanho +" : "Adicionar +"}</span></div></div></summary>
             <div class="digital-product-options"><div class="field"><label>Opção / tamanho</label><select data-public-option>${product.category === "pizza" ? `<option value="">Escolha o tamanho</option>` : ""}${options.map((option, index) => `<option value="${index}">${escapeHtml(option.name)} · ${money(option.price)}</option>`).join("")}</select></div>
               ${product.category === "pizza" ? `<div data-pizza-flavor-container></div><div data-pizza-border-container></div>` : ""}
               ${(product.addons || []).length ? `<div class="option-group"><span class="section-label">Adicionais deste produto (opcional)</span><div class="sale-addons">${product.addons.map((addon, index) => `<label class="addon-choice"><input type="checkbox" data-public-addon="${index}">${escapeHtml(addon.name)} + ${money(addon.price)}</label>`).join("")}</div></div>` : ""}
@@ -2603,7 +2619,7 @@
         const deliveryFee = digitalFulfillment === "delivery" ? publicOrdering.deliveryFee : 0;
         const total = roundMoney(subtotal + deliveryFee);
         document.getElementById("pageContent").innerHTML = `
-          <header class="digital-hero"><div class="digital-hero-copy"><div class="eyebrow">BORA! DELIVERY · CARDÁPIO DIGITAL</div><h1>${publicStoreOpen ? "Peça algo gostoso." : "Confira nosso cardápio."}</h1><p>${publicStoreOpen ? "Escolha seus favoritos e receba seu pedido do seu jeito." : "Conheça nossos produtos e preços."}</p><div class="digital-menu-highlights"><span class="digital-menu-highlight"><span>◷</span>Entrega · ${publicOrdering.deliveryFee ? money(publicOrdering.deliveryFee) : "grátis"}</span>${publicOrdering.pickupEnabled ? `<span class="digital-menu-highlight"><span>⌖</span>Retirada no local</span>` : ""}<span class="digital-menu-highlight ${publicStoreOpen ? "store-open" : "store-closed"}"><span aria-hidden="true">●</span>${publicStoreOpen ? "Loja aberta" : "Loja fechada"}</span></div></div><span class="digital-hero-mark" aria-hidden="true">🍽️</span></header>
+          ${elvisPreview ? renderElvisPreviewHero() : `<header class="digital-hero"><div class="digital-hero-copy"><div class="eyebrow">BORA! DELIVERY · CARDÁPIO DIGITAL</div><h1>${publicStoreOpen ? "Peça algo gostoso." : "Confira nosso cardápio."}</h1><p>${publicStoreOpen ? "Escolha seus favoritos e receba seu pedido do seu jeito." : "Conheça nossos produtos e preços."}</p><div class="digital-menu-highlights"><span class="digital-menu-highlight"><span>◷</span>Entrega · ${publicOrdering.deliveryFee ? money(publicOrdering.deliveryFee) : "grátis"}</span>${publicOrdering.pickupEnabled ? `<span class="digital-menu-highlight"><span>⌖</span>Retirada no local</span>` : ""}<span class="digital-menu-highlight ${publicStoreOpen ? "store-open" : "store-closed"}"><span aria-hidden="true">●</span>${publicStoreOpen ? "Loja aberta" : "Loja fechada"}</span></div></div><span class="digital-hero-mark" aria-hidden="true">🍽️</span></header>`}
           ${!publicStoreOpen ? `<div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b>Loja fechada para pedidos</b>${publicNextOpening ? `Próxima abertura prevista: ${escapeHtml(publicNextOpening)}.` : "O cardápio está disponível para consulta."}</div></div>` : !canPlaceOrders ? `<div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b>Finalização online indisponível</b>Tente novamente mais tarde.</div></div>` : ""}
           ${!canPlaceOrders && currentOrderConfirmation ? renderDigitalOrderConfirmation() : ""}
           ${groups.length ? `<nav class="filters category-tabs" aria-label="Categorias do cardápio">${categoryButtons}</nav><section class="digital-menu-section"><div class="panel-heading"><h2>${categoryIcon(digitalCategory)} ${categoryName(digitalCategory)}s</h2><span>${shownProducts.length} produto(s)</span></div><div class="digital-menu-list">${items}</div></section>` : `<div class="empty-state" style="margin-top:13px">O cardápio está temporariamente sem produtos disponíveis.</div>`}
@@ -2619,10 +2635,14 @@
               <div class="field full" id="digitalAddressField" ${digitalFulfillment === "pickup" ? "hidden" : ""}><label for="digitalAddress">Endereço de entrega</label><input id="digitalAddress" name="address" ${digitalFulfillment === "pickup" ? "" : "required"} maxlength="180" placeholder="Rua, número, bairro e complemento" value="${escapeHtml(digitalCustomerDraft.address)}"></div>
               <div class="field full"><label for="digitalNotes">Observações do pedido</label><input id="digitalNotes" name="notes" maxlength="160" placeholder="Ponto de referência, sem cebola..." value="${escapeHtml(digitalCustomerDraft.notes)}"></div>
             </div>
-            <button type="submit" class="button primary" ${digitalCart.length && !currentOrderConfirmation && canPlaceOrders ? "" : "disabled"}>Finalizar pedido · ${money(total)}</button>
+            <button type="submit" class="button primary" ${digitalCart.length && !currentOrderConfirmation && canPlaceOrders ? "" : "disabled"}>${elvisPreview ? "Testar finalização (prévia)" : "Finalizar pedido"} · ${money(total)}</button>
             <div>${currentOrderConfirmation ? renderDigitalOrderConfirmation() : ""}</div>
             </form>
           </section>${digitalCart.length ? `<div class="public-cart-bar"><a class="button primary" href="#digitalCart"><span class="public-cart-count"><span>${digitalCart.length}</span>Ver pedido</span><strong>${money(total)} <span aria-hidden="true">→</span></strong></a></div>` : ""}` : ""}`;
+        if (elvisPreview && !elvisHeroShown) {
+          const lastLayer = document.querySelector(".elvis-layer:last-child");
+          lastLayer?.addEventListener("animationend", () => { elvisHeroShown = true; }, { once: true });
+        }
         document.querySelectorAll("[data-public-product]").forEach(card => {
           const product = state.products.find(item => item.id === card.dataset.publicProduct);
           if (product.category === "pizza") {
@@ -2740,6 +2760,10 @@
       async function submitDigitalOrder(event) {
         event.preventDefault();
         if (!digitalCart.length) return;
+        if (elvisPreview) {
+          if (event.currentTarget.reportValidity()) showToast("Prévia: nenhum pedido foi enviado e nenhuma cobrança foi criada.");
+          return;
+        }
         const paymentMethod = digitalPaymentMethod;
         if (!supportedDigitalPaymentMethods.includes(paymentMethod)) {
           showToast("Essa forma de pagamento não está disponível nesta loja.");

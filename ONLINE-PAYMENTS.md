@@ -43,6 +43,8 @@ Não coloque essas credenciais no código nem no cardápio público. Cadastre a 
 
 O cardápio mostra a loja aberta ou fechada e, quando fechada, a próxima abertura prevista pelos horários cadastrados. A previsão não garante que a loja abrirá: se o caixa continuar fechado ou os pedidos estiverem desativados, o cardápio permanece fechado e mostra o próximo horário programado.
 
+Na página **Cardápio digital**, lojas com cardápio publicado podem abrir a **prévia Elvis na Chapa**. Ela usa os produtos e a disponibilidade publicados, mas a finalização é apenas visual: não envia pedidos, não gera Pix e não substitui o cardápio público.
+
 ## Como o Pix funciona
 
 - O cliente escolhe Pix online no checkout, informa um e-mail e recebe o QR Code e o código Pix copia e cola.

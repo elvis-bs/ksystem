@@ -1,0 +1,58 @@
+@font-face {
+  font-family: "Elvis Comic";
+  src: url("elvis-comic.ttf") format("truetype");
+  font-display: swap;
+}
+
+body.elvis-preview {
+  --ink: #f5efdf;
+  --canvas: #151411;
+  --muted: #b6afa1;
+  --line: #ffffff24;
+  --green: #ffbd46;
+  --green-dark: #ffbd46;
+  --lime: #ffbd46;
+  color: #f5efdf;
+  background: #151411;
+}
+body.elvis-preview .main, body.elvis-preview .content { background: #151411; }
+body.elvis-preview .content { max-width: 1050px; }
+body.elvis-preview .elvis-preview-notice { padding: 12px 16px; border: 1px solid #9a6a22; border-radius: 12px; color: #f9e3b4; background: #3a2a12; line-height: 1.5; }
+body.elvis-preview .elvis-hero { position: relative; width: min(760px, 100%); aspect-ratio: 3 / 2; margin: 0 auto; overflow: hidden; }
+body.elvis-preview .elvis-logo { position: absolute; z-index: 20; inset: 0 0 auto; width: 100%; filter: drop-shadow(0 5px 0 #09060399); }
+body.elvis-preview .elvis-logo text { font-family: "Elvis Comic", "Comic Sans MS", cursive; font-size: 88px; fill: #ffbd46; stroke: #482307; stroke-width: 9px; stroke-linejoin: round; paint-order: stroke fill; }
+body.elvis-preview .elvis-burger { position: absolute; left: 16%; top: 32%; width: 68%; height: 61%; }
+body.elvis-preview .elvis-layer { position: absolute; left: 0; top: var(--y); z-index: var(--z); width: 100%; aspect-ratio: 4 / 1; background: url("burger-layers.webp") center calc(var(--cell) * 20%) / 100% 600% no-repeat; transform: translateY(-50%); filter: drop-shadow(0 5px 4px #0008); }
+body.elvis-preview .elvis-burger.animate .elvis-layer { animation: elvis-drop .55s both; animation-delay: calc(var(--cell) * .2s); }
+body.elvis-preview .elvis-plate { position: absolute; left: 3%; bottom: -7%; width: 94%; height: 20%; border: 2px solid #74674e; border-radius: 50%; background: radial-gradient(ellipse, #3c382d, #111410 75%); box-shadow: 0 12px 0 #080a08, 0 20px 28px #e9683540; }
+@keyframes elvis-drop {
+  from { opacity: 0; transform: translateY(calc(-50% - 35vh)); }
+  to { opacity: 1; transform: translateY(-50%); }
+}
+body.elvis-preview .elvis-slogan { margin: 0 0 20px; text-align: center; color: #f5efdf; }
+body.elvis-preview .digital-menu-highlights { justify-content: center; margin: 0 0 18px; }
+body.elvis-preview .digital-menu-highlight { color: #f5efdf; border-color: #ffffff24; background: #28251f; font-size: 12px; }
+body.elvis-preview .digital-menu-highlight.store-open { color: #a7e4b7; border-color: #438959; background: #193325; }
+body.elvis-preview .digital-menu-highlight.store-open span { color: #a7e4b7; }
+body.elvis-preview .digital-menu-highlight.store-closed { color: #ffb1a9; border-color: #a64c40; background: #3b211d; }
+body.elvis-preview .digital-menu-highlight.store-closed span { color: #ffb1a9; }
+body.elvis-preview .panel, body.elvis-preview .digital-product-card { color: #f5efdf; background: #201e19; border-color: #ffffff24; }
+body.elvis-preview .digital-product-art { background: #322a1d; }
+body.elvis-preview .digital-product-info h3, body.elvis-preview .panel-heading h2 { color: #f5efdf; }
+body.elvis-preview .digital-product-info p, body.elvis-preview .helper { color: #c8c0b1; }
+body.elvis-preview .digital-product-price, body.elvis-preview .digital-product-action { color: #ffbd46; }
+body.elvis-preview .digital-product-action { background: #3a2a12; border-color: #8b612a; }
+body.elvis-preview .digital-product-card[open] .digital-product-action { color: #151411; background: #ffbd46; border-color: #ffbd46; }
+body.elvis-preview .addon-choice { color: #f5efdf; background: #28251f; border-color: #ffffff35; }
+body.elvis-preview .digital-product-card .addon-choice:has(input:checked) { color: #ffdb8d; background: #44351e; border-color: #ffbd46; }
+body.elvis-preview .filter-btn { color: #f5efdf; background: #28251f; border-color: #ffffff24; }
+body.elvis-preview .filter-btn.active { color: #151411; background: #ffbd46; border-color: #ffbd46; }
+body.elvis-preview .field label, body.elvis-preview .section-label { color: #f5efdf; }
+body.elvis-preview .field input, body.elvis-preview .field select, body.elvis-preview .field textarea { color: #f5efdf; background: #28251f; border-color: #ffffff35; }
+body.elvis-preview .button.primary { color: #151411; background: #ffbd46; border-color: #ffbd46; }
+body.elvis-preview .callout { color: #f5efdf; background: #28251f; border-color: #8b612a; }
+body.elvis-preview .empty-state { color: #c8c0b1; border-color: #ffffff35; }
+body.elvis-preview .sale-cart-row small, body.elvis-preview .panel-heading span { color: #c8c0b1; }
+@media (prefers-reduced-motion: reduce) {
+  body.elvis-preview .elvis-burger.animate .elvis-layer { animation: none; }
+}
