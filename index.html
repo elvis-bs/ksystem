@@ -1584,6 +1584,7 @@
           selectedName: document.getElementById("saleCustomerSearch").dataset.selectedName || "",
           customerId: document.getElementById("saleCustomerId").value,
           payment: document.getElementById("salePayment").value,
+          paymentStatus: document.getElementById("salePaymentStatus").value,
           dueDate: document.getElementById("saleDueDate").value
         } : null;
         const products = activeSaleProducts();
@@ -1624,9 +1625,10 @@
               <form class="sale-checkout" id="checkoutForm">
                 <div class="field"><label for="saleCustomerSearch">Nome do cliente (opcional)</label><div class="customer-autocomplete"><input id="saleCustomerSearch" name="customerName" type="search" autocomplete="off" maxlength="100" placeholder="Digite o nome ou busque um cliente cadastrado"><input id="saleCustomerId" name="customerId" type="hidden"><div class="customer-suggestions" id="saleCustomerSuggestions" role="listbox" hidden></div></div><p class="helper">Digite um nome sem cadastrar ou selecione um cliente cadastrado. Em branco, será identificado como Balcão. Para crediário, selecione um cliente cadastrado.</p></div>
                 <div class="field"><label for="salePayment">Forma de pagamento</label><select id="salePayment" name="payment" required><option>Pix</option><option>Dinheiro</option><option>Cartão de crédito</option><option>Cartão de débito</option><option value="Crediário">Crediário (fiado)</option></select></div>
+                <div class="field" id="salePaymentStatusField"><label for="salePaymentStatus">Situação do pagamento</label><select id="salePaymentStatus" name="paymentStatus"><option value="paid">Pago agora</option><option value="pending">A receber</option></select><p class="helper">Escolha “A receber” se o cliente ainda vai pagar. O valor só entra no caixa quando o pagamento for registrado.</p></div>
                 <div class="field" id="saleDueDateField" hidden><label for="saleDueDate">Vencimento da nota (opcional)</label><input id="saleDueDate" name="dueDate" type="date"></div>
                 <button type="submit" id="finishSaleButton" class="button primary" ${saleCart.length && currentCashSession() ? "" : "disabled"}>Registrar venda · ${money(total)}</button>
-                ${!currentCashSession() && !standalonePdv ? `<p class="helper">Abra o caixa para registrar vendas pagas. Vendas no crediário podem ser registradas sem caixa aberto. <button type="button" class="button small" data-page="caixa">Abrir caixa</button></p>` : ""}
+                ${!currentCashSession() && !standalonePdv ? `<p class="helper">Abra o caixa para registrar vendas com Pix, dinheiro ou cartão, mesmo a receber. Vendas no crediário podem ser registradas sem caixa aberto. <button type="button" class="button small" data-page="caixa">Abrir caixa</button></p>` : ""}
               </form>
             </article>
           </section>`;
@@ -1647,6 +1649,7 @@
           customerSearch.dataset.selectedName = checkoutDraft.selectedName;
           document.getElementById("saleCustomerId").value = checkoutDraft.customerId;
           document.getElementById("salePayment").value = checkoutDraft.payment;
+          document.getElementById("salePaymentStatus").value = checkoutDraft.paymentStatus;
           document.getElementById("saleDueDate").value = checkoutDraft.dueDate;
         }
         updateSaleCheckoutAvailability();
@@ -1676,9 +1679,11 @@
         const payment = document.getElementById("salePayment")?.value;
         const credit = payment === "Crediário";
         const dueDateField = document.getElementById("saleDueDateField");
+        const statusField = document.getElementById("salePaymentStatusField");
         const submitButton = document.getElementById("finishSaleButton");
         const customerId = document.getElementById("saleCustomerId")?.value;
         if (dueDateField) dueDateField.hidden = !credit;
+        if (statusField) statusField.hidden = credit;
         if (submitButton) submitButton.disabled = !saleCart.length || (credit ? !customerId : !currentCashSession());
       }
 
@@ -1802,12 +1807,17 @@
         const session = currentCashSession();
         const payment = String(data.get("payment") || "");
         const isCredit = payment === "Crediário";
+        const isPaid = !isCredit && data.get("paymentStatus") === "paid";
+        if (!isCredit && !["paid", "pending"].includes(data.get("paymentStatus"))) {
+          showToast("Escolha a situação do pagamento.");
+          return;
+        }
         if (isCredit && !customer) {
           showToast("Selecione um cliente cadastrado para vender no crediário.");
           return;
         }
         if (!session && !isCredit) {
-          showToast("Abra o caixa antes de registrar uma venda paga.");
+          showToast("Abra o caixa antes de registrar esta venda.");
           return;
         }
         const dueDate = String(data.get("dueDate") || "");
@@ -1818,27 +1828,15 @@
           customerName: customer?.name || String(data.get("customerName") || "").trim() || "Balcão",
           customerPhone: customer?.phone || "",
           payment,
-          paid: !isCredit,
-          cashSessionId: isCredit ? null : session.id,
+          paid: isPaid,
+          cashSessionId: isPaid ? session.id : null,
           status: "Recebido",
           items: saleCart.map(item => ({ ...item, addons: item.addons.map(addon => ({ ...addon })) })),
           total: saleCart.reduce((sum, item) => sum + saleLineTotal(item), 0)
         };
         state.sales.push(sale);
         if (isCredit) {
-          state.financeEntries.push({
-            id: `receivable-${sale.id}`,
-            kind: "receivable",
-            description: `Venda #${sale.id.slice(-5)}`,
-            customerId: customer.id,
-            partyName: customer.name,
-            saleId: sale.id,
-            amount: sale.total,
-            paidAmount: 0,
-            dueDate,
-            createdAt: sale.createdAt,
-            payments: []
-          });
+          state.financeEntries.push(saleReceivable(sale, customer, dueDate));
         }
         if (!saveState()) {
           state.sales.pop();
@@ -1855,6 +1853,22 @@
           "Imprimir cupom",
           () => printReceipt(sale)
         );
+      }
+
+      function saleReceivable(sale, customer, dueDate) {
+        return {
+          id: `receivable-${sale.id}`,
+          kind: "receivable",
+          description: `Venda #${sale.id.slice(-5)}`,
+          customerId: customer.id,
+          partyName: customer.name,
+          saleId: sale.id,
+          amount: sale.total,
+          paidAmount: 0,
+          dueDate,
+          createdAt: new Date().toISOString(),
+          payments: []
+        };
       }
 
       function updateSaleStatus(event) {
@@ -1938,7 +1952,7 @@
             ${sale.fulfillment ? `<div class="order-card-meta"><span>${sale.fulfillment === "pickup" ? "Retirada no local" : "Entrega"}${sale.deliveryFee ? ` · taxa ${money(sale.deliveryFee)}` : ""}</span></div>` : ""}
             ${sale.address ? `<div class="order-card-contact">${sale.fulfillment === "pickup" ? "Retirada em" : "Endereço"}: ${escapeHtml(sale.address)}</div>` : sale.pickupAddress ? `<div class="order-card-contact">Retirada em: ${escapeHtml(sale.pickupAddress)}</div>` : ""}
             ${sale.notes ? `<div class="order-card-contact">Obs.: ${escapeHtml(sale.notes)}</div>` : ""}
-            <div class="order-card-actions">${!isPendingPix && nextStatus ? `<button type="button" class="button primary" data-action="advance-order" data-id="${escapeHtml(sale.id)}" data-status="${nextStatus}">${nextLabel} →</button>` : ""}<button type="button" class="button icon-button order-details-trigger" data-action="order-details" data-id="${escapeHtml(sale.id)}" aria-label="Detalhes do pedido #${escapeHtml(String(sale.id || "").slice(-5))}" title="Detalhes do pedido"><svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="m16 16 4 4M11 8v.1M11 11v4"></path></svg></button></div>
+            <div class="order-card-actions">${!isPendingPix && nextStatus ? `<button type="button" class="button primary" data-action="advance-order" data-id="${escapeHtml(sale.id)}" data-status="${nextStatus}">${nextLabel} →</button>` : ""}${!sale.onlineOrderId && !sale.paid && sale.payment !== "Crediário" && sale.status !== "Cancelado" ? `<button type="button" class="button" data-action="edit-sale-payment" data-id="${escapeHtml(sale.id)}">Alterar / receber pagamento</button>` : ""}<button type="button" class="button icon-button order-details-trigger" data-action="order-details" data-id="${escapeHtml(sale.id)}" aria-label="Detalhes do pedido #${escapeHtml(String(sale.id || "").slice(-5))}" title="Detalhes do pedido"><svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="m16 16 4 4M11 8v.1M11 11v4"></path></svg></button></div>
           </article>`;
         };
         const columns = statusColumns.map(column => {
@@ -2005,6 +2019,109 @@
         });
       }
 
+      function editSalePayment(sale) {
+        if (!sale || sale.onlineOrderId || sale.paid || sale.payment === "Crediário" || sale.status === "Cancelado"
+          || state.financeEntries.some(entry => entry.saleId === sale.id)) {
+          showToast("Não é possível alterar o pagamento deste pedido.");
+          return;
+        }
+        const methods = ["Pix", "Dinheiro", "Cartão de crédito", "Cartão de débito", "Crediário"];
+        const body = `<p class="helper">Pedido de ${escapeHtml(sale.customerName || "Balcão")} · Total ${money(sale.total)}.</p>
+          <div class="field" style="margin-top:12px"><label for="editSalePaymentMethod">Forma de pagamento</label><select id="editSalePaymentMethod" name="payment" required>${methods.map(method => `<option ${method === sale.payment ? "selected" : ""}>${method}</option>`).join("")}</select></div>
+          <div class="field" id="editSaleStatusField" style="margin-top:12px"><label for="editSalePaymentStatus">Situação do pagamento</label><select id="editSalePaymentStatus" name="paymentStatus"><option value="pending">A receber</option><option value="paid">Pago agora</option></select><p class="helper">Marque como pago apenas após receber. É necessário abrir o caixa para registrar o pagamento.</p></div>
+          <div id="editSaleCreditFields" hidden>
+            <div class="field" style="margin-top:12px"><label for="editSaleCreditCustomer">Cliente do crediário</label><select id="editSaleCreditCustomer" name="customerId"><option value="">Selecione ou cadastre um cliente</option>${state.customers.map(customer => `<option value="${escapeHtml(customer.id)}" ${customer.id === sale.customerId ? "selected" : ""}>${escapeHtml(customer.name)}${customer.phone ? ` · ${escapeHtml(customer.phone)}` : ""}</option>`).join("")}<option value="new">Cadastrar novo cliente</option></select></div>
+            <div class="field" id="editSaleNewCustomerFields" hidden style="margin-top:12px"><label for="editSaleNewCustomerName">Nome do novo cliente</label><input id="editSaleNewCustomerName" name="customerName" maxlength="70" value="${escapeHtml(sale.customerName === "Balcão" ? "" : (sale.customerName || "").slice(0, 70))}"><label for="editSaleNewCustomerPhone">Telefone / WhatsApp (opcional)</label><input id="editSaleNewCustomerPhone" name="customerPhone" type="tel" maxlength="25" value="${escapeHtml(sale.customerPhone || "")}"></div>
+            <div class="field" style="margin-top:12px"><label for="editSaleDueDate">Vencimento da nota (opcional)</label><input id="editSaleDueDate" name="dueDate" type="date"></div>
+            <p class="helper">Ao salvar, será criada uma nota no crediário. Os pagamentos dela devem ser registrados no Financeiro.</p>
+          </div>`;
+        openModal("Alterar pagamento", body, "editSalePayment", sale.id);
+        const updateFields = () => {
+          const credit = document.getElementById("editSalePaymentMethod").value === "Crediário";
+          document.getElementById("editSaleStatusField").hidden = credit;
+          document.getElementById("editSaleCreditFields").hidden = !credit;
+          document.getElementById("editSaleNewCustomerFields").hidden = !credit || document.getElementById("editSaleCreditCustomer").value !== "new";
+        };
+        document.getElementById("editSalePaymentMethod").addEventListener("change", updateFields);
+        document.getElementById("editSaleCreditCustomer").addEventListener("change", updateFields);
+        updateFields();
+      }
+
+      function saveSalePayment(form) {
+        const sale = state.sales.find(item => item.id === editingId);
+        if (!sale || sale.paid || sale.payment === "Crediário" || sale.status === "Cancelado"
+          || state.financeEntries.some(entry => entry.saleId === sale.id)) {
+          showToast("Não é possível alterar o pagamento deste pedido.");
+          return;
+        }
+        const data = new FormData(form);
+        const method = String(data.get("payment") || "");
+        if (!["Pix", "Dinheiro", "Cartão de crédito", "Cartão de débito", "Crediário"].includes(method)) {
+          showToast("Escolha uma forma de pagamento válida.");
+          return;
+        }
+        const credit = method === "Crediário";
+        const status = String(data.get("paymentStatus") || "");
+        if (!credit && !["pending", "paid"].includes(status)) {
+          showToast("Escolha a situação do pagamento.");
+          return;
+        }
+        const session = currentCashSession();
+        if (!credit && status === "paid" && !session) {
+          showToast("Abra o caixa antes de receber o pagamento.");
+          return;
+        }
+        let customer = null;
+        let newCustomer = null;
+        if (credit) {
+          const customerId = String(data.get("customerId") || "");
+          if (customerId === "new") {
+            const name = String(data.get("customerName") || "").trim();
+            if (!name) {
+              showToast("Informe o nome para cadastrar o cliente.");
+              return;
+            }
+            newCustomer = {
+              id: `customer-${crypto.randomUUID()}`,
+              name,
+              phone: String(data.get("customerPhone") || "").trim(),
+              neighborhood: "",
+              address: "",
+              notes: ""
+            };
+            customer = newCustomer;
+          } else {
+            customer = state.customers.find(item => item.id === customerId);
+          }
+          if (!customer) {
+            showToast("Selecione ou cadastre um cliente para o crediário.");
+            return;
+          }
+        }
+        const previous = { ...sale };
+        sale.payment = method;
+        sale.paid = !credit && status === "paid";
+        sale.cashSessionId = sale.paid ? session.id : null;
+        if (sale.paid) sale.paidAt = new Date().toISOString();
+        if (credit) {
+          sale.customerId = customer.id;
+          sale.customerName = customer.name;
+          sale.customerPhone = customer.phone || "";
+          if (newCustomer) state.customers.push(newCustomer);
+          state.financeEntries.push(saleReceivable(sale, customer, String(data.get("dueDate") || "")));
+        }
+        if (!saveState()) {
+          Object.assign(sale, previous);
+          if (!Object.hasOwn(previous, "paidAt")) delete sale.paidAt;
+          if (credit) state.financeEntries.pop();
+          if (newCustomer) state.customers.pop();
+          return;
+        }
+        closeModal();
+        render();
+        showToast(credit ? "Pedido lançado no crediário." : sale.paid ? "Pagamento registrado no caixa." : "Forma de pagamento atualizada.");
+      }
+
       function receiveSale(sale) {
         if (!currentCashSession()) {
           showToast("Abra o caixa antes de receber o pagamento.");
@@ -2038,7 +2155,7 @@
             return;
           }
           closeModal();
-          renderSales();
+          render();
           showToast("Pagamento registrado no caixa.");
           return;
         }
@@ -2051,7 +2168,7 @@
           return;
         }
         closeModal();
-        renderSales();
+        render();
         showToast("Pagamento registrado no caixa.");
       }
 
@@ -3691,6 +3808,7 @@
         if (action.dataset.action === "cash-addition") openCashMovementForm("addition");
         if (action.dataset.action === "cash-withdrawal") openCashMovementForm("withdrawal");
         if (action.dataset.action === "receive-sale") receiveSale(state.sales.find(sale => sale.id === id));
+        if (action.dataset.action === "edit-sale-payment") editSalePayment(state.sales.find(sale => sale.id === id));
         if (action.dataset.action === "toggle-today-sales") {
           showTodaySales = !showTodaySales;
           renderSales();
@@ -3783,6 +3901,7 @@
         if (form.dataset.type === "closeCash") saveCashSession(form, true);
         if (form.dataset.type === "cashMovement") saveCashMovement(form);
         if (form.dataset.type === "receivePayment") saveReceivedPayment(form);
+        if (form.dataset.type === "editSalePayment") saveSalePayment(form);
         if (form.dataset.type === "financeEntry") saveFinanceEntry(form);
         if (form.dataset.type === "financeEntryEdit") saveFinanceEntryEdit(form);
         if (form.dataset.type === "financePayment") saveFinanceSettlement(form);
