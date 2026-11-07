@@ -1578,6 +1578,14 @@
 
       function renderSales() {
         const standalonePdv = new URLSearchParams(location.search).has("pdv");
+        const previousCheckout = document.getElementById("checkoutForm");
+        const checkoutDraft = previousCheckout ? {
+          customerName: document.getElementById("saleCustomerSearch").value,
+          selectedName: document.getElementById("saleCustomerSearch").dataset.selectedName || "",
+          customerId: document.getElementById("saleCustomerId").value,
+          payment: document.getElementById("salePayment").value,
+          dueDate: document.getElementById("saleDueDate").value
+        } : null;
         const products = activeSaleProducts();
         const today = localDateKey(new Date());
         const history = allSales()
@@ -1614,7 +1622,7 @@
               ${cartHtml}
               <div class="sale-total"><span>Total da venda</span><strong>${money(total)}</strong></div>
               <form class="sale-checkout" id="checkoutForm">
-                <div class="field"><label for="saleCustomerSearch">Cliente</label><div class="customer-autocomplete"><input id="saleCustomerSearch" type="search" autocomplete="off" placeholder="Venda de balcão ou digite um nome/telefone" aria-label="Buscar cliente cadastrado"><input id="saleCustomerId" name="customerId" type="hidden"><div class="customer-suggestions" id="saleCustomerSuggestions" role="listbox" hidden></div></div><p class="helper">Digite para localizar um cliente cadastrado.</p></div>
+                <div class="field"><label for="saleCustomerSearch">Nome do cliente (opcional)</label><div class="customer-autocomplete"><input id="saleCustomerSearch" name="customerName" type="search" autocomplete="off" maxlength="100" placeholder="Digite o nome ou busque um cliente cadastrado"><input id="saleCustomerId" name="customerId" type="hidden"><div class="customer-suggestions" id="saleCustomerSuggestions" role="listbox" hidden></div></div><p class="helper">Digite um nome sem cadastrar ou selecione um cliente cadastrado. Em branco, será identificado como Balcão. Para crediário, selecione um cliente cadastrado.</p></div>
                 <div class="field"><label for="salePayment">Forma de pagamento</label><select id="salePayment" name="payment" required><option>Pix</option><option>Dinheiro</option><option>Cartão de crédito</option><option>Cartão de débito</option><option value="Crediário">Crediário (fiado)</option></select></div>
                 <div class="field" id="saleDueDateField" hidden><label for="saleDueDate">Vencimento da nota (opcional)</label><input id="saleDueDate" name="dueDate" type="date"></div>
                 <button type="submit" id="finishSaleButton" class="button primary" ${saleCart.length && currentCashSession() ? "" : "disabled"}>Registrar venda · ${money(total)}</button>
@@ -1630,10 +1638,18 @@
         if (addForm) addForm.addEventListener("submit", addSaleItem);
         document.getElementById("checkoutForm").addEventListener("submit", finishSale);
         document.getElementById("salePayment").addEventListener("change", updateSaleCheckoutAvailability);
-        document.getElementById("saleCustomerSearch").addEventListener("input", updateSaleCheckoutAvailability);
         const customerSearch = document.getElementById("saleCustomerSearch");
         customerSearch.addEventListener("input", updateSaleCustomerSuggestions);
+        customerSearch.addEventListener("input", updateSaleCheckoutAvailability);
         customerSearch.addEventListener("focus", updateSaleCustomerSuggestions);
+        if (checkoutDraft) {
+          customerSearch.value = checkoutDraft.customerName;
+          customerSearch.dataset.selectedName = checkoutDraft.selectedName;
+          document.getElementById("saleCustomerId").value = checkoutDraft.customerId;
+          document.getElementById("salePayment").value = checkoutDraft.payment;
+          document.getElementById("saleDueDate").value = checkoutDraft.dueDate;
+        }
+        updateSaleCheckoutAvailability();
         document.querySelectorAll("[data-sale-status]").forEach(select => select.addEventListener("change", updateSaleStatus));
       }
 
@@ -1799,7 +1815,7 @@
           id: `sale-${Date.now()}`,
           createdAt: new Date().toISOString(),
           customerId: customer?.id || null,
-          customerName: customer?.name || "Balcão",
+          customerName: customer?.name || String(data.get("customerName") || "").trim() || "Balcão",
           customerPhone: customer?.phone || "",
           payment,
           paid: !isCredit,
@@ -1831,6 +1847,8 @@
         }
         lastRegisteredSaleId = sale.id;
         saleCart = [];
+        form.reset();
+        document.getElementById("saleCustomerSearch").dataset.selectedName = "";
         renderSales();
         showToast(
           isCredit ? "Nota fiada registrada. Deseja imprimir o cupom?" : "Venda registrada. Deseja imprimir o cupom?",
@@ -1916,6 +1934,7 @@
             ${sale.customerPhone ? `<div class="order-card-contact">${escapeHtml(sale.customerPhone)}</div>` : ""}
             <div class="order-card-items">${items || `<div class="order-card-item">Itens não informados</div>`}</div>
             <div class="order-card-total"><span>${(sale.items || []).reduce((sum, item) => sum + number(item.quantity), 0)} item(ns)</span><strong>${money(sale.total)}</strong></div>
+            <div class="order-card-meta"><span>Pagamento: ${escapeHtml(sale.payment || "Não informado")}</span><span class="pill ${sale.paid ? "" : "orange"}">${escapeHtml(receiptPaymentStatus(sale))}</span></div>
             ${sale.fulfillment ? `<div class="order-card-meta"><span>${sale.fulfillment === "pickup" ? "Retirada no local" : "Entrega"}${sale.deliveryFee ? ` · taxa ${money(sale.deliveryFee)}` : ""}</span></div>` : ""}
             ${sale.address ? `<div class="order-card-contact">${sale.fulfillment === "pickup" ? "Retirada em" : "Endereço"}: ${escapeHtml(sale.address)}</div>` : sale.pickupAddress ? `<div class="order-card-contact">Retirada em: ${escapeHtml(sale.pickupAddress)}</div>` : ""}
             ${sale.notes ? `<div class="order-card-contact">Obs.: ${escapeHtml(sale.notes)}</div>` : ""}
