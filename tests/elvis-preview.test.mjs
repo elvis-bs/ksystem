@@ -102,6 +102,11 @@ test("preview checkout never creates an order or Pix charge", async () => {
   assert.match(messages[0], /nenhum pedido foi enviado/);
 });
 
+test("only the preview labels checkout as a test", () => {
+  const source = publicFunction("function renderPublicMenu(", "function addDigitalItem(");
+  assert.ok(source.includes('${elvisPreview ? "Testar finalização (prévia)" : "Finalizar pedido"}'));
+});
+
 test("preview product rejects invalid quantity and preserves valid quantity", () => {
   const source = publicFunction("function addDigitalItem(", "async function submitDigitalOrder(");
   const product = { id: "p1", name: "Suco", category: "bebida", active: true, price: 8, addons: [] };

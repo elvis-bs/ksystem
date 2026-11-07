@@ -2843,7 +2843,7 @@
               <div class="field full"><label for="digitalNotes">Observações do pedido</label><input id="digitalNotes" name="notes" maxlength="160" placeholder="Ponto de referência, sem cebola..." value="${escapeHtml(digitalCustomerDraft.notes)}"></div>
             </div>
             ${elvisVisual ? `<div class="preview-step-actions"><button type="button" class="button" id="previewToCart">Voltar</button><button type="button" class="button primary" id="previewToReview">Conferir pedido</button></div></div><div id="previewReviewStep"><p id="previewReviewDetails"></p><p class="helper">Itens: ${money(subtotal)}${deliveryFee ? ` + entrega ${money(deliveryFee)}` : ""} · Total: ${money(total)}</p><button type="button" class="button" id="previewBackToCustomer">Voltar</button>` : ""}
-            <button type="submit" class="button primary" ${digitalCart.length && !currentOrderConfirmation && canPlaceOrders ? "" : "disabled"}>${elvisVisual ? "Testar finalização (prévia)" : "Finalizar pedido"} · ${money(total)}</button>
+            <button type="submit" class="button primary" ${digitalCart.length && !currentOrderConfirmation && canPlaceOrders ? "" : "disabled"}>${elvisPreview ? "Testar finalização (prévia)" : "Finalizar pedido"} · ${money(total)}</button>
             ${elvisVisual ? `</div>` : ""}
             <div>${!elvisVisual && currentOrderConfirmation ? renderDigitalOrderConfirmation() : ""}</div>
             </form>
