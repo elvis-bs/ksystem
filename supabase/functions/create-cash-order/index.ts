@@ -109,7 +109,7 @@ Deno.serve(async request => {
         if (connectionError) throw connectionError;
         if (connection) paymentMethods.push("pix");
       }
-      return jsonResponse({ paymentMethods, storeOpen: true });
+      return jsonResponse({ paymentMethods, storeOpen: true, supportsRemovedIngredients: true });
     }
 
     const customer = body.customer as JsonRecord;
@@ -221,6 +221,13 @@ Deno.serve(async request => {
         return jsonResponse({ error: "One of the selected add-ons is unavailable." }, 400);
       }
       const selectedAddons = [...new Set(addonIndexes.map(Number))].map(index => addons[index]);
+      const removedIngredients = rawItem.removedIngredients === undefined ? [] : rawItem.removedIngredients;
+      const ingredients = Array.isArray(product.ingredients) ? product.ingredients : [];
+      if (!Array.isArray(removedIngredients) || removedIngredients.length > 50
+        || (removedIngredients.length > 0 && product.category !== "lanche")
+        || removedIngredients.some(name => typeof name !== "string" || !ingredients.includes(name))) {
+        return jsonResponse({ error: "Um ingrediente selecionado não está disponível. Atualize o cardápio e tente novamente." }, 400);
+      }
       const borderCents = cents(border?.price ?? 0);
       const addonsCents = selectedAddons.reduce((sum, addon) => sum + Math.max(0, cents(addon.price)), 0);
       const lineTotalCents = (unitPriceCents + borderCents + addonsCents) * quantity;
@@ -238,7 +245,8 @@ Deno.serve(async request => {
         price: unitPriceCents / 100,
         quantity,
         border: border ? { name: text(border.name, 60), price: borderCents / 100 } : null,
-        addons: selectedAddons.map(addon => ({ name: text(addon.name, 60), price: cents(addon.price) / 100 }))
+        addons: selectedAddons.map(addon => ({ name: text(addon.name, 60), price: cents(addon.price) / 100 })),
+        removedIngredients: [...new Set(removedIngredients)]
       });
     }
 

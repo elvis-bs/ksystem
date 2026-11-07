@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f7f7f4">
-  <link rel="stylesheet" href="assets/elvis-preview/preview.css">
+  <link rel="stylesheet" href="assets/elvis-preview/preview.css?v=2">
   <title>Bora! Gestão — custos e cardápio</title>
   <style>
     :root {
@@ -563,6 +563,7 @@
       let orderAlertAudioContext = null;
       let publicBusinessId = "";
       const elvisPreview = new URLSearchParams(location.search).get("visual") === "elvis-preview";
+      const elvisVisual = elvisPreview || new URLSearchParams(location.search).get("visual") === "elvis";
       let elvisHeroShown = false;
       let elvisSearch = "";
       let elvisSort = "menu";
@@ -573,6 +574,7 @@
       let elvisMotionEnabled = true;
       let publicOrdering = { deliveryFee: 0, pickupEnabled: false, pickupAddress: "", acceptingOrders: false };
       let publicStoreOpen = false;
+      let publicSupportsRemovedIngredients = false;
       let publicNextOpening = null;
       let publicMenuLoadError = "";
       let digitalFulfillment = "delivery";
@@ -855,7 +857,8 @@
           const details = [
             item.optionName && item.optionName !== "Padrão" ? item.optionName : "",
             item.border?.name && item.border.name !== "Sem borda" ? item.border.name : "",
-            ...(item.addons || []).map(addon => addon.name)
+            ...(item.addons || []).map(addon => addon.name),
+            ...(item.removedIngredients || []).map(name => `Sem ${name}`)
           ].filter(Boolean);
           return `<div class="receipt-item"><div class="receipt-row"><span>${quantity} × ${escapeHtml(item.name || "Produto")}</span><strong>${money(lineTotal)}</strong></div>${details.length ? `<p class="receipt-item-details">${escapeHtml(details.join(" · "))}</p>` : ""}</div>`;
         }).join("");
@@ -1143,8 +1146,10 @@
           ? data.paymentMethods.filter(method => ["cash_on_delivery", "cash_on_pickup", "pix"].includes(method)) : [];
         const open = !menuError && !!publication && !error && data?.storeOpen === true && publicOrdering.acceptingOrders;
         const nextOpening = !menuError && publication && !error && typeof data?.nextOpening === "string" ? data.nextOpening : null;
-        const changed = settingsChanged || publicStoreOpen !== open || publicNextOpening !== nextOpening || JSON.stringify(supportedDigitalPaymentMethods) !== JSON.stringify(methods);
+        const supportsRemovedIngredients = !error && data?.supportsRemovedIngredients === true;
+        const changed = settingsChanged || publicStoreOpen !== open || publicNextOpening !== nextOpening || publicSupportsRemovedIngredients !== supportsRemovedIngredients || JSON.stringify(supportedDigitalPaymentMethods) !== JSON.stringify(methods);
         publicStoreOpen = open;
+        publicSupportsRemovedIngredients = supportsRemovedIngredients;
         publicNextOpening = nextOpening;
         supportedDigitalPaymentMethods = methods;
         if (changed) {
@@ -1165,9 +1170,9 @@
           document.querySelector(".bottom-nav").hidden = true;
           document.getElementById("signOutButton").hidden = true;
           document.body.classList.add("public-menu");
-          if (elvisPreview) document.body.classList.add("elvis-preview");
+          if (elvisVisual) document.body.classList.add("elvis-preview");
           publicBusinessId = params.get("loja") || "";
-          if (elvisPreview) {
+          if (elvisVisual) {
             try {
               const savedFavorites = JSON.parse(localStorage.getItem(`elvis-preview-favorites:${publicBusinessId}`) || "[]");
               if (Array.isArray(savedFavorites)) elvisFavorites = new Set(savedFavorites.filter(id => typeof id === "string"));
@@ -1955,7 +1960,7 @@
             ? elapsedMinutes < 60 ? `${elapsedMinutes} min` : `${Math.floor(elapsedMinutes / 60)}h ${elapsedMinutes % 60}min`
             : "Horário indisponível";
           const items = (sale.items || []).map(item => {
-            const details = [item.optionName, item.border?.name, ...(item.addons || []).map(addon => addon.name)].filter(Boolean);
+            const details = [item.optionName, item.border?.name, ...(item.addons || []).map(addon => addon.name), ...(item.removedIngredients || []).map(name => `Sem ${name}`)].filter(Boolean);
             return `<div class="order-card-item"><strong>${number(item.quantity)}×</strong> ${escapeHtml(item.name || "Produto")}${details.length ? `<small>${escapeHtml(details.join(" · "))}</small>` : ""}</div>`;
           }).join("");
           const nextStatus = { "Recebido": "Em preparo", "Em preparo": "Saiu para entrega", "Saiu para entrega": "Concluído" }[sale.status || "Recebido"];
@@ -2010,7 +2015,7 @@
           ? "Data não informada"
           : createdAt.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
         const items = (sale.items || []).map(item => {
-          const details = [item.optionName, item.border?.name, ...(item.addons || []).map(addon => addon.name)].filter(Boolean);
+          const details = [item.optionName, item.border?.name, ...(item.addons || []).map(addon => addon.name), ...(item.removedIngredients || []).map(name => `Sem ${name}`)].filter(Boolean);
           return `<div class="order-details-item"><span>${number(item.quantity)}× ${escapeHtml(item.name || "Produto")}${details.length ? `<small>${escapeHtml(details.join(" · "))}</small>` : ""}</span><strong>${money(saleLineTotal(item))}</strong></div>`;
         }).join("");
         const isPendingPix = sale.onlineOrderId && sale.paymentMethod === "pix" && !sale.paid;
@@ -2506,7 +2511,7 @@
               <div class="field full"><label for="pickupAddress">Endereço para retirada</label><input id="pickupAddress" name="pickupAddress" maxlength="180" value="${escapeHtml(onlineOrdering.pickupAddress)}" placeholder="Endereço da loja" ${onlineOrdering.pickupEnabled ? "required" : ""}></div>
               <div class="field full"><button class="button primary" type="submit" ${onlineMenuReady ? "" : "disabled"}>Salvar configurações</button></div>
             </form>
-            ${onlineOrdering.published && onlineMenuReady ? `<div class="toolbar" style="margin-top:14px"><div class="field" style="flex:1"><label for="menuShareUrl">Link público do cardápio</label><input class="search" id="menuShareUrl" style="width:100%" readonly value="${escapeHtml(shareUrl)}"></div><button class="button" type="button" data-action="copy-menu-link">Copiar link</button><a class="button" href="${escapeHtml(shareUrl)}&amp;visual=elvis-preview" target="_blank" rel="noopener noreferrer">Abrir prévia Elvis na Chapa</a></div><p class="helper">A prévia não substitui o cardápio público e não envia pedidos nem gera cobranças.</p>` : ""}
+            ${onlineOrdering.published && onlineMenuReady ? `<div class="toolbar" style="margin-top:14px"><div class="field" style="flex:1"><label for="menuShareUrl">Link público do cardápio</label><input class="search" id="menuShareUrl" style="width:100%" readonly value="${escapeHtml(shareUrl)}"></div><button class="button" type="button" data-action="copy-menu-link">Copiar link</button><a class="button" href="${escapeHtml(shareUrl)}&amp;visual=elvis-preview" target="_blank" rel="noopener noreferrer">Abrir prévia Elvis na Chapa</a></div><p class="helper">A prévia não substitui o cardápio público e não envia pedidos nem gera cobranças.</p><div class="toolbar"><div class="field" style="flex:1"><label for="elvisMenuShareUrl">Link real Elvis na Chapa</label><input class="search" id="elvisMenuShareUrl" style="width:100%" readonly value="${escapeHtml(shareUrl)}&amp;visual=elvis"></div><button class="button" type="button" data-action="copy-elvis-menu-link">Copiar link real</button><a class="button" href="${escapeHtml(shareUrl)}&amp;visual=elvis" target="_blank" rel="noopener noreferrer">Abrir cardápio Elvis</a></div><p class="helper">Este link aceita pedidos e pagamentos reais conforme as configurações da loja.</p>` : ""}
             ${!onlineCashOrdersReady ? `<div class="callout" style="margin:13px 0 0"><span>ⓘ</span><div><b>Finalização em dinheiro ainda em implantação</b>Publique a função create-cash-order no Supabase para receber pedidos e liberar a finalização. O cardápio continuará disponível para consulta até lá.</div></div>` : ""}
           </article>
           <article class="panel" style="margin-bottom:15px"><div class="panel-heading"><h2>Pix online</h2><span>${mercadoPagoStatus.connected ? "Conectado" : "Mercado Pago"}</span></div><p class="helper">${escapeHtml(mpConnectionMessage)}</p><button class="button ${mercadoPagoStatus.connected ? "" : "primary"}" type="button" id="connectMercadoPago" ${mercadoPagoStatus.configured ? "" : "disabled"}>${mercadoPagoStatus.connected ? "Reconectar Mercado Pago" : "Conectar conta Mercado Pago"}</button></article>
@@ -2588,7 +2593,7 @@
           `<g transform="translate(${x},0) scale(.8,${[.75, 1.05, .85, 1.15, .88][index]})"><path d="M0 140C-13 118-4 98 10 90C5 106 27 101 22 81C18 62 35 51 33 27C55 48 65 67 57 87C51 104 74 97 71 80C97 107 97 126 80 140Z" fill="url(#previewFlame)"></path></g>`
         ).join("");
         return `<header class="preview-topbar"><a href="#previewMenu" class="preview-brand" aria-label="Elvis na Chapa, cardápio"><span class="preview-brand-mark">♨</span><span><b>ELVIS</b><small>NA CHAPA</small></span></a><a href="#previewMenu" class="preview-nav">Cardápio</a><span class="preview-top-status ${publicStoreOpen ? "store-open" : "store-closed"}">● ${publicStoreOpen ? "LOJA ABERTA" : "LOJA FECHADA"}</span></header>
-          <div class="elvis-preview-notice"><strong>Prévia visual — sem pedidos reais.</strong> Esta página mostra o cardápio cadastrado, mas não envia pedidos nem gera cobranças.</div>
+          ${elvisPreview ? `<div class="elvis-preview-notice"><strong>Prévia visual — sem pedidos reais.</strong> Esta página mostra o cardápio cadastrado, mas não envia pedidos nem gera cobranças.</div>` : ""}
           <div class="elvis-hero" role="img" aria-label="Elvis na Chapa: hambúrguer montado em camadas">
             <svg class="elvis-logo" viewBox="0 0 840 240" aria-hidden="true"><defs><path id="elvis-preview-arc" d="M65 205 Q420 -35 775 205"></path></defs><text><textPath href="#elvis-preview-arc" startOffset="50%" text-anchor="middle">ELVIS NA CHAPA</textPath></text></svg>
             <div class="elvis-burger ${elvisHeroShown || !elvisMotionEnabled ? "" : "animate"}"><svg class="preview-flames" viewBox="0 0 640 150" aria-hidden="true"><defs><linearGradient id="previewFlame" x1="0" y1="1" x2="0" y2="0"><stop stop-color="#a82704" stop-opacity=".15"></stop><stop offset=".46" stop-color="#f15b0c"></stop><stop offset="1" stop-color="#ffcd5d"></stop></linearGradient></defs>${flames}</svg><div class="elvis-plate"></div>${layers}</div>
@@ -2780,7 +2785,7 @@
         if (!paymentOptions.some(option => option.value === digitalPaymentMethod)) {
           digitalPaymentMethod = paymentOptions[0]?.value || "";
         }
-        const canPlaceOrders = publicStoreOpen && paymentOptions.length > 0;
+        const canPlaceOrders = publicStoreOpen && paymentOptions.length > 0 && (!elvisVisual || elvisPreview || publicSupportsRemovedIngredients);
         const items = shownProducts.map(product => {
           const options = productOptions(product);
           const prices = options.map(option => number(option.price));
@@ -2789,15 +2794,15 @@
             ? `Vai no lanche: ${product.ingredients.map(escapeHtml).join(", ")}`
             : "Ingredientes não informados";
           return `<details class="digital-product-card" data-category="${escapeHtml(product.category)}" data-public-product="${escapeHtml(product.id)}">
-            <summary class="digital-product-summary"><span class="digital-product-art" aria-hidden="true">${elvisPreview && product.category === "lanche" ? `<img src="assets/elvis-preview/${shownProducts.indexOf(product) % 2 ? "burger-loaded.jpg" : "burger-classic.jpg"}" alt="">` : categoryIcon(product.category)}</span><div class="digital-product-info"><h3>${escapeHtml(product.name)}</h3><p>${product.category === "pizza" ? `${options.length} tamanho(s) · escolha o tamanho e depois os sabores` : product.category === "bebida" ? "Bebida gelada" : sandwichDescription}</p><div class="digital-product-bottom"><strong class="digital-product-price">${priceLabel}</strong><span class="digital-product-action">${elvisPreview && !canPlaceOrders ? "Consultar" : product.category === "pizza" ? "Escolher tamanho +" : elvisPreview ? "Escolher +" : "Adicionar +"}</span></div></div>${elvisPreview ? `<button type="button" class="preview-favorite" aria-label="${elvisFavorites.has(product.id) ? "Remover dos favoritos" : "Adicionar aos favoritos"}: ${escapeHtml(product.name)}" aria-pressed="${elvisFavorites.has(product.id)}">${elvisFavorites.has(product.id) ? "♥" : "♡"}</button>` : ""}</summary>
+            <summary class="digital-product-summary"><span class="digital-product-art" aria-hidden="true">${elvisVisual && product.category === "lanche" ? `<img src="assets/elvis-preview/${shownProducts.indexOf(product) % 2 ? "burger-loaded.jpg?v=2" : "burger-classic.jpg?v=2"}" alt="">` : categoryIcon(product.category)}</span><div class="digital-product-info"><h3>${escapeHtml(product.name)}</h3><p>${product.category === "pizza" ? `${options.length} tamanho(s) · escolha o tamanho e depois os sabores` : product.category === "bebida" ? "Bebida gelada" : sandwichDescription}</p><div class="digital-product-bottom"><strong class="digital-product-price">${priceLabel}</strong><span class="digital-product-action">${elvisVisual && !canPlaceOrders ? "Consultar" : product.category === "pizza" ? "Escolher tamanho +" : elvisVisual ? "Escolher +" : "Adicionar +"}</span></div></div>${elvisVisual ? `<button type="button" class="preview-favorite" aria-label="${elvisFavorites.has(product.id) ? "Remover dos favoritos" : "Adicionar aos favoritos"}: ${escapeHtml(product.name)}" aria-pressed="${elvisFavorites.has(product.id)}">${elvisFavorites.has(product.id) ? "♥" : "♡"}</button>` : ""}</summary>
             <div class="digital-product-options"><div class="field"><label>Opção / tamanho</label><select data-public-option>${product.category === "pizza" ? `<option value="">Escolha o tamanho</option>` : ""}${options.map((option, index) => `<option value="${index}">${escapeHtml(option.name)} · ${money(option.price)}</option>`).join("")}</select></div>
               ${product.category === "pizza" ? `<div data-pizza-flavor-container></div><div data-pizza-border-container></div>` : ""}
-              ${elvisPreview && canPlaceOrders && product.category === "lanche" && product.ingredients?.length ? `<div class="option-group"><span class="section-label">Retirar ingredientes (opcional)</span><p class="helper">Marque os ingredientes que você não deseja. O preço não muda.</p><div class="sale-addons">${product.ingredients.map((ingredient, index) => `<label class="addon-choice"><input type="checkbox" data-preview-remove-ingredient="${index}">Sem ${escapeHtml(ingredient)}</label>`).join("")}</div></div>` : ""}
+              ${elvisVisual && canPlaceOrders && product.category === "lanche" && product.ingredients?.length ? `<div class="option-group"><span class="section-label">Retirar ingredientes (opcional)</span><p class="helper">Marque os ingredientes que você não deseja. O preço não muda.</p><div class="sale-addons">${product.ingredients.map((ingredient, index) => `<label class="addon-choice"><input type="checkbox" data-preview-remove-ingredient="${index}">Sem ${escapeHtml(ingredient)}</label>`).join("")}</div></div>` : ""}
               ${(product.addons || []).length ? `<div class="option-group"><span class="section-label">Adicionais deste produto (opcional)</span><div class="sale-addons">${product.addons.map((addon, index) => `<label class="addon-choice"><input type="checkbox" data-public-addon="${index}">${escapeHtml(addon.name)} + ${money(addon.price)}</label>`).join("")}</div></div>` : ""}
               ${product.category === "pizza" ? `<p class="helper" data-public-price></p>` : ""}
-              ${elvisPreview && canPlaceOrders ? `<div class="field"><label>Quantidade</label><input data-preview-quantity aria-label="Quantidade" type="number" min="1" max="20" step="1" value="1" required></div>` : ""}
+              ${elvisVisual && canPlaceOrders ? `<div class="field"><label>Quantidade</label><input data-preview-quantity aria-label="Quantidade" type="number" min="1" max="20" step="1" value="1" required></div>` : ""}
               ${canPlaceOrders && !currentOrderConfirmation ? `<button type="button" class="button primary" data-action="public-add" data-id="${escapeHtml(product.id)}">Adicionar ao pedido</button>` : ""}
-              ${elvisPreview ? `<button type="button" class="button preview-close-product">Fechar</button>` : ""}
+              ${elvisVisual ? `<button type="button" class="button preview-close-product">Fechar</button>` : ""}
             </div>
           </details>`;
         }).join("");
@@ -2806,36 +2811,36 @@
         const deliveryFee = digitalFulfillment === "delivery" ? publicOrdering.deliveryFee : 0;
         const total = roundMoney(subtotal + deliveryFee);
         document.getElementById("pageContent").innerHTML = `
-          ${elvisPreview ? renderElvisPreviewHero() : `<header class="digital-hero"><div class="digital-hero-copy"><div class="eyebrow">BORA! DELIVERY · CARDÁPIO DIGITAL</div><h1>${publicStoreOpen ? "Peça algo gostoso." : "Confira nosso cardápio."}</h1><p>${publicStoreOpen ? "Escolha seus favoritos e receba seu pedido do seu jeito." : "Conheça nossos produtos e preços."}</p><div class="digital-menu-highlights"><span class="digital-menu-highlight"><span>◷</span>Entrega · ${publicOrdering.deliveryFee ? money(publicOrdering.deliveryFee) : "grátis"}</span>${publicOrdering.pickupEnabled ? `<span class="digital-menu-highlight"><span>⌖</span>Retirada no local</span>` : ""}<span class="digital-menu-highlight ${publicStoreOpen ? "store-open" : "store-closed"}"><span aria-hidden="true">●</span>${publicStoreOpen ? "Loja aberta" : "Loja fechada"}</span></div></div><span class="digital-hero-mark" aria-hidden="true">🍽️</span></header>`}
+          ${elvisVisual ? renderElvisPreviewHero() : `<header class="digital-hero"><div class="digital-hero-copy"><div class="eyebrow">BORA! DELIVERY · CARDÁPIO DIGITAL</div><h1>${publicStoreOpen ? "Peça algo gostoso." : "Confira nosso cardápio."}</h1><p>${publicStoreOpen ? "Escolha seus favoritos e receba seu pedido do seu jeito." : "Conheça nossos produtos e preços."}</p><div class="digital-menu-highlights"><span class="digital-menu-highlight"><span>◷</span>Entrega · ${publicOrdering.deliveryFee ? money(publicOrdering.deliveryFee) : "grátis"}</span>${publicOrdering.pickupEnabled ? `<span class="digital-menu-highlight"><span>⌖</span>Retirada no local</span>` : ""}<span class="digital-menu-highlight ${publicStoreOpen ? "store-open" : "store-closed"}"><span aria-hidden="true">●</span>${publicStoreOpen ? "Loja aberta" : "Loja fechada"}</span></div></div><span class="digital-hero-mark" aria-hidden="true">🍽️</span></header>`}
           ${!publicStoreOpen ? `<div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b>Loja fechada para pedidos</b>${publicNextOpening ? `Próxima abertura prevista: ${escapeHtml(publicNextOpening)}.` : "O cardápio está disponível para consulta."}</div></div>` : !canPlaceOrders ? `<div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b>Finalização online indisponível</b>Tente novamente mais tarde.</div></div>` : ""}
-          ${!canPlaceOrders && currentOrderConfirmation ? renderDigitalOrderConfirmation() : ""}
-          ${elvisPreview ? `<div class="preview-menu-layout" id="previewMenu"><div class="preview-menu-main"><h2 class="preview-menu-title">CARDÁPIO</h2>` : ""}
-          ${elvisPreview && groups.length ? `<div class="preview-tools"><label for="previewSearch" class="preview-visually-hidden">Buscar produto</label><input id="previewSearch" type="search" placeholder="Buscar produto ou ingrediente" value="${escapeHtml(elvisSearch)}"><div class="preview-tool-row"><button type="button" class="button" id="previewFavorites" aria-pressed="${elvisFavoritesOnly}">♥ Favoritos</button><label for="previewSort">Ordenar</label><select id="previewSort"><option value="menu">Ordem do cardápio</option><option value="low">Menor preço</option><option value="high">Maior preço</option></select></div></div>` : ""}
-          ${groups.length ? `<nav class="filters category-tabs" aria-label="Categorias do cardápio">${categoryButtons}</nav><section class="digital-menu-section"><div class="panel-heading"><h2>${categoryIcon(digitalCategory)} ${categoryName(digitalCategory)}s</h2><span id="previewResultCount">${shownProducts.length} produto(s)</span></div>${elvisPreview && digitalCategory === "lanche" ? `<p class="preview-image-note">Fotos ilustrativas</p>` : ""}<div class="digital-menu-list">${items}</div>${elvisPreview ? `<div class="empty-state" id="previewNoResults" hidden>Nenhum produto encontrado nesta categoria.</div>` : ""}</section>` : `<div class="empty-state" style="margin-top:13px">O cardápio está temporariamente sem produtos disponíveis.</div>`}
-          ${elvisPreview ? `</div><aside class="preview-order-side" aria-label="Resumo do pedido"><h2>SEU PEDIDO</h2>${digitalCart.length && canPlaceOrders ? `<p>${digitalCart.reduce((sum, item) => sum + item.quantity, 0)} item(ns) na sacola</p><p>Subtotal <strong>${money(subtotal)}</strong></p><p>Entrega <strong>${digitalFulfillment === "delivery" ? money(deliveryFee) : "Grátis"}</strong></p><p>Total <strong>${money(total)}</strong></p><button id="previewSidebarButton" type="button" class="button primary">Continuar pedido →</button>` : `<div class="preview-empty-bag"><span>♧</span><b>${canPlaceOrders ? "Sacola vazia" : publicStoreOpen ? "Finalização indisponível" : "Loja fechada"}</b><p>${canPlaceOrders ? "Escolha um produto para começar." : "Confira nosso cardápio."}</p></div><button type="button" class="button primary" disabled>Continuar pedido →</button>`}<small>Prévia sem pedido ou pagamento real.</small></aside></div>` : ""}
-          ${canPlaceOrders ? `<section class="panel" id="digitalCart" tabindex="-1" style="margin-top:22px"><div class="panel-heading"><h2>Seu pedido</h2><span id="digitalCartCount">${digitalCart.length} item(ns)</span></div>${elvisPreview ? `<p id="previewStepLabel"></p><div id="previewCartStep">` : ""}<div id="digitalCartSummary">${digitalCart.length ? digitalCart.map((item, index) => `<div class="sale-cart-row"><div><strong>${escapeHtml(item.name)}${item.optionName !== "Padrão" ? ` · ${escapeHtml(item.optionName)}` : ""} × ${item.quantity}</strong><small>${escapeHtml([item.border?.name, ...item.addons.map(addon => addon.name), ...(elvisPreview ? (item.removedIngredients || []).map(name => `Sem ${name}`) : [])].filter(Boolean).join(" · ") || "Sem adicionais")}</small></div><span>${money(saleLineTotal(item))}</span><span></span><button type="button" class="icon-button" data-action="remove-digital-item" data-index="${index}">×</button></div>`).join("") : `<div class="empty-state">Adicione um produto ao pedido.</div>`}</div>
+          ${(elvisVisual || !canPlaceOrders) && currentOrderConfirmation ? `<div id="digitalConfirmation" tabindex="-1">${renderDigitalOrderConfirmation()}</div>` : ""}
+          ${elvisVisual ? `<div class="preview-menu-layout" id="previewMenu"><div class="preview-menu-main"><h2 class="preview-menu-title">CARDÁPIO</h2>` : ""}
+          ${elvisVisual && groups.length ? `<div class="preview-tools"><label for="previewSearch" class="preview-visually-hidden">Buscar produto</label><input id="previewSearch" type="search" placeholder="Buscar produto ou ingrediente" value="${escapeHtml(elvisSearch)}"><div class="preview-tool-row"><button type="button" class="button" id="previewFavorites" aria-pressed="${elvisFavoritesOnly}">♥ Favoritos</button><label for="previewSort">Ordenar</label><select id="previewSort"><option value="menu">Ordem do cardápio</option><option value="low">Menor preço</option><option value="high">Maior preço</option></select></div></div>` : ""}
+          ${groups.length ? `<nav class="filters category-tabs" aria-label="Categorias do cardápio">${categoryButtons}</nav><section class="digital-menu-section"><div class="panel-heading"><h2>${categoryIcon(digitalCategory)} ${categoryName(digitalCategory)}s</h2><span id="previewResultCount">${shownProducts.length} produto(s)</span></div>${elvisVisual && digitalCategory === "lanche" ? `<p class="preview-image-note">Fotos ilustrativas</p>` : ""}<div class="digital-menu-list">${items}</div>${elvisVisual ? `<div class="empty-state" id="previewNoResults" hidden>Nenhum produto encontrado nesta categoria.</div>` : ""}</section>` : `<div class="empty-state" style="margin-top:13px">O cardápio está temporariamente sem produtos disponíveis.</div>`}
+          ${elvisVisual ? `</div><aside class="preview-order-side" aria-label="Resumo do pedido"><h2>SEU PEDIDO</h2>${digitalCart.length && canPlaceOrders ? `<p>${digitalCart.reduce((sum, item) => sum + item.quantity, 0)} item(ns) na sacola</p><p>Subtotal <strong>${money(subtotal)}</strong></p><p>Entrega <strong>${digitalFulfillment === "delivery" ? money(deliveryFee) : "Grátis"}</strong></p><p>Total <strong>${money(total)}</strong></p><button id="previewSidebarButton" type="button" class="button primary">Continuar pedido →</button>` : `<div class="preview-empty-bag"><span>♧</span><b>${canPlaceOrders ? "Sacola vazia" : publicStoreOpen ? "Finalização indisponível" : "Loja fechada"}</b><p>${canPlaceOrders ? "Escolha um produto para começar." : "Confira nosso cardápio."}</p></div><button type="button" class="button primary" disabled>Continuar pedido →</button>`}<small>${elvisPreview ? "Prévia sem pedido ou pagamento real." : "Pedidos e pagamentos reais."}</small></aside></div>` : ""}
+          ${canPlaceOrders ? `<section class="panel" id="digitalCart" tabindex="-1" style="margin-top:22px"><div class="panel-heading"><h2>Seu pedido</h2><span id="digitalCartCount">${digitalCart.length} item(ns)</span></div>${elvisVisual ? `<p id="previewStepLabel"></p><div id="previewCartStep">` : ""}<div id="digitalCartSummary">${digitalCart.length ? digitalCart.map((item, index) => `<div class="sale-cart-row"><div><strong>${escapeHtml(item.name)}${item.optionName !== "Padrão" ? ` · ${escapeHtml(item.optionName)}` : ""} × ${item.quantity}</strong><small>${escapeHtml([item.border?.name, ...item.addons.map(addon => addon.name), ...(elvisVisual ? (item.removedIngredients || []).map(name => `Sem ${name}`) : [])].filter(Boolean).join(" · ") || "Sem adicionais")}</small></div><span>${money(saleLineTotal(item))}</span><span></span><button type="button" class="icon-button" data-action="remove-digital-item" data-index="${index}">×</button></div>`).join("") : `<div class="empty-state">Adicione um produto ao pedido.</div>`}</div>
             <div class="field" style="margin-top:13px"><label for="digitalFulfillment">Como prefere receber?</label><select id="digitalFulfillment" ${currentOrderConfirmation ? "disabled" : ""}><option value="delivery">Entrega · ${money(publicOrdering.deliveryFee)}</option>${publicOrdering.pickupEnabled ? `<option value="pickup">Retirada no local · grátis</option>` : ""}</select></div>
             ${publicOrdering.pickupEnabled && publicOrdering.pickupAddress ? `<p class="helper" id="pickupAddressNote" ${digitalFulfillment === "pickup" ? "" : "hidden"}>Endereço para retirada: ${escapeHtml(publicOrdering.pickupAddress)}</p>` : ""}
             <div class="field" style="margin-top:13px"><label for="digitalPaymentMethod">Forma de pagamento</label><select id="digitalPaymentMethod" ${currentOrderConfirmation ? "disabled" : ""}>${paymentOptions.map(option => `<option value="${option.value}">${escapeHtml(option.label)}</option>`).join("")}</select></div>
             <div class="sale-total"><span id="digitalOrderBreakdown">Itens ${money(subtotal)}${deliveryFee ? ` + entrega ${money(deliveryFee)}` : ""}</span><strong id="digitalOrderTotal">${money(total)}</strong></div>
-            ${elvisPreview ? `<button type="button" class="button primary" id="previewToCustomer">Continuar</button></div>` : ""}
-            <form class="sale-checkout" id="digitalCheckout">${elvisPreview ? `<div id="previewCustomerStep">` : ""}<div class="form-grid">
+            ${elvisVisual ? `<button type="button" class="button primary" id="previewToCustomer">Continuar</button></div>` : ""}
+            <form class="sale-checkout" id="digitalCheckout">${elvisVisual ? `<div id="previewCustomerStep">` : ""}<div class="form-grid">
               <div class="field"><label for="digitalName">Seu nome</label><input id="digitalName" name="name" required maxlength="70" value="${escapeHtml(digitalCustomerDraft.name)}"></div>
               <div class="field"><label for="digitalPhone">WhatsApp / telefone</label><input id="digitalPhone" name="phone" type="tel" required maxlength="25" value="${escapeHtml(digitalCustomerDraft.phone)}"></div>
               <div class="field full" id="digitalEmailField" ${digitalPaymentMethod === "pix" ? "" : "hidden"}><label for="digitalEmail">E-mail para o pagamento Pix</label><input id="digitalEmail" name="email" type="email" maxlength="254" value="${escapeHtml(digitalCustomerDraft.email)}" ${digitalPaymentMethod === "pix" ? "required" : ""}></div>
               <div class="field full" id="digitalAddressField" ${digitalFulfillment === "pickup" ? "hidden" : ""}><label for="digitalAddress">Endereço de entrega</label><input id="digitalAddress" name="address" ${digitalFulfillment === "pickup" ? "" : "required"} maxlength="180" placeholder="Rua, número, bairro e complemento" value="${escapeHtml(digitalCustomerDraft.address)}"></div>
               <div class="field full"><label for="digitalNotes">Observações do pedido</label><input id="digitalNotes" name="notes" maxlength="160" placeholder="Ponto de referência, sem cebola..." value="${escapeHtml(digitalCustomerDraft.notes)}"></div>
             </div>
-            ${elvisPreview ? `<div class="preview-step-actions"><button type="button" class="button" id="previewToCart">Voltar</button><button type="button" class="button primary" id="previewToReview">Conferir pedido</button></div></div><div id="previewReviewStep"><p id="previewReviewDetails"></p><p class="helper">Itens: ${money(subtotal)}${deliveryFee ? ` + entrega ${money(deliveryFee)}` : ""} · Total: ${money(total)}</p><button type="button" class="button" id="previewBackToCustomer">Voltar</button>` : ""}
-            <button type="submit" class="button primary" ${digitalCart.length && !currentOrderConfirmation && canPlaceOrders ? "" : "disabled"}>${elvisPreview ? "Testar finalização (prévia)" : "Finalizar pedido"} · ${money(total)}</button>
-            ${elvisPreview ? `</div>` : ""}
-            <div>${currentOrderConfirmation ? renderDigitalOrderConfirmation() : ""}</div>
+            ${elvisVisual ? `<div class="preview-step-actions"><button type="button" class="button" id="previewToCart">Voltar</button><button type="button" class="button primary" id="previewToReview">Conferir pedido</button></div></div><div id="previewReviewStep"><p id="previewReviewDetails"></p><p class="helper">Itens: ${money(subtotal)}${deliveryFee ? ` + entrega ${money(deliveryFee)}` : ""} · Total: ${money(total)}</p><button type="button" class="button" id="previewBackToCustomer">Voltar</button>` : ""}
+            <button type="submit" class="button primary" ${digitalCart.length && !currentOrderConfirmation && canPlaceOrders ? "" : "disabled"}>${elvisVisual ? "Testar finalização (prévia)" : "Finalizar pedido"} · ${money(total)}</button>
+            ${elvisVisual ? `</div>` : ""}
+            <div>${!elvisVisual && currentOrderConfirmation ? renderDigitalOrderConfirmation() : ""}</div>
             </form>
-          </section>${digitalCart.length ? `<div class="public-cart-bar"><a class="button primary" href="#digitalCart"><span class="public-cart-count"><span>${elvisPreview ? digitalCart.reduce((sum, item) => sum + item.quantity, 0) : digitalCart.length}</span>Ver pedido</span><strong>${money(total)} <span aria-hidden="true">→</span></strong></a></div>` : ""}` : ""}
-          ${elvisPreview ? `<footer class="preview-footer"><span>Imagens ilustrativas</span><button type="button" class="button" id="previewInfoButton">Sobre esta versão</button><button type="button" class="button" id="previewSettingsButton">Personalizar prévia</button></footer>
-          <dialog id="previewInfo" aria-labelledby="previewInfoTitle"><h2 id="previewInfoTitle">Sobre esta versão</h2><p>Esta prévia usa os produtos, preços e disponibilidade publicados pela loja. A sacola e a finalização servem apenas para teste: nenhum pedido ou pagamento é enviado.</p><button type="button" class="button" data-preview-close-dialog>Fechar</button></dialog>
+          </section>${digitalCart.length ? `<div class="public-cart-bar"><a class="button primary" href="#digitalCart"><span class="public-cart-count"><span>${elvisVisual ? digitalCart.reduce((sum, item) => sum + item.quantity, 0) : digitalCart.length}</span>Ver pedido</span><strong>${money(total)} <span aria-hidden="true">→</span></strong></a></div>` : ""}` : ""}
+          ${elvisVisual ? `<footer class="preview-footer"><span>Imagens ilustrativas</span><button type="button" class="button" id="previewInfoButton">Sobre esta versão</button><button type="button" class="button" id="previewSettingsButton">${elvisPreview ? "Personalizar prévia" : "Ajustar animação"}</button></footer>
+          <dialog id="previewInfo" aria-labelledby="previewInfoTitle"><h2 id="previewInfoTitle">Sobre esta versão</h2><p>${elvisPreview ? "Esta prévia usa os produtos, preços e disponibilidade publicados pela loja. A sacola e a finalização servem apenas para teste: nenhum pedido ou pagamento é enviado." : "Este cardápio usa os produtos e preços publicados pela loja. Os pedidos e pagamentos são reais. As imagens dos lanches são ilustrativas."}</p><button type="button" class="button" data-preview-close-dialog>Fechar</button></dialog>
           <dialog id="previewSettings" aria-labelledby="previewSettingsTitle"><h2 id="previewSettingsTitle">Personalizar prévia</h2><p>O funcionamento, o endereço e a taxa de entrega vêm das configurações reais da loja e não são alterados aqui.</p><label><input id="previewMotion" type="checkbox"> Animação do hambúrguer nesta visita</label><p class="helper">A preferência de movimento reduzido do aparelho também é respeitada.</p><button type="button" class="button" data-preview-close-dialog>Fechar</button></dialog>` : ""}`;
-        if (elvisPreview && !elvisHeroShown) {
+        if (elvisVisual && !elvisHeroShown) {
           const lastLayer = document.querySelector(".elvis-layer:last-child");
           lastLayer?.addEventListener("animationend", () => { elvisHeroShown = true; }, { once: true });
         }
@@ -2892,7 +2897,7 @@
           });
           checkout.addEventListener("submit", submitDigitalOrder);
         }
-        if (elvisPreview) setupElvisPreview();
+        if (elvisVisual) setupElvisPreview();
       }
 
       function addDigitalItem(productId) {
@@ -2902,7 +2907,7 @@
           return;
         }
         const card = document.querySelector(`[data-public-product="${productId}"]`);
-        const quantityInput = elvisPreview ? card.querySelector("[data-preview-quantity]") : null;
+        const quantityInput = elvisVisual ? card.querySelector("[data-preview-quantity]") : null;
         if (quantityInput && !quantityInput.reportValidity()) return;
         const options = productOptions(product);
         const selectedOption = card.querySelector("[data-public-option]").value;
@@ -2947,7 +2952,7 @@
           borderName: border?.name || "Sem borda",
           addonIndexes,
           addons,
-          ...(elvisPreview && product.category === "lanche" ? {
+          ...(elvisVisual && product.category === "lanche" ? {
             removedIngredients: [...card.querySelectorAll("[data-preview-remove-ingredient]:checked")]
               .map(input => product.ingredients[Number(input.dataset.previewRemoveIngredient)])
           } : {})
@@ -2965,6 +2970,10 @@
         if (!digitalCart.length) return;
         if (elvisPreview) {
           if (event.currentTarget.reportValidity()) showToast("Prévia: nenhum pedido foi enviado e nenhuma cobrança foi criada.");
+          return;
+        }
+        if (elvisVisual && !publicSupportsRemovedIngredients) {
+          showToast("A finalização deste cardápio está temporariamente indisponível. Atualize a página e tente novamente.");
           return;
         }
         const paymentMethod = digitalPaymentMethod;
@@ -2997,6 +3006,7 @@
                 flavorIds: item.flavorIds || [],
                 borderName: item.borderName || "Sem borda",
                 addonIndexes: item.addonIndexes || [],
+                ...(elvisVisual ? { removedIngredients: item.removedIngredients || [] } : {}),
                 quantity: item.quantity
               }))
             }
@@ -3026,6 +3036,7 @@
           currentPixOrderCart = currentPixPayment?.status === "pending" ? [...digitalCart] : [];
           digitalCart = [];
           renderPublicMenu();
+          if (elvisVisual) document.getElementById("digitalConfirmation")?.focus();
           if (currentPixPayment?.status === "pending") startPixPaymentStatusPolling(currentOrderConfirmation);
           showToast(paymentMethod === "pix"
             ? currentPixPayment.status === "approved" ? "Pix confirmado. Pedido enviado à loja." : "Pix gerado. Conclua o pagamento para confirmar o pedido."
@@ -4015,8 +4026,9 @@
           window.open(pdvUrl.toString(), "_blank", "noopener,noreferrer");
         }
         if (action.dataset.action === "open-public-menu") window.open(`${location.pathname}?cardapio=1`, "_blank", "noopener,noreferrer");
-        if (action.dataset.action === "copy-menu-link") {
-          const shareUrl = document.getElementById("menuShareUrl")?.value;
+        if (action.dataset.action === "copy-menu-link" || action.dataset.action === "copy-elvis-menu-link") {
+          const linkField = document.getElementById(action.dataset.action === "copy-elvis-menu-link" ? "elvisMenuShareUrl" : "menuShareUrl");
+          const shareUrl = linkField?.value;
           if (shareUrl && navigator.clipboard?.writeText) {
             navigator.clipboard.writeText(shareUrl).then(
               () => showToast("Link do cardápio copiado."),
@@ -4026,7 +4038,7 @@
               }
             );
           } else {
-            document.getElementById("menuShareUrl")?.select();
+            linkField?.select();
             showToast("Link selecionado. Copie usando Ctrl+C.");
           }
         }

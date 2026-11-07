@@ -48,7 +48,7 @@ test("preview product rejects invalid quantity and preserves valid quantity", ()
     querySelectorAll: () => []
   };
   const context = {
-    state: { products: [product] }, elvisPreview: true,
+    state: { products: [product] }, elvisVisual: true,
     document: { querySelector: () => card },
     productOptions: p => [{ name: "Padrão", price: p.price }],
     number: Number, roundMoney: value => value, productCost: () => 0,
@@ -78,7 +78,7 @@ test("preview keeps removed ingredients per item without changing the price", ()
     querySelectorAll: selector => selector === "[data-preview-remove-ingredient]:checked" ? selected : []
   };
   const context = {
-    state: { products: [product] }, elvisPreview: true,
+    state: { products: [product] }, elvisVisual: true,
     document: { querySelector: () => card },
     productOptions: p => [{ name: "Padrão", price: p.price }],
     number: Number, roundMoney: value => value, productCost: () => 0,
@@ -94,4 +94,27 @@ test("preview keeps removed ingredients per item without changing the price", ()
   assert.deepEqual(Array.from(context.digitalCart[1].removedIngredients), ["Queijo"]);
   assert.equal(context.digitalCart[0].price, 18);
   assert.equal(context.digitalCart[1].price, 18);
+});
+
+test("online receipt includes removed ingredients", () => {
+  const source = publicFunction("function printReceipt(", "function orderCanTriggerAlert(");
+  let htmlOutput = "";
+  const receiptWindow = {
+    document: { open: () => {}, write: value => { htmlOutput = value; }, close: () => {} },
+    addEventListener: () => {}
+  };
+  const context = {
+    seedData: { receiptSettings: {} }, state: { receiptSettings: {} },
+    window: { open: () => receiptWindow },
+    number: Number, saleLineTotal: item => item.price * item.quantity,
+    money: value => `R$ ${value}`, escapeHtml: value => String(value),
+    receiptPaymentStatus: () => "A receber", setTimeout: () => {}
+  };
+  vm.createContext(context);
+  vm.runInContext(source, context);
+  context.printReceipt({
+    id: "order1", createdAt: "2026-01-01T00:00:00Z",
+    items: [{ name: "Lanche", price: 18, quantity: 1, removedIngredients: ["Cebola"], addons: [] }]
+  });
+  assert.match(htmlOutput, /Sem Cebola/);
 });

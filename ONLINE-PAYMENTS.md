@@ -48,6 +48,8 @@ Na página **Cardápio digital**, lojas com cardápio publicado podem abrir a **
 A prévia oferece busca e ordenação dentro da categoria selecionada, favoritos salvos neste navegador por loja, personalização dos produtos disponíveis e uma sacola com etapas de dados e conferência. Nos lanches com ingredientes cadastrados, é possível simular a retirada de ingredientes por item, sem alteração de preço; essa escolha aparece na sacola e na conferência, mas não é enviada à loja. O menu **Personalizar prévia** controla apenas a animação durante a visita; endereço, taxa e funcionamento continuam vindo das configurações publicadas da loja. A observação disponível é a do pedido inteiro.
 As imagens de lanches são ilustrativas, extraídas do HTML de referência; não representam necessariamente os produtos cadastrados.
 
+O **link real Elvis na Chapa**, disponível separadamente na página **Cardápio digital**, aceita pedidos e pagamentos reais e mantém o link atual e a prévia de teste inalterados. A retirada de ingredientes nos lanches não altera o preço e é validada pelo servidor contra o cardápio publicado; ela aparece no pedido e no cupom. A finalização deste link fica indisponível se a função `create-cash-order` não anunciar suporte à retirada de ingredientes. Publique essa função antes de divulgar o novo link. A disponibilidade e o Pix seguem as mesmas configurações e regras do cardápio atual.
+
 ## Como o Pix funciona
 
 - O cliente escolhe Pix online no checkout, informa um e-mail e recebe o QR Code e o código Pix copia e cola.
