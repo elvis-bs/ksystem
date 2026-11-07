@@ -564,6 +564,13 @@
       let publicBusinessId = "";
       const elvisPreview = new URLSearchParams(location.search).get("visual") === "elvis-preview";
       let elvisHeroShown = false;
+      let elvisSearch = "";
+      let elvisSort = "menu";
+      let elvisFavoritesOnly = false;
+      let elvisFavorites = new Set();
+      let elvisCartOpen = false;
+      let elvisCheckoutStep = 0;
+      let elvisMotionEnabled = true;
       let publicOrdering = { deliveryFee: 0, pickupEnabled: false, pickupAddress: "", acceptingOrders: false };
       let publicStoreOpen = false;
       let publicNextOpening = null;
@@ -1160,6 +1167,14 @@
           document.body.classList.add("public-menu");
           if (elvisPreview) document.body.classList.add("elvis-preview");
           publicBusinessId = params.get("loja") || "";
+          if (elvisPreview) {
+            try {
+              const savedFavorites = JSON.parse(localStorage.getItem(`elvis-preview-favorites:${publicBusinessId}`) || "[]");
+              if (Array.isArray(savedFavorites)) elvisFavorites = new Set(savedFavorites.filter(id => typeof id === "string"));
+            } catch (error) {
+              console.warn("Não foi possível carregar os favoritos da prévia:", error);
+            }
+          }
           if (!supabaseClient || !/^[0-9a-f-]{36}$/i.test(publicBusinessId)) {
             publicMenuLoadError = "Use o link do cardápio gerado pela loja para fazer um pedido.";
             renderPublicMenu();
@@ -2572,9 +2587,172 @@
         return `<div class="elvis-preview-notice"><strong>Prévia visual — sem pedidos reais.</strong> Esta página mostra o cardápio cadastrado, mas não envia pedidos nem gera cobranças.</div>
           <div class="elvis-hero" role="img" aria-label="Elvis na Chapa: hambúrguer montado em camadas">
             <svg class="elvis-logo" viewBox="0 0 840 240" aria-hidden="true"><defs><path id="elvis-preview-arc" d="M65 205 Q420 -35 775 205"></path></defs><text><textPath href="#elvis-preview-arc" startOffset="50%" text-anchor="middle">ELVIS NA CHAPA</textPath></text></svg>
-            <div class="elvis-burger ${elvisHeroShown ? "" : "animate"}"><div class="elvis-plate"></div>${layers}</div>
+            <div class="elvis-burger ${elvisHeroShown || !elvisMotionEnabled ? "" : "animate"}"><div class="elvis-plate"></div>${layers}</div>
           </div><p class="elvis-slogan">O melhor lanche da região.</p>
           <div class="digital-menu-highlights"><span class="digital-menu-highlight">Entrega · ${publicOrdering.deliveryFee ? money(publicOrdering.deliveryFee) : "grátis"}</span>${publicOrdering.pickupEnabled ? `<span class="digital-menu-highlight">Retirada no local</span>` : ""}<span class="digital-menu-highlight ${publicStoreOpen ? "store-open" : "store-closed"}"><span aria-hidden="true">●</span>${publicStoreOpen ? "Loja aberta" : "Loja fechada"}</span></div>`;
+      }
+
+      function setupElvisPreview() {
+        const infoDialog = document.getElementById("previewInfo");
+        const settingsDialog = document.getElementById("previewSettings");
+        document.getElementById("previewInfoButton").addEventListener("click", () => infoDialog.showModal());
+        document.getElementById("previewSettingsButton").addEventListener("click", () => settingsDialog.showModal());
+        document.querySelectorAll("[data-preview-close-dialog]").forEach(button => {
+          button.addEventListener("click", () => button.closest("dialog").close());
+        });
+        const motion = document.getElementById("previewMotion");
+        motion.checked = elvisMotionEnabled;
+        motion.addEventListener("change", () => {
+          elvisMotionEnabled = motion.checked;
+          document.querySelector(".elvis-burger").classList.toggle("animate", elvisMotionEnabled);
+        });
+        const search = document.getElementById("previewSearch");
+        const sort = document.getElementById("previewSort");
+        const favoritesButton = document.getElementById("previewFavorites");
+        const list = document.querySelector(".digital-menu-list");
+        const cards = list ? [...list.querySelectorAll("[data-public-product]")] : [];
+        const updateProducts = () => {
+          const term = elvisSearch.trim().toLocaleLowerCase("pt-BR");
+          let visible = 0;
+          cards.forEach(card => {
+            const product = state.products.find(item => item.id === card.dataset.publicProduct);
+            const text = `${product.name} ${(product.ingredients || []).join(" ")}`.toLocaleLowerCase("pt-BR");
+            card.hidden = !text.includes(term) || (elvisFavoritesOnly && !elvisFavorites.has(product.id));
+            if (!card.hidden) visible++;
+          });
+          const ordered = [...cards];
+          if (elvisSort !== "menu") ordered.sort((a, b) => {
+            const price = card => Math.min(...productOptions(state.products.find(item => item.id === card.dataset.publicProduct)).map(option => number(option.price)));
+            return (price(a) - price(b)) * (elvisSort === "low" ? 1 : -1);
+          });
+          ordered.forEach(card => list.appendChild(card));
+          const count = document.getElementById("previewResultCount");
+          const empty = document.getElementById("previewNoResults");
+          if (count) count.textContent = `${visible} produto(s)`;
+          if (empty) empty.hidden = visible > 0;
+        };
+        if (search && sort && favoritesButton) {
+          sort.value = elvisSort;
+          search.addEventListener("input", () => { elvisSearch = search.value; updateProducts(); });
+          sort.addEventListener("change", () => { elvisSort = sort.value; updateProducts(); });
+          favoritesButton.addEventListener("click", () => {
+            elvisFavoritesOnly = !elvisFavoritesOnly;
+            favoritesButton.setAttribute("aria-pressed", String(elvisFavoritesOnly));
+            updateProducts();
+          });
+          cards.forEach(card => {
+            const favorite = card.querySelector(".preview-favorite");
+            favorite.addEventListener("click", event => {
+              event.preventDefault();
+              if (elvisFavorites.has(card.dataset.publicProduct)) elvisFavorites.delete(card.dataset.publicProduct);
+              else elvisFavorites.add(card.dataset.publicProduct);
+              favorite.setAttribute("aria-pressed", String(elvisFavorites.has(card.dataset.publicProduct)));
+              favorite.textContent = elvisFavorites.has(card.dataset.publicProduct) ? "♥" : "♡";
+              const product = state.products.find(item => item.id === card.dataset.publicProduct);
+              favorite.setAttribute("aria-label", `${elvisFavorites.has(product.id) ? "Remover dos favoritos" : "Adicionar aos favoritos"}: ${product.name}`);
+              try {
+                localStorage.setItem(`elvis-preview-favorites:${publicBusinessId}`, JSON.stringify([...elvisFavorites]));
+              } catch (error) {
+                console.error("Não foi possível salvar os favoritos:", error);
+                showToast("Não foi possível salvar os favoritos neste navegador.");
+              }
+              updateProducts();
+            });
+            card.querySelector(".preview-close-product").addEventListener("click", () => {
+              card.open = false;
+              card.querySelector("summary").focus();
+            });
+            card.addEventListener("toggle", () => {
+              if (card.open) {
+                cards.filter(other => other !== card).forEach(other => { other.open = false; });
+                card.querySelector("[data-public-option]").focus();
+              }
+            });
+          });
+          updateProducts();
+        }
+        const cart = document.getElementById("digitalCart");
+        const cartLink = document.querySelector(".public-cart-bar a");
+        if (!cart || !cartLink) {
+          elvisCartOpen = false;
+          elvisCheckoutStep = 0;
+        }
+        if (cart && cartLink) {
+          const close = document.createElement("button");
+          close.type = "button";
+          close.className = "button preview-close-cart";
+          close.textContent = "Fechar sacola";
+          close.addEventListener("click", () => { elvisCartOpen = false; cart.classList.remove("preview-cart-open"); cartLink.focus(); });
+          cart.prepend(close);
+          cart.classList.toggle("preview-cart-open", elvisCartOpen);
+          cartLink.addEventListener("click", event => {
+            event.preventDefault();
+            elvisCartOpen = true;
+            cart.classList.add("preview-cart-open");
+            cart.focus();
+          });
+          const checkout = document.getElementById("digitalCheckout");
+          const summary = document.getElementById("previewCartStep");
+          const customer = document.getElementById("previewCustomerStep");
+          const review = document.getElementById("previewReviewStep");
+          const updateStep = () => {
+            if (elvisCheckoutStep === 2 && !checkout.checkValidity()) elvisCheckoutStep = 1;
+            summary.hidden = elvisCheckoutStep !== 0;
+            customer.hidden = elvisCheckoutStep !== 1;
+            review.hidden = elvisCheckoutStep !== 2;
+            document.getElementById("previewStepLabel").textContent = ["1 de 3 · Sacola", "2 de 3 · Seus dados", "3 de 3 · Conferir"][elvisCheckoutStep];
+            const fulfillment = document.getElementById("digitalFulfillment");
+            const payment = document.getElementById("digitalPaymentMethod");
+            document.getElementById("previewReviewDetails").textContent = [
+              digitalCart.map(item => {
+                const details = [item.optionName !== "Padrão" ? item.optionName : "", item.border?.name, ...item.addons.map(addon => addon.name)].filter(Boolean);
+                return `${item.quantity} × ${item.name}${details.length ? ` (${details.join(", ")})` : ""}`;
+              }).join(" · "),
+              digitalCustomerDraft.name, digitalCustomerDraft.phone,
+              digitalFulfillment === "delivery" ? digitalCustomerDraft.address : "",
+              digitalPaymentMethod === "pix" ? digitalCustomerDraft.email : "",
+              digitalCustomerDraft.notes ? `Observações: ${digitalCustomerDraft.notes}` : "",
+              fulfillment.selectedOptions[0].textContent, payment.selectedOptions[0].textContent
+            ].filter(Boolean).join(" · ");
+          };
+          document.getElementById("previewToCustomer").addEventListener("click", () => { elvisCheckoutStep = 1; updateStep(); });
+          document.getElementById("previewToCart").addEventListener("click", () => { elvisCheckoutStep = 0; updateStep(); });
+          document.getElementById("previewToReview").addEventListener("click", () => {
+            if (!checkout.reportValidity()) return;
+            elvisCheckoutStep = 2;
+            updateStep();
+          });
+          document.getElementById("previewBackToCustomer").addEventListener("click", () => { elvisCheckoutStep = 1; updateStep(); });
+          updateStep();
+        }
+        document.getElementById("pageContent").onkeydown = event => {
+          const dialog = event.target.closest("dialog[open]");
+          if (dialog && event.key === "Escape") {
+            event.preventDefault();
+            dialog.close();
+            return;
+          }
+          const modal = document.querySelector(".digital-product-card[open]") || document.querySelector("#digitalCart.preview-cart-open");
+          if (!modal) return;
+          if (event.key === "Escape") {
+            event.preventDefault();
+            const close = modal.querySelector(".preview-close-product, .preview-close-cart");
+            if (close) close.click();
+          } else if (event.key === "Tab") {
+            const controls = [...modal.querySelectorAll("button:not([disabled]), select:not([disabled]), input:not([disabled]), textarea:not([disabled]), a[href]")]
+              .filter(control => control.getClientRects().length);
+            if (!controls.length) return;
+            const first = controls[0];
+            const last = controls[controls.length - 1];
+            if (event.shiftKey && (document.activeElement === first || document.activeElement === modal)) {
+              event.preventDefault();
+              last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+              event.preventDefault();
+              first.focus();
+            }
+          }
+        };
       }
 
       function renderPublicMenu() {
@@ -2605,12 +2783,14 @@
             ? `Vai no lanche: ${product.ingredients.map(escapeHtml).join(", ")}`
             : "Ingredientes não informados";
           return `<details class="digital-product-card" data-category="${escapeHtml(product.category)}" data-public-product="${escapeHtml(product.id)}">
-            <summary class="digital-product-summary"><span class="digital-product-art" aria-hidden="true">${categoryIcon(product.category)}</span><div class="digital-product-info"><h3>${escapeHtml(product.name)}</h3><p>${product.category === "pizza" ? `${options.length} tamanho(s) · escolha o tamanho e depois os sabores` : product.category === "bebida" ? "Bebida gelada" : sandwichDescription}</p><div class="digital-product-bottom"><strong class="digital-product-price">${priceLabel}</strong><span class="digital-product-action">${elvisPreview && !canPlaceOrders ? "Consultar" : product.category === "pizza" ? "Escolher tamanho +" : "Adicionar +"}</span></div></div></summary>
+            <summary class="digital-product-summary"><span class="digital-product-art" aria-hidden="true">${categoryIcon(product.category)}</span><div class="digital-product-info"><h3>${escapeHtml(product.name)}</h3><p>${product.category === "pizza" ? `${options.length} tamanho(s) · escolha o tamanho e depois os sabores` : product.category === "bebida" ? "Bebida gelada" : sandwichDescription}</p><div class="digital-product-bottom"><strong class="digital-product-price">${priceLabel}</strong><span class="digital-product-action">${elvisPreview && !canPlaceOrders ? "Consultar" : product.category === "pizza" ? "Escolher tamanho +" : "Adicionar +"}</span></div></div>${elvisPreview ? `<button type="button" class="preview-favorite" aria-label="${elvisFavorites.has(product.id) ? "Remover dos favoritos" : "Adicionar aos favoritos"}: ${escapeHtml(product.name)}" aria-pressed="${elvisFavorites.has(product.id)}">${elvisFavorites.has(product.id) ? "♥" : "♡"}</button>` : ""}</summary>
             <div class="digital-product-options"><div class="field"><label>Opção / tamanho</label><select data-public-option>${product.category === "pizza" ? `<option value="">Escolha o tamanho</option>` : ""}${options.map((option, index) => `<option value="${index}">${escapeHtml(option.name)} · ${money(option.price)}</option>`).join("")}</select></div>
               ${product.category === "pizza" ? `<div data-pizza-flavor-container></div><div data-pizza-border-container></div>` : ""}
               ${(product.addons || []).length ? `<div class="option-group"><span class="section-label">Adicionais deste produto (opcional)</span><div class="sale-addons">${product.addons.map((addon, index) => `<label class="addon-choice"><input type="checkbox" data-public-addon="${index}">${escapeHtml(addon.name)} + ${money(addon.price)}</label>`).join("")}</div></div>` : ""}
               ${product.category === "pizza" ? `<p class="helper" data-public-price></p>` : ""}
+              ${elvisPreview && canPlaceOrders ? `<div class="field"><label>Quantidade</label><input data-preview-quantity aria-label="Quantidade" type="number" min="1" max="20" step="1" value="1" required></div>` : ""}
               ${canPlaceOrders && !currentOrderConfirmation ? `<button type="button" class="button primary" data-action="public-add" data-id="${escapeHtml(product.id)}">Adicionar ao pedido</button>` : ""}
+              ${elvisPreview ? `<button type="button" class="button preview-close-product">Fechar</button>` : ""}
             </div>
           </details>`;
         }).join("");
@@ -2622,23 +2802,30 @@
           ${elvisPreview ? renderElvisPreviewHero() : `<header class="digital-hero"><div class="digital-hero-copy"><div class="eyebrow">BORA! DELIVERY · CARDÁPIO DIGITAL</div><h1>${publicStoreOpen ? "Peça algo gostoso." : "Confira nosso cardápio."}</h1><p>${publicStoreOpen ? "Escolha seus favoritos e receba seu pedido do seu jeito." : "Conheça nossos produtos e preços."}</p><div class="digital-menu-highlights"><span class="digital-menu-highlight"><span>◷</span>Entrega · ${publicOrdering.deliveryFee ? money(publicOrdering.deliveryFee) : "grátis"}</span>${publicOrdering.pickupEnabled ? `<span class="digital-menu-highlight"><span>⌖</span>Retirada no local</span>` : ""}<span class="digital-menu-highlight ${publicStoreOpen ? "store-open" : "store-closed"}"><span aria-hidden="true">●</span>${publicStoreOpen ? "Loja aberta" : "Loja fechada"}</span></div></div><span class="digital-hero-mark" aria-hidden="true">🍽️</span></header>`}
           ${!publicStoreOpen ? `<div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b>Loja fechada para pedidos</b>${publicNextOpening ? `Próxima abertura prevista: ${escapeHtml(publicNextOpening)}.` : "O cardápio está disponível para consulta."}</div></div>` : !canPlaceOrders ? `<div class="callout" style="margin-top:14px"><span>ⓘ</span><div><b>Finalização online indisponível</b>Tente novamente mais tarde.</div></div>` : ""}
           ${!canPlaceOrders && currentOrderConfirmation ? renderDigitalOrderConfirmation() : ""}
-          ${groups.length ? `<nav class="filters category-tabs" aria-label="Categorias do cardápio">${categoryButtons}</nav><section class="digital-menu-section"><div class="panel-heading"><h2>${categoryIcon(digitalCategory)} ${categoryName(digitalCategory)}s</h2><span>${shownProducts.length} produto(s)</span></div><div class="digital-menu-list">${items}</div></section>` : `<div class="empty-state" style="margin-top:13px">O cardápio está temporariamente sem produtos disponíveis.</div>`}
-          ${canPlaceOrders ? `<section class="panel" id="digitalCart" tabindex="-1" style="margin-top:22px"><div class="panel-heading"><h2>Seu pedido</h2><span id="digitalCartCount">${digitalCart.length} item(ns)</span></div><div id="digitalCartSummary">${digitalCart.length ? digitalCart.map((item, index) => `<div class="sale-cart-row"><div><strong>${escapeHtml(item.name)}${item.optionName !== "Padrão" ? ` · ${escapeHtml(item.optionName)}` : ""} × ${item.quantity}</strong><small>${[item.border?.name, ...item.addons.map(addon => addon.name)].filter(Boolean).join(" · ") || "Sem adicionais"}</small></div><span>${money(saleLineTotal(item))}</span><span></span><button type="button" class="icon-button" data-action="remove-digital-item" data-index="${index}">×</button></div>`).join("") : `<div class="empty-state">Adicione um produto ao pedido.</div>`}</div>
+          ${elvisPreview && groups.length ? `<div class="preview-tools"><label for="previewSearch">Buscar produto</label><input id="previewSearch" type="search" placeholder="Buscar por nome ou ingrediente" value="${escapeHtml(elvisSearch)}"><div class="preview-tool-row"><button type="button" class="button" id="previewFavorites" aria-pressed="${elvisFavoritesOnly}">♥ Favoritos</button><label for="previewSort">Ordenar</label><select id="previewSort"><option value="menu">Ordem do cardápio</option><option value="low">Menor preço</option><option value="high">Maior preço</option></select></div></div>` : ""}
+          ${groups.length ? `<nav class="filters category-tabs" aria-label="Categorias do cardápio">${categoryButtons}</nav><section class="digital-menu-section"><div class="panel-heading"><h2>${categoryIcon(digitalCategory)} ${categoryName(digitalCategory)}s</h2><span id="previewResultCount">${shownProducts.length} produto(s)</span></div><div class="digital-menu-list">${items}</div>${elvisPreview ? `<div class="empty-state" id="previewNoResults" hidden>Nenhum produto encontrado nesta categoria.</div>` : ""}</section>` : `<div class="empty-state" style="margin-top:13px">O cardápio está temporariamente sem produtos disponíveis.</div>`}
+          ${canPlaceOrders ? `<section class="panel" id="digitalCart" tabindex="-1" style="margin-top:22px"><div class="panel-heading"><h2>Seu pedido</h2><span id="digitalCartCount">${digitalCart.length} item(ns)</span></div>${elvisPreview ? `<p id="previewStepLabel"></p><div id="previewCartStep">` : ""}<div id="digitalCartSummary">${digitalCart.length ? digitalCart.map((item, index) => `<div class="sale-cart-row"><div><strong>${escapeHtml(item.name)}${item.optionName !== "Padrão" ? ` · ${escapeHtml(item.optionName)}` : ""} × ${item.quantity}</strong><small>${[item.border?.name, ...item.addons.map(addon => addon.name)].filter(Boolean).join(" · ") || "Sem adicionais"}</small></div><span>${money(saleLineTotal(item))}</span><span></span><button type="button" class="icon-button" data-action="remove-digital-item" data-index="${index}">×</button></div>`).join("") : `<div class="empty-state">Adicione um produto ao pedido.</div>`}</div>
             <div class="field" style="margin-top:13px"><label for="digitalFulfillment">Como prefere receber?</label><select id="digitalFulfillment" ${currentOrderConfirmation ? "disabled" : ""}><option value="delivery">Entrega · ${money(publicOrdering.deliveryFee)}</option>${publicOrdering.pickupEnabled ? `<option value="pickup">Retirada no local · grátis</option>` : ""}</select></div>
             ${publicOrdering.pickupEnabled && publicOrdering.pickupAddress ? `<p class="helper" id="pickupAddressNote" ${digitalFulfillment === "pickup" ? "" : "hidden"}>Endereço para retirada: ${escapeHtml(publicOrdering.pickupAddress)}</p>` : ""}
             <div class="field" style="margin-top:13px"><label for="digitalPaymentMethod">Forma de pagamento</label><select id="digitalPaymentMethod" ${currentOrderConfirmation ? "disabled" : ""}>${paymentOptions.map(option => `<option value="${option.value}">${escapeHtml(option.label)}</option>`).join("")}</select></div>
             <div class="sale-total"><span id="digitalOrderBreakdown">Itens ${money(subtotal)}${deliveryFee ? ` + entrega ${money(deliveryFee)}` : ""}</span><strong id="digitalOrderTotal">${money(total)}</strong></div>
-            <form class="sale-checkout" id="digitalCheckout"><div class="form-grid">
+            ${elvisPreview ? `<button type="button" class="button primary" id="previewToCustomer">Continuar</button></div>` : ""}
+            <form class="sale-checkout" id="digitalCheckout">${elvisPreview ? `<div id="previewCustomerStep">` : ""}<div class="form-grid">
               <div class="field"><label for="digitalName">Seu nome</label><input id="digitalName" name="name" required maxlength="70" value="${escapeHtml(digitalCustomerDraft.name)}"></div>
               <div class="field"><label for="digitalPhone">WhatsApp / telefone</label><input id="digitalPhone" name="phone" type="tel" required maxlength="25" value="${escapeHtml(digitalCustomerDraft.phone)}"></div>
               <div class="field full" id="digitalEmailField" ${digitalPaymentMethod === "pix" ? "" : "hidden"}><label for="digitalEmail">E-mail para o pagamento Pix</label><input id="digitalEmail" name="email" type="email" maxlength="254" value="${escapeHtml(digitalCustomerDraft.email)}" ${digitalPaymentMethod === "pix" ? "required" : ""}></div>
               <div class="field full" id="digitalAddressField" ${digitalFulfillment === "pickup" ? "hidden" : ""}><label for="digitalAddress">Endereço de entrega</label><input id="digitalAddress" name="address" ${digitalFulfillment === "pickup" ? "" : "required"} maxlength="180" placeholder="Rua, número, bairro e complemento" value="${escapeHtml(digitalCustomerDraft.address)}"></div>
               <div class="field full"><label for="digitalNotes">Observações do pedido</label><input id="digitalNotes" name="notes" maxlength="160" placeholder="Ponto de referência, sem cebola..." value="${escapeHtml(digitalCustomerDraft.notes)}"></div>
             </div>
+            ${elvisPreview ? `<div class="preview-step-actions"><button type="button" class="button" id="previewToCart">Voltar</button><button type="button" class="button primary" id="previewToReview">Conferir pedido</button></div></div><div id="previewReviewStep"><p id="previewReviewDetails"></p><p class="helper">Itens: ${money(subtotal)}${deliveryFee ? ` + entrega ${money(deliveryFee)}` : ""} · Total: ${money(total)}</p><button type="button" class="button" id="previewBackToCustomer">Voltar</button>` : ""}
             <button type="submit" class="button primary" ${digitalCart.length && !currentOrderConfirmation && canPlaceOrders ? "" : "disabled"}>${elvisPreview ? "Testar finalização (prévia)" : "Finalizar pedido"} · ${money(total)}</button>
+            ${elvisPreview ? `</div>` : ""}
             <div>${currentOrderConfirmation ? renderDigitalOrderConfirmation() : ""}</div>
             </form>
-          </section>${digitalCart.length ? `<div class="public-cart-bar"><a class="button primary" href="#digitalCart"><span class="public-cart-count"><span>${digitalCart.length}</span>Ver pedido</span><strong>${money(total)} <span aria-hidden="true">→</span></strong></a></div>` : ""}` : ""}`;
+          </section>${digitalCart.length ? `<div class="public-cart-bar"><a class="button primary" href="#digitalCart"><span class="public-cart-count"><span>${elvisPreview ? digitalCart.reduce((sum, item) => sum + item.quantity, 0) : digitalCart.length}</span>Ver pedido</span><strong>${money(total)} <span aria-hidden="true">→</span></strong></a></div>` : ""}` : ""}
+          ${elvisPreview ? `<footer class="preview-footer"><button type="button" class="button" id="previewInfoButton">Sobre esta versão</button><button type="button" class="button" id="previewSettingsButton">Personalizar prévia</button></footer>
+          <dialog id="previewInfo" aria-labelledby="previewInfoTitle"><h2 id="previewInfoTitle">Sobre esta versão</h2><p>Esta prévia usa os produtos, preços e disponibilidade publicados pela loja. A sacola e a finalização servem apenas para teste: nenhum pedido ou pagamento é enviado.</p><button type="button" class="button" data-preview-close-dialog>Fechar</button></dialog>
+          <dialog id="previewSettings" aria-labelledby="previewSettingsTitle"><h2 id="previewSettingsTitle">Personalizar prévia</h2><p>O funcionamento, o endereço e a taxa de entrega vêm das configurações reais da loja e não são alterados aqui.</p><label><input id="previewMotion" type="checkbox"> Animação do hambúrguer nesta visita</label><p class="helper">A preferência de movimento reduzido do aparelho também é respeitada.</p><button type="button" class="button" data-preview-close-dialog>Fechar</button></dialog>` : ""}`;
         if (elvisPreview && !elvisHeroShown) {
           const lastLayer = document.querySelector(".elvis-layer:last-child");
           lastLayer?.addEventListener("animationend", () => { elvisHeroShown = true; }, { once: true });
@@ -2696,6 +2883,7 @@
           });
           checkout.addEventListener("submit", submitDigitalOrder);
         }
+        if (elvisPreview) setupElvisPreview();
       }
 
       function addDigitalItem(productId) {
@@ -2705,6 +2893,8 @@
           return;
         }
         const card = document.querySelector(`[data-public-product="${productId}"]`);
+        const quantityInput = elvisPreview ? card.querySelector("[data-preview-quantity]") : null;
+        if (quantityInput && !quantityInput.reportValidity()) return;
         const options = productOptions(product);
         const selectedOption = card.querySelector("[data-public-option]").value;
         if (product.category === "pizza" && selectedOption === "") {
@@ -2743,7 +2933,7 @@
           optionName: option.name,
           price: roundMoney(price),
           cost: roundMoney(cost),
-          quantity: 1,
+          quantity: quantityInput ? Number(quantityInput.value) : 1,
           border: border ? { ...border } : null,
           borderName: border?.name || "Sem borda",
           addonIndexes,

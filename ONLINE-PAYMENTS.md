@@ -45,6 +45,8 @@ O cardápio mostra a loja aberta ou fechada e, quando fechada, a próxima abertu
 
 Na página **Cardápio digital**, lojas com cardápio publicado podem abrir a **prévia Elvis na Chapa**. Ela usa os produtos e a disponibilidade publicados, mas a finalização é apenas visual: não envia pedidos, não gera Pix e não substitui o cardápio público.
 
+A prévia oferece busca e ordenação dentro da categoria selecionada, favoritos salvos neste navegador por loja, personalização dos produtos disponíveis e uma sacola com etapas de dados e conferência. O menu **Personalizar prévia** controla apenas a animação durante a visita; endereço, taxa e funcionamento continuam vindo das configurações publicadas da loja. Remoção de ingredientes por item e observações por item do HTML de referência não são reproduzidas: a observação disponível é a do pedido inteiro.
+
 ## Como o Pix funciona
 
 - O cliente escolhe Pix online no checkout, informa um e-mail e recebe o QR Code e o código Pix copia e cola.
