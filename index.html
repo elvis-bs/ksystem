@@ -88,6 +88,8 @@
     .button:hover { border-color: #b7c8ba; transform: translateY(-1px); }
     .button.primary { border-color: var(--green); color: #fff; background: var(--green); }
     .button.primary:hover { background: var(--green-dark); }
+    .button.finance-balance-button { border-color: #b7d3be; color: var(--green-dark); background: linear-gradient(135deg, #e6f4e9, #f8fbf3); box-shadow: 0 3px 10px #194b2e14; }
+    .button.finance-balance-button:hover { border-color: var(--green); background: #dcefe1; }
     .button:disabled { cursor: not-allowed; opacity: .5; transform: none; }
     .button.small { min-height: 32px; padding: 0 11px; font-size: 11px; }
     .button.danger { color: var(--red); }
@@ -270,6 +272,10 @@
     #modalForm[data-type="orderDetails"] .modal-footer { display: none; }
     #modalForm[data-type="completedOrders"] .modal-footer { display: none; }
     #modalForm[data-type="cashReceipts"] .modal-footer { display: none; }
+    #modalForm[data-type="financeBalance"] .modal-footer { display: none; }
+    .finance-balance-result { margin: 16px 0; padding: 18px; border-radius: 12px; color: #fff; background: var(--green-dark); }
+    .finance-balance-result span { display: block; color: #c1d5c8; font-size: 11px; }
+    .finance-balance-result strong { display: block; margin-top: 6px; font-size: 28px; letter-spacing: -.6px; }
     .orders-cancelled { margin-top: 15px; }
     .customer-item { overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
     .customer-item-top { display: flex; align-items: center; gap: 8px; padding: 5px 7px 5px 13px; }
@@ -2228,6 +2234,54 @@
         return "Em aberto";
       }
 
+      function financeSalesBalance(sales, entries) {
+        const saleReceivables = entries.filter(entry => entry.kind === "receivable" && entry.saleId);
+        const creditSaleIds = new Set(saleReceivables.map(entry => entry.saleId));
+        const directSales = sales.filter(sale => sale.paid && !creditSaleIds.has(sale.id))
+          .reduce((sum, sale) => sum + number(sale.total), 0);
+        const creditPayments = saleReceivables.reduce((sum, entry) => sum + number(entry.paidAmount), 0);
+        const paidExpenses = entries.filter(entry => entry.kind === "expense" || entry.kind === "payable")
+          .reduce((sum, entry) => sum + number(entry.paidAmount), 0);
+        const received = roundMoney(directSales + creditPayments);
+        const spent = roundMoney(paidExpenses);
+        return { received, spent, balance: roundMoney(received - spent) };
+      }
+
+      async function showFinanceSalesBalance() {
+        if (!currentUser || !onlineMenuReady) {
+          showToast("Não foi possível consultar os pedidos online. Verifique a conexão e tente novamente.");
+          return;
+        }
+        const userId = currentUser.id;
+        const orders = [];
+        const pageSize = 100;
+        try {
+          for (let offset = 0; ; offset += pageSize) {
+            const { data, error } = await supabaseClient.from("online_orders")
+              .select("id,payment_status,status,order_data,total,created_at,paid_at")
+              .order("id", { ascending: true })
+              .range(offset, offset + pageSize - 1);
+            if (error) throw error;
+            if (!Array.isArray(data)) throw new Error("Resposta inválida ao carregar pedidos online.");
+            orders.push(...data);
+            if (data.length < pageSize) break;
+          }
+          if (!currentUser || currentUser.id !== userId) {
+            showToast("A conta mudou durante a consulta. Tente novamente.");
+            return;
+          }
+          const totals = financeSalesBalance([...state.sales, ...orders.map(onlineOrderSale)], state.financeEntries);
+          const body = `<p class="helper">Consulta de todo o histórico registrado, independentemente dos filtros da tela.</p>
+            <div class="finance-balance-result"><span>Entradas de vendas menos gastos pagos</span><strong>${money(totals.balance)}</strong></div>
+            <div class="cost-summary"><div class="cost-row"><span>Vendas recebidas, incluindo parcelas do crediário</span><strong>${money(totals.received)}</strong></div><div class="cost-row"><span>Despesas e contas pagas</span><strong>− ${money(totals.spent)}</strong></div></div>
+            <p class="helper" style="margin-top:14px">Não inclui vendas ou contas ainda não pagas, outras contas a receber, fundo inicial, reforços ou sangrias. Valores dependem dos registros disponíveis e não consideram estornos ou custos não lançados. Isto não é lucro contábil nem saldo bancário.</p>`;
+          openModal("Verificar resultado das vendas", body, "financeBalance");
+        } catch (error) {
+          console.error("Não foi possível consultar o resultado das vendas:", error);
+          showToast("Não foi possível carregar todos os pedidos online. Tente novamente.");
+        }
+      }
+
       function renderFinance() {
         const entries = [...state.financeEntries].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         const receivables = entries.filter(entry => entry.kind === "receivable");
@@ -2262,7 +2316,7 @@
           </tr>`;
         }).join("");
         document.getElementById("pageContent").innerHTML = `
-          <div class="page-heading"><div><div class="eyebrow">Controle financeiro</div><h1>Fluxo financeiro</h1><p class="subtitle">Acompanhe despesas, contas a pagar, valores a receber e notas fiadas.</p></div><div class="filters"><button class="button" data-action="new-finance-receivable">＋ Conta a receber</button><button class="button" data-action="new-finance-payable">− Conta a pagar</button><button class="button primary" data-action="new-finance-expense">− Lançar despesa</button></div></div>
+          <div class="page-heading"><div><div class="eyebrow">Controle financeiro</div><h1>Fluxo financeiro</h1><p class="subtitle">Acompanhe despesas, contas a pagar, valores a receber e notas fiadas.</p></div><div class="filters"><button type="button" class="button finance-balance-button" data-action="finance-sales-balance">↗ Ver resultado das vendas</button><button class="button" data-action="new-finance-receivable">＋ Conta a receber</button><button class="button" data-action="new-finance-payable">− Conta a pagar</button><button class="button primary" data-action="new-finance-expense">− Lançar despesa</button></div></div>
           <section class="stats">
             <article class="stat-card"><div class="stat-top"><span>Contas a receber</span><span class="stat-icon">↗</span></div><div class="stat-value">${money(receivableBalance)}</div><div class="stat-note">${receivables.filter(entry => financeBalance(entry) > 0).length} em aberto</div></article>
             <article class="stat-card"><div class="stat-top"><span>Contas a pagar</span><span class="stat-icon">↙</span></div><div class="stat-value">${money(payableBalance)}</div><div class="stat-note">${payables.filter(entry => financeBalance(entry) > 0).length} em aberto</div></article>
@@ -4224,6 +4278,7 @@
           renderSales();
         }
         if (action.dataset.action === "new-finance-receivable") financeEntryForm("receivable");
+        if (action.dataset.action === "finance-sales-balance") showFinanceSalesBalance();
         if (action.dataset.action === "new-finance-payable") financeEntryForm("payable");
         if (action.dataset.action === "new-finance-expense") financeEntryForm("expense");
         if (action.dataset.action === "edit-finance-entry") {
