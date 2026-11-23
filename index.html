@@ -656,7 +656,7 @@
       let state = loadState();
       let currentPage = "inicio";
       let productFilter = "todos";
-      let financeDateFilter = localDateKey(new Date());
+      let financeDateFilter = "";
       let financeSearch = "";
       let financeKindFilter = "all";
       let lastRegisteredSaleId = null;
@@ -2539,12 +2539,13 @@
         const receivableBalance = summary.received;
         const payableBalance = summary.payable;
         const overdueCount = summary.overdue.length;
-        const searchTerm = financeSearch.trim().toLocaleLowerCase("pt-BR");
+        const normalizeSearch = value => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
+        const searchTerm = normalizeSearch(financeSearch.trim());
         const filteredEntries = entries.filter(entry => {
           const entryDate = localDateKey(entry.createdAt);
           const matchesDate = !financeDateFilter || entryDate === financeDateFilter;
           const matchesKind = financeKindFilter === "all" || entry.kind === financeKindFilter;
-          const matchesSearch = !searchTerm || `${entry.description} ${entry.partyName || ""}`.toLocaleLowerCase("pt-BR").includes(searchTerm);
+          const matchesSearch = !searchTerm || normalizeSearch(`${entry.description || ""} ${entry.partyName || ""}`).includes(searchTerm);
           return matchesDate && matchesKind && matchesSearch;
         });
         const dailyExpenses = filteredEntries.filter(entry => entry.kind === "expense").reduce((sum, entry) => sum + number(entry.amount), 0);
@@ -2573,7 +2574,7 @@
             <button type="button" class="stat-card finance-stat-button" data-action="finance-summary" data-summary="balance"><div class="stat-top"><span>Saldo previsto</span><span class="stat-icon">↕</span></div><div class="stat-value">${money(receivableBalance - payableBalance)}</div><div class="stat-note">a receber menos a pagar · Ver detalhes</div></button>
             <button type="button" class="stat-card finance-stat-button" data-action="finance-summary" data-summary="overdue"><div class="stat-top"><span>Contas atrasadas</span><span class="stat-icon">!</span></div><div class="stat-value">${overdueCount}</div><div class="stat-note">vencidas · Ver detalhes</div></button>
           </section>
-          <article class="panel" style="margin-bottom:14px"><form class="report-filters" id="financeFilters"><div class="field"><label for="financeDate">Dia do lançamento</label><input id="financeDate" name="date" type="date" value="${escapeHtml(financeDateFilter)}"></div><div class="field"><label for="financeKind">Tipo</label><select id="financeKind" name="kind"><option value="all" ${financeKindFilter === "all" ? "selected" : ""}>Todos</option><option value="receivable" ${financeKindFilter === "receivable" ? "selected" : ""}>A receber</option><option value="payable" ${financeKindFilter === "payable" ? "selected" : ""}>A pagar</option><option value="expense" ${financeKindFilter === "expense" ? "selected" : ""}>Despesas</option></select></div><div class="field"><label for="financeSearch">Pesquisar descrição / pessoa</label><input id="financeSearch" name="search" type="search" value="${escapeHtml(financeSearch)}" placeholder="Ex.: fornecedor, cliente"></div><button class="button primary" type="submit">Filtrar</button><button class="button" type="button" data-action="clear-finance-filters">Todos os dias</button></form></article>
+          <article class="panel" style="margin-bottom:14px"><form class="report-filters" id="financeFilters"><div class="field"><label for="financeDate">Dia do lançamento</label><input id="financeDate" name="date" type="date" value="${escapeHtml(financeDateFilter)}"><span class="helper">Em branco: todos os dias</span></div><div class="field"><label for="financeKind">Tipo</label><select id="financeKind" name="kind"><option value="all" ${financeKindFilter === "all" ? "selected" : ""}>Todos</option><option value="receivable" ${financeKindFilter === "receivable" ? "selected" : ""}>A receber</option><option value="payable" ${financeKindFilter === "payable" ? "selected" : ""}>A pagar</option><option value="expense" ${financeKindFilter === "expense" ? "selected" : ""}>Despesas</option></select></div><div class="field"><label for="financeSearch">Pesquisar descrição / pessoa</label><input id="financeSearch" name="search" type="search" value="${escapeHtml(financeSearch)}" placeholder="Ex.: fornecedor, cliente"></div><button class="button primary" type="submit">Filtrar</button><button class="button" type="button" data-action="clear-finance-filters">Todos os dias</button></form></article>
           <article class="panel"><div class="panel-heading"><h2>Lançamentos financeiros</h2><span>${filteredEntries.length} resultado(s) · despesas no período: ${money(dailyExpenses)}</span></div>
             ${rows ? `<div class="table-wrap"><table class="finance-table"><thead><tr><th>Tipo</th><th>Descrição / pessoa</th><th>Valor</th><th>Pago</th><th>Saldo</th><th>Vencimento</th><th>Situação</th><th>Ações</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty-state">Nenhum lançamento encontrado para os filtros selecionados.</div>`}
           </article>`;
@@ -2584,6 +2585,18 @@
           financeKindFilter = String(data.get("kind") || "all");
           financeSearch = String(data.get("search") || "");
           renderFinance();
+        });
+        document.getElementById("financeSearch").addEventListener("input", event => {
+          if (event.isComposing) return;
+          const input = event.currentTarget;
+          const position = input.selectionStart;
+          financeSearch = input.value;
+          financeDateFilter = document.getElementById("financeDate").value;
+          financeKindFilter = document.getElementById("financeKind").value;
+          renderFinance();
+          const nextInput = document.getElementById("financeSearch");
+          nextInput.focus();
+          if (position !== null) nextInput.setSelectionRange(position, position);
         });
       }
 
@@ -4541,8 +4554,8 @@
         }
         if (action.dataset.action === "clear-finance-filters") {
           financeDateFilter = "";
-          financeSearch = "";
-          financeKindFilter = "all";
+          financeSearch = document.getElementById("financeSearch").value;
+          financeKindFilter = document.getElementById("financeKind").value;
           renderFinance();
         }
         if (action.dataset.action === "settle-finance-entry") openFinanceSettlement(state.financeEntries.find(entry => entry.id === id));
