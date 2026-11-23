@@ -8,9 +8,10 @@ const source = readFileSync(new URL("../supabase/functions/create-cash-order/ind
   .replace(/import\s*\{[\s\S]*?\}\s*from\s*"[^"]+";\s*/g, "");
 const javascript = stripTypeScriptTypes(source);
 
-function createHandler() {
+function createHandler({ presenceEnabled = false, insertError = null, pixError = null, reconciliationError = null } = {}) {
   let handler;
   let inserted;
+  const errors = [];
   const menu = {
     acceptingOrders: true,
     products: [{ id: "p1", category: "lanche", name: "Lanche", active: true, price: 18, ingredients: ["Cebola", "Queijo"], addons: [] }]
@@ -22,7 +23,7 @@ function createHandler() {
         eq: () => query,
         maybeSingle: async () => ({ data: table === "business_data" ? { data: { cashSessions: [{}] } } : table === "mercadopago_connections" ? { business_id: "store" } : { menu, delivery_fee: 3 }, error: null }),
         insert: value => { inserted = value; return query; },
-        single: async () => ({ data: { id: "order-id" }, error: null })
+        single: async () => ({ data: insertError ? null : { id: "order-id" }, error: insertError })
       };
       return query;
     },
@@ -31,12 +32,20 @@ function createHandler() {
   vm.runInNewContext(javascript, {
     adminClient: () => client,
     storeAvailability: () => ({ open: true }),
-    Deno: { serve: callback => { handler = callback; }, env: { get: () => "test" } },
-    createMercadoPagoPixPayment: async () => ({ point_of_interaction: { transaction_data: { qr_code: "simulated-pix" } } }),
-    reconcilePayment: async () => ({ paymentStatus: "pending" }),
-    Response, crypto, TextEncoder, console
+    Deno: { serve: callback => { handler = callback; }, env: {
+      get: key => key === "EXPERIMENTAL_OFFLINE_PRESENCE" ? (presenceEnabled ? "true" : undefined) : "test"
+    } },
+    createMercadoPagoPixPayment: async () => {
+      if (pixError) throw pixError;
+      return { point_of_interaction: { transaction_data: { qr_code: "simulated-pix" } } };
+    },
+    reconcilePayment: async () => {
+      if (reconciliationError) throw reconciliationError;
+      return { paymentStatus: "pending" };
+    },
+    Response, crypto, TextEncoder, console: { error: (...args) => errors.push(args) }
   });
-  return { handler, getInserted: () => inserted };
+  return { handler, getInserted: () => inserted, errors };
 }
 
 function request(items, paymentMethod = "cash_on_delivery") {
@@ -108,4 +117,34 @@ test("simulated Pix retains item notes and calculates the same price", async () 
   assert.equal(result.pix.qrCode, "simulated-pix");
   assert.equal(result.total, 21);
   assert.equal(getInserted().order_data.items[0].notes, "Bem passado");
+});
+
+test("uncertain Pix creation or reconciliation is not marked failed and asks for verification", async () => {
+  for (const options of [
+    { pixError: new Error("connection lost after payment creation") },
+    { reconciliationError: new Error("database response lost") }
+  ]) {
+    const { handler, getInserted, errors } = createHandler(options);
+    const response = await handler(request([item], "pix"));
+    const result = await response.json();
+    assert.equal(response.status, 503);
+    assert.equal(result.orderId, "order-id");
+    assert.match(result.error, /Antes de tentar novamente/);
+    assert.equal(getInserted().payment_status, "pending");
+    assert.equal(getInserted().status, "Aguardando Pix");
+    assert.equal(errors.length, 1);
+    assert.match(errors[0][0], /uncertain/);
+  }
+});
+
+test("presence guard rejects orders if the store disconnects after the initial check", async () => {
+  for (const paymentMethod of ["cash_on_delivery", "pix"]) {
+    const { handler } = createHandler({
+      presenceEnabled: true,
+      insertError: { code: "P0001", message: "STORE_OFFLINE" }
+    });
+    const response = await handler(request([item], paymentMethod));
+    assert.equal(response.status, 409);
+    assert.match((await response.json()).error, /fechada/);
+  }
 });

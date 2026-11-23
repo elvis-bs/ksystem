@@ -76,9 +76,18 @@ Deno.serve(async request => {
     const sessions = businessData?.cashSessions;
     const cashOpen = Array.isArray(sessions) && sessions.some(session => session && !session.closedAt);
     const availability = storeAvailability(businessData?.storeSettings as JsonRecord | undefined);
-    if (!cashOpen || !availability.open) {
+    let localStorePresent = true;
+    if (Deno.env.get("EXPERIMENTAL_OFFLINE_PRESENCE") === "true") {
+      const { data: present, error: presenceError } = await client.rpc("experimental_store_is_present", {
+        p_business_id: businessId
+      });
+      if (presenceError) throw presenceError;
+      if (typeof present !== "boolean") throw new Error("Invalid local store presence response.");
+      localStorePresent = present;
+    }
+    if (!cashOpen || !availability.open || !localStorePresent) {
       return body.action === "payment_methods"
-        ? jsonResponse({ paymentMethods: [], storeOpen: false, nextOpening: availability.nextOpening })
+        ? jsonResponse({ paymentMethods: [], storeOpen: false, nextOpening: localStorePresent ? availability.nextOpening : null })
         : jsonResponse({ error: "A loja está fechada para pedidos no momento." }, 409);
     }
     if (body.action === "payment_methods") {
@@ -296,12 +305,17 @@ Deno.serve(async request => {
       })
       .select("id")
       .single();
-    if (insertError) throw insertError;
+    if (insertError) {
+      if (Deno.env.get("EXPERIMENTAL_OFFLINE_PRESENCE") === "true"
+        && insertError.code === "P0001" && insertError.message === "STORE_OFFLINE") {
+        return jsonResponse({ error: "A loja está fechada para pedidos no momento." }, 409);
+      }
+      throw insertError;
+    }
 
     if (paymentMethod === "pix") {
-      let payment: MercadoPagoPixPayment;
       try {
-        payment = await createMercadoPagoPixPayment(
+        const payment: MercadoPagoPixPayment = await createMercadoPagoPixPayment(
           client,
           businessId,
           String(order.id),
@@ -309,30 +323,27 @@ Deno.serve(async request => {
           `Pedido online ${String(order.id).slice(0, 8)}`,
           customerEmail
         );
+        const paymentResult = await reconcilePayment(client, payment, businessId);
+        const transactionData = payment.point_of_interaction?.transaction_data;
+        if (!transactionData?.qr_code) throw new Error("Mercado Pago returned an empty Pix code.");
+        return jsonResponse({
+          orderId: order.id,
+          total: totalCents / 100,
+          paymentMethod,
+          paymentStatus: paymentResult.paymentStatus,
+          pix: {
+            qrCode: transactionData.qr_code,
+            qrCodeBase64: transactionData.qr_code_base64 || "",
+            ticketUrl: transactionData.ticket_url || ""
+          }
+        }, 201);
       } catch (error) {
-        const { error: updateError } = await client
-          .from("online_orders")
-          .update({ payment_status: "failed", status: "Cancelado", updated_at: new Date().toISOString() })
-          .eq("id", order.id)
-          .eq("payment_status", "pending");
-        if (updateError) console.error("Could not mark failed Pix order:", updateError);
-        throw error;
+        console.error("Pix creation or reconciliation is uncertain for order:", order.id, error);
+        return jsonResponse({
+          error: `Não foi possível confirmar o Pix do pedido #${String(order.id).slice(0, 8)}. Antes de tentar novamente, entre em contato com a loja para verificar o pedido e o pagamento.`,
+          orderId: order.id
+        }, 503);
       }
-
-      const paymentResult = await reconcilePayment(client, payment, businessId);
-      const transactionData = payment.point_of_interaction?.transaction_data;
-      if (!transactionData?.qr_code) throw new Error("Mercado Pago returned an empty Pix code.");
-      return jsonResponse({
-        orderId: order.id,
-        total: totalCents / 100,
-        paymentMethod,
-        paymentStatus: paymentResult.paymentStatus,
-        pix: {
-          qrCode: transactionData.qr_code,
-          qrCodeBase64: transactionData.qr_code_base64 || "",
-          ticketUrl: transactionData.ticket_url || ""
-        }
-      }, 201);
     }
 
     return jsonResponse({

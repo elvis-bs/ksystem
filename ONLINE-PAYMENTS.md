@@ -80,6 +80,8 @@ Fotos antigas são removidas depois que o produto e o cardápio são sincronizad
 - O cliente escolhe Pix online no checkout, informa um e-mail e recebe o QR Code e o código Pix copia e cola.
 - O servidor valida produtos, adicionais, taxa, total e disponibilidade antes de criar a cobrança Pix no Mercado Pago.
 - O cardápio consulta o status do pagamento; o webhook também atualiza o pedido. Apenas pagamentos aprovados são marcados como recebidos.
+- A reconciliação compara o estado do pedido antes de atualizá-lo e tenta novamente quando há alterações simultâneas. Uma resposta antiga não reverte um pagamento aprovado ou reembolsado; se as tentativas se esgotarem, a operação informa erro em vez de confirmar uma alteração não gravada.
 - Pagamentos Pix aprovados são associados ao caixa aberto na data da confirmação. Para pedidos em dinheiro, registre o recebimento no sistema.
 - Um código Pix criado antes do fechamento ainda pode ser pago depois que o caixa fechar. Confira os pedidos Pix pendentes e concilie pagamentos posteriores; o fechamento não cancela cobranças já geradas.
+- Se a geração do Pix ou a gravação da confirmação falhar, o resultado pode ser incerto. O pedido não é automaticamente marcado como cancelado: confira o pedido e a cobrança no Mercado Pago antes de repetir. O webhook pode atualizar o estado posteriormente, mas não garante por si só a recuperação do código Pix ou a conciliação de todos os casos.
 - Para usar somente dinheiro, não é necessário conectar o Mercado Pago.

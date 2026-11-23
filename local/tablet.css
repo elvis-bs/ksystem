@@ -1,0 +1,12 @@
+* { box-sizing: border-box; }
+body { font: 16px system-ui, sans-serif; background: #f5f6f8; color: #17212d; margin: 0; }
+main { max-width: 720px; margin: auto; padding: 20px; }
+form, section { display: grid; gap: 12px; }
+[hidden] { display: none !important; }
+label { display: grid; gap: 5px; }
+input, select, button { font: inherit; padding: 10px; min-height: 44px; }
+button { cursor: pointer; }
+.warning { background: #fff0c2; padding: 12px; border-radius: 6px; }
+fieldset label { display: block; }
+fieldset input { min-height: auto; }
+#productPhoto { max-width: 180px; max-height: 140px; object-fit: cover; border-radius: 6px; }

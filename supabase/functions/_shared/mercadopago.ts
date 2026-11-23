@@ -223,27 +223,6 @@ export async function reconcilePayment(
 ): Promise<{ orderId: string; paymentStatus: string }> {
   if (!payment.external_reference) throw new Error("Payment has no external order reference.");
 
-  const { data: order, error: lookupError } = await client
-    .from("online_orders")
-    .select("id,business_id,total,status,payment_id,payment_status,paid_at")
-    .eq("id", payment.external_reference)
-    .maybeSingle();
-  if (lookupError) throw lookupError;
-  if (!order) throw new Error("Online order was not found.");
-  if (expectedBusinessId && order.business_id !== expectedBusinessId) {
-    throw new Error("Payment does not belong to the specified store.");
-  }
-
-  if (
-    payment.currency_id !== "BRL" ||
-    Math.abs(Number(payment.transaction_amount) - Number(order.total)) > 0.01
-  ) {
-    throw new Error("Payment amount or currency does not match the order.");
-  }
-  if (order.payment_id && String(order.payment_id) !== String(payment.id)) {
-    throw new Error("Payment ID does not match the order.");
-  }
-
   const statusMap: Record<string, string> = {
     approved: "approved",
     pending: "pending",
@@ -254,27 +233,56 @@ export async function reconcilePayment(
     refunded: "refunded",
     charged_back: "refunded"
   };
-  let paymentStatus = statusMap[payment.status] || "pending";
-  if (order.payment_status === "approved" && paymentStatus === "pending") paymentStatus = "approved";
-  if (order.payment_status === "refunded") paymentStatus = "refunded";
-  let orderStatus = String(order.status);
-  if (paymentStatus === "approved" && orderStatus === "Aguardando Pix") orderStatus = "Recebido";
-  if (["rejected", "cancelled", "refunded"].includes(paymentStatus)) orderStatus = "Cancelado";
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const { data: order, error: lookupError } = await client
+      .from("online_orders")
+      .select("id,business_id,total,status,payment_id,payment_status,paid_at")
+      .eq("id", payment.external_reference)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+    if (!order) throw new Error("Online order was not found.");
+    if (expectedBusinessId && order.business_id !== expectedBusinessId) {
+      throw new Error("Payment does not belong to the specified store.");
+    }
 
-  let updateQuery = client
-    .from("online_orders")
-    .update({
-      payment_id: String(payment.id),
-      payment_status: paymentStatus,
-      status: orderStatus,
-      paid_at: paymentStatus === "approved" ? order.paid_at || new Date().toISOString() : order.paid_at,
-      updated_at: new Date().toISOString()
-    })
-    .eq("id", order.id);
-  if (paymentStatus !== "approved") updateQuery = updateQuery.neq("payment_status", "approved");
-  if (paymentStatus !== "refunded") updateQuery = updateQuery.neq("payment_status", "refunded");
-  const { error: updateError } = await updateQuery;
-  if (updateError) throw updateError;
+    const paymentAmount = Number(payment.transaction_amount);
+    const orderAmount = Number(order.total);
+    if (
+      payment.transaction_amount == null || !Number.isFinite(paymentAmount) || !Number.isFinite(orderAmount)
+      || payment.currency_id !== "BRL" || Math.abs(paymentAmount - orderAmount) > 0.01
+    ) {
+      throw new Error("Payment amount or currency does not match the order.");
+    }
+    if (order.payment_id && String(order.payment_id) !== String(payment.id)) {
+      throw new Error("Payment ID does not match the order.");
+    }
 
-  return { orderId: String(order.id), paymentStatus };
+    let paymentStatus = statusMap[payment.status] || "pending";
+    if (order.payment_status === "approved" && paymentStatus !== "refunded") paymentStatus = "approved";
+    if (order.payment_status === "refunded") paymentStatus = "refunded";
+    let orderStatus = String(order.status);
+    if (paymentStatus === "approved" && orderStatus === "Aguardando Pix") orderStatus = "Recebido";
+    if (["rejected", "cancelled", "refunded"].includes(paymentStatus)) orderStatus = "Cancelado";
+
+    let updateQuery = client
+      .from("online_orders")
+      .update({
+        payment_id: String(payment.id),
+        payment_status: paymentStatus,
+        status: orderStatus,
+        paid_at: paymentStatus === "approved" ? order.paid_at || new Date().toISOString() : order.paid_at,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", order.id)
+      .eq("business_id", order.business_id)
+      .eq("total", order.total)
+      .eq("status", order.status)
+      .eq("payment_status", order.payment_status);
+    updateQuery = order.payment_id == null ? updateQuery.is("payment_id", null) : updateQuery.eq("payment_id", order.payment_id);
+    updateQuery = order.paid_at == null ? updateQuery.is("paid_at", null) : updateQuery.eq("paid_at", order.paid_at);
+    const { data: updated, error: updateError } = await updateQuery.select("id").maybeSingle();
+    if (updateError) throw updateError;
+    if (updated) return { orderId: String(order.id), paymentStatus };
+  }
+  throw new Error("Payment reconciliation conflicted with concurrent order changes.");
 }

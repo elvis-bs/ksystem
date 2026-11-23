@@ -72,3 +72,20 @@ test("invalid ranges do not include sessions", () => {
   assert.match(context.page.innerHTML, /Período inválido/);
   assert.match(context.page.innerHTML, /Nenhum turno de caixa no período selecionado/);
 });
+
+test("provisional closures are identified and excluded from report totals", () => {
+  const context = createContext();
+  context.state.cashSessions = [
+    { id: "final", openedAt: "2026-11-20T10:00:00", closedAt: "2026-11-20T12:00:00",
+      expectedCash: 85, countedCash: 80, difference: -5 },
+    { id: "provisional", openedAt: "2026-11-21T10:00:00", closedAt: "2026-11-21T12:00:00",
+      offlineClosureStatus: "provisional", offlineProvisional: { localExpected: 999, countedCash: 999 } }
+  ];
+  context.cashSessionReceipts = id => [{ payment: "Pix", receiptAmount: id === "final" ? 85 : 999 }];
+  context.renderCashReports();
+  assert.match(context.page.innerHTML, /Provisório — aguarda conciliação/);
+  assert.match(context.page.innerHTML, /1 turno\(s\) aguardam conciliação e foram excluídos/);
+  assert.match(context.page.innerHTML, /R\$ 85\.00/);
+  assert.match(context.page.innerHTML, /R\$ -5\.00/);
+  assert.doesNotMatch(context.page.innerHTML, /R\$ 999\.00|R\$ 1084\.00/);
+});

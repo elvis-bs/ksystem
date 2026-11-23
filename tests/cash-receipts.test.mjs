@@ -41,6 +41,7 @@ function createContext() {
   };
   const context = {
     state,
+    localMainPreview: false,
     allSales: () => state.sales,
     number: value => Number(value) || 0,
     paymentMethodForSale: sale => sale.payment === "Pix online" ? "Pix" : sale.payment || "A combinar",
@@ -94,4 +95,45 @@ test("empty or missing sessions are handled and both cash views expose the actio
   const renderCash = sourceBetween("renderCash", "renderCashReports");
   assert.equal((renderCash.match(/data-action="cash-receipts"/g) || []).length, 2);
   assert.match(html, /action\.dataset\.action === "cash-receipts"\) showCashReceipts\(id\)/);
+});
+
+test("provisional cash details explicitly warn the total is not final", () => {
+  const context = createContext();
+  context.state.cashSessions[0].offlineClosureStatus = "provisional";
+  context.showCashReceipts("old");
+  assert.match(context.modal[1], /Fechamento provisório/);
+  assert.match(context.modal[1], /não representam o total final/);
+});
+
+test("main cash history shows provisional status without final-looking totals", () => {
+  const context = createContext();
+  context.state.cashSessions = [{ id: "provisional", openedAt: "2026-11-01T10:00:00Z",
+    closedAt: "2026-11-01T12:00:00Z", offlineClosureStatus: "provisional" }];
+  const page = { innerHTML: "" };
+  context.currentCashSession = () => null;
+  context.cashSessionTotalReceived = () => 123;
+  context.cashSessionPaymentTotals = () => [{ payment: "Pix", amount: 123 }];
+  context.document = { getElementById: id => id === "pageContent" ? page : null };
+  vm.runInContext(sourceBetween("renderCash", "cashSessionOverlapsPeriod"), context);
+  context.renderCash();
+  assert.match(page.innerHTML, /Provisório — aguarda conciliação/);
+  assert.doesNotMatch(page.innerHTML, /R\$ 123\.00|R\$ 0\.00/);
+});
+
+test("main screen refuses to save snapshots containing provisional closures", () => {
+  const context = createContext();
+  context.state.cashSessions[0].offlineClosureStatus = "provisional";
+  context.localStorage = { setItem() { throw new Error("Must not write"); } };
+  vm.runInContext(sourceBetween("saveState", "publicMenuSnapshot"), context);
+  assert.equal(context.saveState(), false);
+  assert.match(context.toast, /fechamento provisório pendente/);
+});
+
+test("local main preview refuses all snapshot saves", () => {
+  const context = createContext();
+  context.localMainPreview = true;
+  context.localStorage = { setItem() { throw new Error("Must not write"); } };
+  vm.runInContext(sourceBetween("saveState", "publicMenuSnapshot"), context);
+  assert.equal(context.saveState(), false);
+  assert.match(context.toast, /somente leitura/);
 });

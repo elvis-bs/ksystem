@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Comandas — teste local</title>
+  <link rel="stylesheet" href="/tablet.css">
+  <script type="module" src="/tablet.mjs"></script>
+</head>
+<body>
+  <main>
+    <h1>Comandas</h1>
+    <p class="warning">Versão experimental: não utilizar para vendas reais.</p>
+    <p id="message" role="status" aria-live="polite"></p>
+    <form id="login">
+      <label>Usuário <input name="username" autocomplete="username" required></label>
+      <label>Senha <input name="password" type="password" autocomplete="current-password" required></label>
+      <button>Entrar</button>
+    </form>
+    <section id="workspace" hidden>
+      <p>Funcionário: <strong id="staffName"></strong> <button id="logout" type="button">Sair</button></p>
+      <div id="pending" class="warning" hidden>
+        Há um pedido sem confirmação. Não faça outro pedido até conferir e tentar novamente com o mesmo funcionário.
+        <button id="retry" type="button">Tentar novamente</button>
+      </div>
+      <button id="refresh" type="button">Atualizar mesas e cardápio</button>
+      <label>Mesa <select id="table" required></select></label>
+      <div id="tableItems"></div>
+      <form id="order">
+        <label>Produto <select id="product" required></select></label>
+        <img id="productPhoto" alt="Foto do produto selecionado" hidden>
+        <p id="photoStatus" role="status"></p>
+        <label>Opção <select id="option" required></select></label>
+        <div id="flavors"></div>
+        <label id="borderLabel" hidden>Borda <select id="border"></select></label>
+        <fieldset id="addons"><legend>Adicionais</legend></fieldset>
+        <label>Quantidade <input id="quantity" type="number" min="1" max="10000" value="1" required></label>
+        <button id="send">Enviar item à mesa</button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>
