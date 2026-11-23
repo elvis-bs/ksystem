@@ -33,6 +33,7 @@ Não coloque essas credenciais no código nem no cardápio público. Cadastre a 
    supabase functions deploy mercadopago-oauth-callback
    supabase functions deploy mercadopago-webhook
    supabase functions deploy check-pix-order
+   supabase functions deploy manage-delivery-drivers
    ```
 
 4. Publique o site no GitHub Pages e entre no Bora! Gestão.
@@ -40,6 +41,16 @@ Não coloque essas credenciais no código nem no cardápio público. Cadastre a 
 6. Publique o cardápio e ative **Aceitar pedidos online**.
 7. Em **Configurações**, cadastre os horários semanais e o fuso da loja. Escolha **Usar horário automático** ou abra/feche a loja manualmente. Os horários começam desativados até serem cadastrados.
 8. Abra o caixa e aguarde o status **Sincronizado**. Novos pedidos só são aceitos com o caixa aberto, os pedidos online ativados e a loja aberta pelo horário ou manualmente. A escolha manual permanece até trocar o modo.
+
+## Área dos entregadores
+
+Para habilitar a equipe de entrega, execute novamente `supabase-schema.sql` no SQL Editor para criar os perfis, as permissões e a reserva atômica de pedidos. Publique também a função protegida de cadastro, listada acima.
+
+Na página **Entregadores**, cadastre o nome, o e-mail e uma senha inicial de cada pessoa. Compartilhe a senha por um canal privado e envie o link copiado nessa página. O entregador entra pelo celular usando esse e-mail e senha; não há cadastro público de entregadores.
+
+Os pedidos do **cardápio online** aparecem para escolha depois que a loja os aceitou e moveu para **Saiu para entrega**. O primeiro entregador que tocar em **Aceitar entrega** fica com o pedido; a reserva é atômica, então outro entregador não pode assumir o mesmo pedido. Na área mobile, o entregador pode consultar os dados da entrega e marcar o pedido como entregue. A loja pode pausar ou reativar o acesso de cada entregador.
+
+Pedidos criados apenas como vendas locais no caixa não aparecem na área do entregador; eles não são sincronizados como pedidos compartilhados.
 
 O cardápio mostra a loja aberta ou fechada e, quando fechada, a próxima abertura prevista pelos horários cadastrados. A previsão não garante que a loja abrirá: se o caixa continuar fechado ou os pedidos estiverem desativados, o cardápio permanece fechado e mostra o próximo horário programado.
 

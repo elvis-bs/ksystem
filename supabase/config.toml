@@ -1,6 +1,9 @@
 [functions.create-cash-order]
 verify_jwt = false
 
+[manage-delivery-drivers]
+verify_jwt = true
+
 [functions.check-pix-order]
 verify_jwt = false
 

@@ -64,6 +64,20 @@
     .auth-switch { width: 100%; margin-top: 15px; padding: 5px; border: 0; color: var(--green); background: transparent; font-size: 12px; font-weight: 700; }
     .sync-status { color: var(--muted); font-size: 11px; }
     .user-chip { border: 0; background: transparent; }
+    .driver-portal { min-height: 100vh; background: var(--canvas); }
+    .driver-topbar { min-height: 66px; padding: 12px max(20px, calc((100% - 760px) / 2)); display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); background: #fff; }
+    .driver-brand { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 750; }
+    .driver-brand .brand-mark { width: 34px; height: 34px; }
+    .driver-topbar-actions { display: flex; align-items: center; gap: 8px; }
+    .driver-content { width: min(760px, 100%); margin: 0 auto; padding: 28px 20px max(30px, env(safe-area-inset-bottom)); }
+    .driver-order-list { display: grid; gap: 12px; }
+    .driver-order-card { padding: 17px; border: 1px solid var(--line); border-radius: 14px; background: #fff; box-shadow: var(--shadow); }
+    .driver-order-card h2 { margin: 0; font-size: 16px; }
+    .driver-order-card p { margin: 8px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+    .driver-order-card .driver-order-items { margin-top: 13px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--ink); }
+    .driver-order-card .driver-order-actions { display: flex; gap: 8px; margin-top: 15px; }
+    .driver-order-card .driver-order-actions .button { flex: 1; }
+    .driver-status { display: inline-flex; margin-top: 9px; padding: 5px 9px; border-radius: 20px; color: var(--green); background: var(--green-soft); font-size: 10px; font-weight: 750; }
     .user-chip .button { margin-left: 8px; }
     .main { min-width: 0; flex: 1; }
     .topbar {
@@ -424,6 +438,10 @@
       .sidebar { display: none; }
       .topbar { height: 58px; padding: 0 17px; }
       .user-chip > span:last-child { display: none; }
+      .driver-topbar { min-height: 58px; padding: 10px 12px; }
+      .driver-topbar .button { min-height: 34px; padding: 0 9px; font-size: 10px; }
+      .driver-content { padding: 22px 14px max(28px, env(safe-area-inset-bottom)); }
+      .driver-order-card { padding: 15px; }
       .content { padding: 23px 16px 30px; }
       .page-heading { align-items: flex-start; flex-wrap: wrap; margin-bottom: 19px; }
       .page-heading-actions { width: 100%; }
@@ -502,7 +520,18 @@
         <div class="auth-actions"><button class="button primary" id="authSubmit" type="submit">Entrar</button></div>
       </form>
       <button class="auth-switch" id="authSwitch" type="button">Ainda não tem conta? Criar conta</button>
+      <button class="auth-switch" id="driverAuthSignOutButton" type="button" hidden>Trocar conta neste aparelho</button>
     </div>
+  </section>
+  <section class="driver-portal" id="driverPortal" hidden>
+    <header class="driver-topbar">
+      <div class="driver-brand"><span class="brand-mark">B!</span><span>Bora! Entregas</span></div>
+      <div class="driver-topbar-actions"><button class="button small" id="driverRefreshButton" type="button">Atualizar</button><button class="button small" id="driverSignOutButton" type="button">Sair</button></div>
+    </header>
+    <main class="driver-content">
+      <div class="page-heading"><div><div class="eyebrow">Área do entregador</div><h1 id="driverGreeting">Pedidos disponíveis</h1><p class="subtitle">Escolha uma entrega liberada pela loja. O pedido fica reservado para você ao aceitar.</p></div></div>
+      <div id="driverOrders"></div>
+    </main>
   </section>
   <div class="app-shell">
     <aside class="sidebar">
@@ -529,6 +558,7 @@
         <button data-page="clientes"><span class="nav-icon">♙</span>Clientes</button>
         <button data-page="produtos"><span class="nav-icon">▦</span>Produtos e cardápio</button>
         <button data-page="insumos"><span class="nav-icon">◈</span>Insumos e custos</button>
+        <button data-page="entregadores"><span class="nav-icon">♙</span>Entregadores</button>
         <button data-page="configuracoes"><span class="nav-icon">⚙</span>Configurações</button>
       </nav>
       <div class="sidebar-bottom">
@@ -568,11 +598,17 @@
       const SUPABASE_URL = "https://jnqwtqixklmuxaeppkry.supabase.co";
       const SUPABASE_PUBLIC_KEY = "sb_publishable_aw3z7ZcPxJ4bhTWfQTWJuw_1GaWkb7J";
       const supabaseClient = window.supabase?.createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY);
+      const isDriverPortal = new URLSearchParams(location.search).has("entregador");
       const PHOTO_BUCKET = "product-photos";
       const PHOTO_MAX_BYTES = 512 * 1024;
       let photoSaving = false;
       const businessStorageKey = userId => `${STORAGE_KEY}:${userId}`;
       let currentUser = null;
+      let driverProfile = null;
+      let driverOrders = [];
+      let driverRefreshTimer = null;
+      let deliveryDrivers = [];
+      let driverOrdersError = "";
       let syncQueue = Promise.resolve();
       let authMode = "signin";
       let onlineMenuReady = false;
@@ -1012,9 +1048,186 @@
 
       function showAuth(message = "") {
         document.getElementById("authGate").hidden = false;
+        document.getElementById("driverPortal").hidden = true;
         document.querySelector(".app-shell").hidden = true;
         document.querySelector(".bottom-nav").hidden = true;
+        document.getElementById("authSwitch").hidden = isDriverPortal;
+        document.getElementById("driverAuthSignOutButton").hidden = true;
+        document.getElementById("authTitle").textContent = isDriverPortal ? "Entrar como entregador" : "Entre no Bora! Gestão";
+        document.getElementById("authDescription").textContent = isDriverPortal
+          ? "Use o e-mail e a senha cadastrados pela loja."
+          : "Acesse sua conta para carregar e sincronizar os dados do seu negócio.";
         document.getElementById("authMessage").textContent = message;
+      }
+
+      function showDriverPortal() {
+        document.getElementById("authGate").hidden = true;
+        document.querySelector(".app-shell").hidden = true;
+        document.querySelector(".bottom-nav").hidden = true;
+        document.getElementById("driverPortal").hidden = false;
+        document.getElementById("driverGreeting").textContent = driverProfile?.name ? `Olá, ${driverProfile.name}` : "Pedidos disponíveis";
+        renderDriverPortal();
+      }
+
+      async function openAuthenticatedSession(user) {
+        const { data: profile, error } = await supabaseClient
+          .from("delivery_drivers")
+          .select("user_id,business_id,name,email,active")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (error) {
+          if (["42P01", "PGRST205"].includes(error.code)) {
+            if (isDriverPortal) {
+              showAuth("A área de entregadores ainda não está configurada. Execute supabase-schema.sql no Supabase e tente novamente.");
+              return;
+            }
+            console.warn("A área de entregadores ainda não está configurada no Supabase:", error);
+            await openBusinessSession(user);
+            return;
+          }
+          throw error;
+        }
+        if (profile) {
+          if (!isDriverPortal) {
+            showAuth("Esta é uma conta de entregador. Acesse o link da área do entregador enviado pela loja.");
+            document.getElementById("driverAuthSignOutButton").hidden = false;
+            return;
+          }
+          currentUser = user;
+          driverProfile = profile;
+          driverOrders = [];
+          showDriverPortal();
+          await refreshDriverOrders();
+          if (driverRefreshTimer) clearInterval(driverRefreshTimer);
+          driverRefreshTimer = setInterval(() => {
+            if (!document.hidden) refreshDriverOrders();
+          }, 15000);
+          return;
+        }
+        if (isDriverPortal) {
+          currentUser = null;
+          driverProfile = null;
+          showAuth("Esta conta não está cadastrada como entregador. Confira o e-mail ou fale com a loja.");
+          document.getElementById("driverAuthSignOutButton").hidden = false;
+          return;
+        }
+        await openBusinessSession(user);
+      }
+
+      async function refreshDriverOrders() {
+        if (!driverProfile || !currentUser || !isDriverPortal) return false;
+        const { data: latestProfile, error: profileError } = await supabaseClient
+          .from("delivery_drivers")
+          .select("active")
+          .eq("user_id", driverProfile.user_id)
+          .maybeSingle();
+        if (profileError) {
+          console.error("Não foi possível verificar o acesso do entregador:", profileError);
+          driverOrdersError = "Não foi possível verificar seu acesso. Confira a conexão e tente atualizar.";
+          renderDriverPortal();
+          return false;
+        }
+        driverProfile.active = latestProfile?.active === true;
+        if (!driverProfile.active) {
+          driverOrders = [];
+          driverOrdersError = "Seu acesso está pausado. Fale com a loja.";
+          renderDriverPortal();
+          return false;
+        }
+        const { data, error } = await supabaseClient
+          .from("online_orders")
+          .select("id,status,payment_status,order_data,total,created_at,delivery_driver_id")
+          .order("created_at", { ascending: true });
+        if (error) {
+          console.error("Não foi possível carregar os pedidos de entrega:", error);
+          driverOrdersError = "Não foi possível carregar os pedidos. Verifique a conexão e tente atualizar.";
+          renderDriverPortal();
+          return false;
+        }
+        driverOrders = Array.isArray(data) ? data : [];
+        driverOrdersError = "";
+        renderDriverPortal();
+        return true;
+      }
+
+      function driverOrderCard(order, assigned) {
+        const data = order.order_data || {};
+        const items = (Array.isArray(data.items) ? data.items : []).map(item => {
+          const details = [item.optionName, item.border?.name, ...(item.addons || []).map(addon => addon.name), ...(item.removedIngredients || []).map(name => `Sem ${name}`), item.notes ? `Obs.: ${item.notes}` : ""].filter(Boolean);
+          return `<div>${number(item.quantity)}× ${escapeHtml(item.name || "Produto")}${details.length ? `<small> · ${escapeHtml(details.join(" · "))}</small>` : ""}</div>`;
+        }).join("");
+        const phone = String(data.customerPhone || "");
+        const phoneHref = phone.replace(/[^\d+]/g, "");
+        const createdAt = new Date(order.created_at);
+        const dateLabel = Number.isNaN(createdAt.getTime()) ? "Horário não informado" : createdAt.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+        return `<article class="driver-order-card">
+          <div class="order-card-top"><h2>Pedido #${escapeHtml(String(order.id).slice(-5))}</h2><span class="order-card-age">${escapeHtml(dateLabel)}</span></div>
+          <span class="driver-status">${assigned ? "Sua entrega" : "Disponível para aceitar"}</span>
+          <p><strong>${escapeHtml(data.customerName || "Cliente")}</strong>${phone ? ` · <a href="tel:${escapeHtml(phoneHref)}">${escapeHtml(phone)}</a>` : ""}</p>
+          <p>Endereço: ${escapeHtml(data.address || "Não informado")}</p>
+          ${data.notes ? `<p>Observação: ${escapeHtml(data.notes)}</p>` : ""}
+          <div class="driver-order-items">${items || "Itens não informados"}</div>
+          <p>Pagamento: ${escapeHtml(onlinePaymentLabel(data.paymentMethod))} · Total: <strong>${money(order.total)}</strong></p>
+          <div class="driver-order-actions">${assigned
+            ? `<button class="button primary" type="button" data-action="finish-delivery-order" data-id="${escapeHtml(order.id)}">Marcar como entregue</button>`
+            : `<button class="button primary" type="button" data-action="claim-delivery-order" data-id="${escapeHtml(order.id)}">Aceitar entrega</button>`}</div>
+        </article>`;
+      }
+
+      function renderDriverPortal() {
+        const target = document.getElementById("driverOrders");
+        if (!target || !driverProfile) return;
+        if (driverOrdersError) {
+          target.innerHTML = `<section class="panel"><div class="empty-state">${escapeHtml(driverOrdersError)}</div></section>`;
+          return;
+        }
+        const assigned = driverOrders.filter(order => order.delivery_driver_id === driverProfile.user_id && order.status === "Saiu para entrega");
+        const available = driverOrders.filter(order => !order.delivery_driver_id && order.status === "Saiu para entrega");
+        target.innerHTML = `
+          <section class="panel" style="margin-bottom:16px"><div class="panel-heading"><h2>Minhas entregas</h2><span>${assigned.length}</span></div>
+            <div class="driver-order-list">${assigned.map(order => driverOrderCard(order, true)).join("") || `<div class="empty-state">Você ainda não aceitou nenhuma entrega.</div>`}</div>
+          </section>
+          <section class="panel"><div class="panel-heading"><h2>Pedidos liberados</h2><span>${available.length}</span></div>
+            <div class="driver-order-list">${available.map(order => driverOrderCard(order, false)).join("") || `<div class="empty-state">Não há pedidos disponíveis agora. Novos pedidos aparecem automaticamente.</div>`}</div>
+          </section>`;
+      }
+
+      async function claimDeliveryOrder(orderId) {
+        if (!driverProfile?.active) return;
+        try {
+          const { data, error } = await supabaseClient.rpc("claim_delivery_order", { p_order_id: orderId });
+          if (error) throw error;
+          if (data !== true) {
+            showToast("Outro entregador aceitou esse pedido ou ele não está mais disponível.");
+          } else {
+            showToast("Entrega aceita. O pedido agora está reservado para você.");
+          }
+          await refreshDriverOrders();
+        } catch (error) {
+          console.error("Não foi possível aceitar a entrega:", error);
+          showToast("Não foi possível aceitar o pedido. Atualize a lista e tente novamente.");
+        }
+      }
+
+      async function finishDeliveryOrder(orderId) {
+        if (!driverProfile?.active) return;
+        try {
+          const { data, error } = await supabaseClient
+            .from("online_orders")
+            .update({ status: "Concluído" })
+            .eq("id", orderId)
+            .eq("delivery_driver_id", driverProfile.user_id)
+            .eq("status", "Saiu para entrega")
+            .select("id")
+            .maybeSingle();
+          if (error) throw error;
+          if (!data) throw new Error("O pedido não está mais atribuído a este entregador.");
+          showToast("Pedido marcado como entregue.");
+          await refreshDriverOrders();
+        } catch (error) {
+          console.error("Não foi possível concluir a entrega:", error);
+          showToast("Não foi possível concluir a entrega. Atualize os pedidos e tente novamente.");
+        }
       }
 
       function setAuthMode(mode) {
@@ -1210,6 +1423,12 @@
 
       async function initializeAuth() {
         const params = new URLSearchParams(location.search);
+        if (isDriverPortal) {
+          setAuthMode("signin");
+          document.getElementById("authSwitch").hidden = true;
+          document.getElementById("authTitle").textContent = "Entrar como entregador";
+          document.getElementById("authDescription").textContent = "Use o e-mail e a senha cadastrados pela loja.";
+        }
         if (params.has("cardapio")) {
           document.getElementById("authGate").hidden = true;
           document.querySelector(".app-shell").hidden = false;
@@ -1277,10 +1496,15 @@
             autoAcceptOnlineOrders = false;
             currentUser = null;
             onlineOrders = [];
+            driverProfile = null;
+            driverOrders = [];
+            driverOrdersError = "";
             onlineMenuReady = false;
             onlineCashOrdersReady = false;
             if (onlineOrderRefreshTimer) clearInterval(onlineOrderRefreshTimer);
             onlineOrderRefreshTimer = null;
+            if (driverRefreshTimer) clearInterval(driverRefreshTimer);
+            driverRefreshTimer = null;
             showAuth();
           }
         });
@@ -1294,7 +1518,7 @@
           return;
         }
         try {
-          await openBusinessSession(data.session.user);
+          await openAuthenticatedSession(data.session.user);
         } catch (error) {
           console.error("Não foi possível carregar os dados da conta:", error);
           showAuth(`Não foi possível carregar os dados. Confirme se executou supabase-schema.sql no SQL Editor. Detalhe: ${error.message}`);
@@ -1559,7 +1783,7 @@
       }
 
       function render() {
-        const labels = { inicio: "Visão geral", vendas: "Vendas e pedidos", pedidos: "Acompanhar pedidos", cardapio: "Cardápio digital", caixa: "Caixa", financeiro: "Fluxo financeiro", "relatorio-caixa": "Relatório de caixa", relatorios: "Relatórios", clientes: "Clientes", produtos: "Produtos e cardápio", insumos: "Insumos e custos", configuracoes: "Configurações", "configuracoes-fiscais": "Configurações fiscais", mais: "Mais opções" };
+        const labels = { inicio: "Visão geral", vendas: "Vendas e pedidos", pedidos: "Acompanhar pedidos", cardapio: "Cardápio digital", caixa: "Caixa", financeiro: "Fluxo financeiro", "relatorio-caixa": "Relatório de caixa", relatorios: "Relatórios", clientes: "Clientes", produtos: "Produtos e cardápio", insumos: "Insumos e custos", entregadores: "Entregadores", configuracoes: "Configurações", "configuracoes-fiscais": "Configurações fiscais", mais: "Mais opções" };
         const params = new URLSearchParams(location.search);
         if (params.has("cardapio")) {
           document.body.classList.add("public-menu");
@@ -1593,6 +1817,7 @@
         if (currentPage === "clientes") renderCustomers();
         if (currentPage === "produtos") renderProducts();
         if (currentPage === "insumos") renderIngredients();
+        if (currentPage === "entregadores") renderDrivers();
         if (currentPage === "configuracoes") renderSettings();
         if (currentPage === "configuracoes-fiscais") renderFiscalSettings();
       }
@@ -3490,9 +3715,101 @@
           ["clientes", "♙", "Clientes"],
           ["produtos", "▦", "Produtos e cardápio"],
           ["insumos", "◈", "Insumos e custos"],
+          ["entregadores", "♙", "Entregadores"],
           ["configuracoes", "⚙", "Configurações"]
         ];
         document.getElementById("pageContent").innerHTML = `<div class="page-heading"><div><div class="eyebrow">Navegação</div><h1>Mais opções</h1><p class="subtitle">Acesse cadastros e configurações do delivery.</p></div></div><div class="more-grid">${links.map(([page, icon, label]) => `<button class="more-link" data-page="${page}"><span>${icon}</span>${label}</button>`).join("")}</div>`;
+      }
+
+      function renderDrivers() {
+        const driverUrl = new URL(location.href);
+        driverUrl.search = "";
+        driverUrl.searchParams.set("entregador", "1");
+        document.getElementById("pageContent").innerHTML = `
+          <div class="page-heading"><div><div class="eyebrow">Equipe de entrega</div><h1>Entregadores</h1><p class="subtitle">Cadastre os acessos individuais da equipe. No celular, eles podem escolher pedidos liberados pela loja.</p></div>
+            <div class="page-heading-actions"><button class="button" type="button" data-action="copy-driver-link" data-link="${escapeHtml(driverUrl.toString())}">Copiar link do entregador</button><button class="button primary" type="button" data-action="new-delivery-driver">＋ Cadastrar entregador</button></div>
+          </div>
+          <section class="panel"><div class="panel-heading"><h2>Equipe cadastrada</h2><span>${deliveryDrivers.length}</span></div>
+            <div id="deliveryDriverList"><div class="empty-state">Carregando entregadores…</div></div>
+          </section>`;
+        loadDeliveryDrivers();
+      }
+
+      async function loadDeliveryDrivers() {
+        if (!currentUser) return;
+        const { data, error } = await supabaseClient
+          .from("delivery_drivers")
+          .select("user_id,name,email,active,created_at")
+          .eq("business_id", currentUser.id)
+          .order("created_at", { ascending: false });
+        if (error) {
+          console.error("Não foi possível carregar os entregadores:", error);
+          const target = document.getElementById("deliveryDriverList");
+          if (currentPage === "entregadores" && target) target.innerHTML = `<div class="empty-state">Não foi possível carregar a equipe. Confirme se executou supabase-schema.sql.</div>`;
+          return;
+        }
+        deliveryDrivers = Array.isArray(data) ? data : [];
+        if (currentPage !== "entregadores") return;
+        const target = document.getElementById("deliveryDriverList");
+        if (!target) return;
+        target.innerHTML = deliveryDrivers.length
+          ? deliveryDrivers.map(driver => `<article class="customer-item"><div class="customer-item-top"><div><strong>${escapeHtml(driver.name)}</strong><div class="helper">${escapeHtml(driver.email)}</div><span class="pill ${driver.active ? "" : "orange"}">${driver.active ? "Ativo" : "Acesso pausado"}</span></div><button class="button small" type="button" data-action="toggle-delivery-driver" data-id="${escapeHtml(driver.user_id)}" data-active="${driver.active}">${driver.active ? "Pausar acesso" : "Reativar"}</button></div></article>`).join("")
+          : `<div class="empty-state">Nenhum entregador cadastrado. Crie um acesso e envie o link para entrar pelo celular.</div>`;
+        const count = document.querySelector("#pageContent .panel-heading span");
+        if (count) count.textContent = String(deliveryDrivers.length);
+      }
+
+      function openDeliveryDriverForm() {
+        const body = `<p class="helper">Crie um e-mail e uma senha inicial para o entregador. Compartilhe a senha por um canal privado.</p>
+          <div class="field" style="margin-top:14px"><label for="deliveryDriverName">Nome</label><input id="deliveryDriverName" name="name" required minlength="2" maxlength="80" autocomplete="name"></div>
+          <div class="field" style="margin-top:12px"><label for="deliveryDriverEmail">E-mail de acesso</label><input id="deliveryDriverEmail" name="email" type="email" required maxlength="254" autocomplete="email"></div>
+          <div class="field" style="margin-top:12px"><label for="deliveryDriverPassword">Senha inicial</label><input id="deliveryDriverPassword" name="password" type="password" required minlength="8" maxlength="128" autocomplete="new-password"></div>`;
+        openModal("Cadastrar entregador", body, "deliveryDriver");
+      }
+
+      async function saveDeliveryDriver(form) {
+        const submit = form.querySelector('[type="submit"]');
+        submit.disabled = true;
+        try {
+          const formData = new FormData(form);
+          const { data, error } = await supabaseClient.functions.invoke("manage-delivery-drivers", {
+            body: {
+              name: String(formData.get("name") || "").trim(),
+              email: String(formData.get("email") || "").trim(),
+              password: String(formData.get("password") || "")
+            }
+          });
+          if (error) throw new Error(data?.error || error.message);
+          if (data?.error) throw new Error(data.error);
+          closeModal();
+          await loadDeliveryDrivers();
+          showToast("Entregador cadastrado. Envie o link de acesso e a senha inicial por um canal privado.");
+        } catch (error) {
+          console.error("Não foi possível cadastrar o entregador:", error);
+          showToast(error.message || "Não foi possível cadastrar o entregador.");
+        } finally {
+          submit.disabled = false;
+        }
+      }
+
+      async function toggleDeliveryDriver(userId, active) {
+        const driver = deliveryDrivers.find(item => item.user_id === userId);
+        if (!driver || !currentUser) return;
+        const { data, error } = await supabaseClient
+          .from("delivery_drivers")
+          .update({ active })
+          .eq("user_id", userId)
+          .eq("business_id", currentUser.id)
+          .select("user_id")
+          .maybeSingle();
+        if (error || !data) {
+          console.error("Não foi possível alterar o acesso do entregador:", error || new Error("Profile not found."));
+          showToast("Não foi possível alterar o acesso do entregador.");
+          return;
+        }
+        driver.active = active;
+        renderDrivers();
+        showToast(active ? "Acesso do entregador reativado." : "Acesso do entregador pausado.");
       }
 
       function openCashForm(closeSession = false) {
@@ -4395,6 +4712,7 @@
         document.getElementById("authMessage").textContent = "";
         try {
           if (authMode === "signup") {
+            if (isDriverPortal) throw new Error("O cadastro de entregadores é feito pela loja.");
             const { data: result, error } = await supabaseClient.auth.signUp({ email, password });
             if (error) throw error;
             if (!result.session) {
@@ -4406,7 +4724,7 @@
           } else {
             const { data: result, error } = await supabaseClient.auth.signInWithPassword({ email, password });
             if (error) throw error;
-            await openBusinessSession(result.user);
+            await openAuthenticatedSession(result.user);
           }
         } catch (error) {
           console.error("Não foi possível autenticar ou abrir a conta:", error);
@@ -4422,6 +4740,23 @@
           showToast("Não foi possível sair da conta.");
         }
       });
+      document.getElementById("driverSignOutButton").addEventListener("click", async () => {
+        const { error } = await supabaseClient.auth.signOut();
+        if (error) {
+          console.error("Não foi possível encerrar a sessão do entregador:", error);
+          showToast("Não foi possível sair da conta.");
+        }
+      });
+      document.getElementById("driverAuthSignOutButton").addEventListener("click", async () => {
+        const { error } = await supabaseClient.auth.signOut();
+        if (error) {
+          console.error("Não foi possível trocar a conta do entregador:", error);
+          document.getElementById("authMessage").textContent = "Não foi possível trocar a conta. Tente novamente.";
+        } else {
+          document.getElementById("driverAuthSignOutButton").hidden = true;
+        }
+      });
+      document.getElementById("driverRefreshButton").addEventListener("click", refreshDriverOrders);
 
       document.addEventListener("error", event => {
         const image = event.target;
@@ -4459,6 +4794,37 @@
         const action = event.target.closest("[data-action]");
         if (!action) return;
         const id = action.dataset.id;
+        if (action.dataset.action === "claim-delivery-order") {
+          claimDeliveryOrder(id);
+          return;
+        }
+        if (action.dataset.action === "finish-delivery-order") {
+          finishDeliveryOrder(id);
+          return;
+        }
+        if (action.dataset.action === "copy-driver-link") {
+          const link = action.dataset.link;
+          if (!link || !navigator.clipboard?.writeText) {
+            showToast("Não foi possível copiar o link automaticamente. Copie a URL da página de entregadores.");
+            return;
+          }
+          navigator.clipboard.writeText(link).then(
+            () => showToast("Link da área do entregador copiado."),
+            error => {
+              console.error("Não foi possível copiar o link do entregador:", error);
+              showToast("Não foi possível copiar o link. Tente novamente.");
+            }
+          );
+          return;
+        }
+        if (action.dataset.action === "new-delivery-driver") {
+          openDeliveryDriverForm();
+          return;
+        }
+        if (action.dataset.action === "toggle-delivery-driver") {
+          toggleDeliveryDriver(id, action.dataset.active !== "true");
+          return;
+        }
         if (action.dataset.action === "copy-pix-code") {
           const pixCode = document.getElementById("pixCopyCode");
           if (!pixCode) return;
@@ -4651,6 +5017,7 @@
         if (form.dataset.type === "financeEntry") saveFinanceEntry(form);
         if (form.dataset.type === "financeEntryEdit") saveFinanceEntryEdit(form);
         if (form.dataset.type === "financePayment") saveFinanceSettlement(form);
+        if (form.dataset.type === "deliveryDriver") saveDeliveryDriver(form);
       });
       document.addEventListener("keydown", event => { if (event.key === "Escape") closeModal(); });
       window.addEventListener("storage", event => {

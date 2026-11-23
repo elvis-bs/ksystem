@@ -87,6 +87,47 @@ create table if not exists public.online_orders (
 create index if not exists online_orders_business_created_idx
   on public.online_orders (business_id, created_at desc);
 
+create table if not exists public.delivery_drivers (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  business_id uuid not null references auth.users (id) on delete cascade,
+  name text not null check (length(btrim(name)) between 2 and 80),
+  email text not null,
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists delivery_drivers_business_idx
+  on public.delivery_drivers (business_id, created_at desc);
+
+alter table public.delivery_drivers enable row level security;
+
+drop policy if exists "Businesses can read their delivery drivers" on public.delivery_drivers;
+create policy "Businesses can read their delivery drivers"
+  on public.delivery_drivers
+  for select
+  to authenticated
+  using ((select auth.uid()) = business_id);
+
+drop policy if exists "Drivers can read their own profile" on public.delivery_drivers;
+create policy "Drivers can read their own profile"
+  on public.delivery_drivers
+  for select
+  to authenticated
+  using ((select auth.uid()) = user_id);
+
+drop policy if exists "Businesses can update their delivery drivers" on public.delivery_drivers;
+create policy "Businesses can update their delivery drivers"
+  on public.delivery_drivers
+  for update
+  to authenticated
+  using ((select auth.uid()) = business_id)
+  with check ((select auth.uid()) = business_id);
+
+revoke all on public.delivery_drivers from public, anon, authenticated;
+grant select on public.delivery_drivers to authenticated;
+grant update (active) on public.delivery_drivers to authenticated;
+grant select, insert, update, delete on public.delivery_drivers to service_role;
+
 alter table public.online_orders enable row level security;
 
 drop policy if exists "Users can read their own online orders" on public.online_orders;
@@ -96,6 +137,33 @@ create policy "Users can read their own online orders"
   to authenticated
   using ((select auth.uid()) = business_id);
 
+alter table public.online_orders
+  add column if not exists delivery_driver_id uuid references auth.users (id) on delete set null;
+
+create index if not exists online_orders_delivery_driver_idx
+  on public.online_orders (delivery_driver_id, created_at desc)
+  where delivery_driver_id is not null;
+
+drop policy if exists "Delivery drivers can read available and assigned orders" on public.online_orders;
+create policy "Delivery drivers can read available and assigned orders"
+  on public.online_orders
+  for select
+  to authenticated
+  using (
+    order_data ->> 'fulfillment' = 'delivery'
+    and exists (
+      select 1
+      from public.delivery_drivers as driver
+      where driver.user_id = (select auth.uid())
+        and driver.business_id = online_orders.business_id
+        and driver.active
+    )
+    and (
+      delivery_driver_id = (select auth.uid())
+      or (delivery_driver_id is null and status = 'Saiu para entrega')
+    )
+  );
+
 drop policy if exists "Users can update status of their own online orders" on public.online_orders;
 create policy "Users can update status of their own online orders"
   on public.online_orders
@@ -104,10 +172,80 @@ create policy "Users can update status of their own online orders"
   using ((select auth.uid()) = business_id)
   with check ((select auth.uid()) = business_id);
 
+drop policy if exists "Delivery drivers can finish their assigned orders" on public.online_orders;
+create policy "Delivery drivers can finish their assigned orders"
+  on public.online_orders
+  for update
+  to authenticated
+  using (
+    delivery_driver_id = (select auth.uid())
+    and status = 'Saiu para entrega'
+    and exists (
+      select 1
+      from public.delivery_drivers as driver
+      where driver.user_id = (select auth.uid())
+        and driver.business_id = online_orders.business_id
+        and driver.active
+    )
+  )
+  with check (
+    delivery_driver_id = (select auth.uid())
+    and status = 'Concluído'
+    and exists (
+      select 1
+      from public.delivery_drivers as driver
+      where driver.user_id = (select auth.uid())
+        and driver.business_id = online_orders.business_id
+        and driver.active
+    )
+  );
+
 revoke all on public.online_orders from anon, authenticated;
 grant select on public.online_orders to authenticated;
 grant update (status) on public.online_orders to authenticated;
 grant select, insert, update on public.online_orders to service_role;
+
+create or replace function public.claim_delivery_order(p_order_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if auth.uid() is null or not exists (
+    select 1
+    from public.delivery_drivers as driver
+    where driver.user_id = auth.uid()
+      and driver.active
+  ) then
+    raise exception 'Active delivery driver required';
+  end if;
+
+  update public.online_orders
+  set delivery_driver_id = auth.uid(),
+      updated_at = clock_timestamp()
+  where id = p_order_id
+    and delivery_driver_id is null
+    and status = 'Saiu para entrega'
+    and order_data ->> 'fulfillment' = 'delivery'
+    and (
+      order_data ->> 'paymentMethod' <> 'pix'
+      or payment_status = 'approved'
+    )
+    and exists (
+      select 1
+      from public.delivery_drivers as driver
+      where driver.user_id = auth.uid()
+        and driver.business_id = online_orders.business_id
+        and driver.active
+    );
+
+  return found;
+end;
+$$;
+
+revoke all on function public.claim_delivery_order(uuid) from public, anon;
+grant execute on function public.claim_delivery_order(uuid) to authenticated;
 
 create table if not exists public.mercadopago_connections (
   business_id uuid primary key references auth.users (id) on delete cascade,
