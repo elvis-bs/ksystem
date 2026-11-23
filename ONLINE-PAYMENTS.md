@@ -50,6 +50,8 @@ Na página **Entregadores**, cadastre o nome, o e-mail e uma senha inicial de ca
 
 Os pedidos do **cardápio online** aparecem para escolha depois que a loja os aceitou e moveu para **Saiu para entrega**. O primeiro entregador que tocar em **Aceitar entrega** fica com o pedido; a reserva é atômica, então outro entregador não pode assumir o mesmo pedido. Na área mobile, o entregador pode consultar os dados da entrega e marcar o pedido como entregue. A loja pode pausar ou reativar o acesso de cada entregador.
 
+Na área do entregador, toque em **Ativar alerta sonoro** para liberar o som no navegador. Enquanto houver pedidos disponíveis, o aviso toca novamente a cada atualização, aproximadamente a cada 15 segundos; use **Silenciar alerta** para interrompê-lo. O som respeita o volume e o modo silencioso do aparelho, e precisa ser ativado novamente após recarregar ou sair. A página deve permanecer aberta e visível: não são notificações em segundo plano, e conexões interrompidas ou restrições do navegador podem atrasar os avisos.
+
 Pedidos criados apenas como vendas locais no caixa não aparecem na área do entregador; eles não são sincronizados como pedidos compartilhados.
 
 O cardápio mostra a loja aberta ou fechada e, quando fechada, a próxima abertura prevista pelos horários cadastrados. A previsão não garante que a loja abrirá: se o caixa continuar fechado ou os pedidos estiverem desativados, o cardápio permanece fechado e mostra o próximo horário programado.

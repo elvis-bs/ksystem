@@ -70,6 +70,8 @@
     .driver-brand .brand-mark { width: 34px; height: 34px; }
     .driver-topbar-actions { display: flex; align-items: center; gap: 8px; }
     .driver-content { width: min(760px, 100%); margin: 0 auto; padding: 28px 20px max(30px, env(safe-area-inset-bottom)); }
+    .driver-alert-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+    .driver-alert-controls p { flex: 1 1 240px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
     .driver-order-list { display: grid; gap: 12px; }
     .driver-order-card { padding: 17px; border: 1px solid var(--line); border-radius: 14px; background: #fff; box-shadow: var(--shadow); }
     .driver-order-card h2 { margin: 0; font-size: 16px; }
@@ -530,6 +532,10 @@
     </header>
     <main class="driver-content">
       <div class="page-heading"><div><div class="eyebrow">Área do entregador</div><h1 id="driverGreeting">Pedidos disponíveis</h1><p class="subtitle">Escolha uma entrega liberada pela loja. O pedido fica reservado para você ao aceitar.</p></div></div>
+      <div class="driver-alert-controls">
+        <button class="button" id="driverAlertButton" type="button" aria-pressed="false">Ativar alerta sonoro</button>
+        <p id="driverAlertStatus" role="status">Ative o som para ouvir avisos enquanto esta página estiver aberta e visível.</p>
+      </div>
       <div id="driverOrders"></div>
     </main>
   </section>
@@ -607,6 +613,9 @@
       let driverProfile = null;
       let driverOrders = [];
       let driverRefreshTimer = null;
+      let driverAlertEnabled = false;
+      let driverAlertAudioContext = null;
+      let driverAlertGain = null;
       let deliveryDrivers = [];
       let driverOrdersError = "";
       let syncQueue = Promise.resolve();
@@ -1069,6 +1078,87 @@
         renderDriverPortal();
       }
 
+      function updateDriverAlertControls(message) {
+        const button = document.getElementById("driverAlertButton");
+        button.textContent = driverAlertEnabled ? "Silenciar alerta" : "Ativar alerta sonoro";
+        button.classList.toggle("primary", driverAlertEnabled);
+        button.setAttribute("aria-pressed", String(driverAlertEnabled));
+        document.getElementById("driverAlertStatus").textContent = message || (driverAlertEnabled
+          ? "Som ativo. O aviso se repete a cada atualização enquanto houver pedidos disponíveis e esta página estiver visível."
+          : "Ative o som para ouvir avisos enquanto esta página estiver aberta e visível.");
+      }
+
+      function stopDriverAlert(message) {
+        driverAlertEnabled = false;
+        if (driverAlertGain) driverAlertGain.disconnect();
+        driverAlertGain = null;
+        updateDriverAlertControls(message);
+      }
+
+      function playDriverAlertSound() {
+        if (!driverAlertAudioContext || driverAlertAudioContext.state !== "running" || !driverAlertGain) {
+          throw new Error("O áudio de alerta não está ativo.");
+        }
+        const startAt = driverAlertAudioContext.currentTime;
+        [[880, 0], [1174, 0.2], [880, 0.4], [1174, 0.6]].forEach(([frequency, offset]) => {
+          const oscillator = driverAlertAudioContext.createOscillator();
+          const volume = driverAlertAudioContext.createGain();
+          oscillator.type = "sine";
+          oscillator.frequency.value = frequency;
+          volume.gain.setValueAtTime(0.0001, startAt + offset);
+          volume.gain.exponentialRampToValueAtTime(0.23, startAt + offset + 0.02);
+          volume.gain.exponentialRampToValueAtTime(0.0001, startAt + offset + 0.18);
+          oscillator.connect(volume);
+          volume.connect(driverAlertGain);
+          oscillator.start(startAt + offset);
+          oscillator.stop(startAt + offset + 0.19);
+        });
+      }
+
+      async function toggleDriverAlert() {
+        if (driverAlertEnabled) {
+          stopDriverAlert();
+          return;
+        }
+        const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextConstructor) {
+          updateDriverAlertControls("Este navegador não oferece suporte ao alerta sonoro.");
+          return;
+        }
+        const button = document.getElementById("driverAlertButton");
+        button.disabled = true;
+        try {
+          if (!driverAlertAudioContext) driverAlertAudioContext = new AudioContextConstructor();
+          await driverAlertAudioContext.resume();
+          if (driverAlertAudioContext.state !== "running") throw new Error("O navegador não liberou a reprodução de áudio.");
+          if (!driverProfile || !currentUser || !driverProfile.active) {
+            updateDriverAlertControls("Não foi possível ativar o som: seu acesso não está ativo.");
+            return;
+          }
+          driverAlertGain = driverAlertAudioContext.createGain();
+          driverAlertGain.connect(driverAlertAudioContext.destination);
+          driverAlertEnabled = true;
+          playDriverAlertSound();
+          updateDriverAlertControls();
+        } catch (error) {
+          console.error("Não foi possível ativar o alerta sonoro do entregador:", error);
+          stopDriverAlert("Não foi possível ativar o som. Verifique as permissões e tente novamente.");
+        } finally {
+          button.disabled = false;
+        }
+      }
+
+      function alertAvailableDriverOrders() {
+        if (!driverAlertEnabled || document.hidden || !driverProfile?.active || driverOrdersError) return;
+        if (!driverOrders.some(order => !order.delivery_driver_id && order.status === "Saiu para entrega")) return;
+        try {
+          playDriverAlertSound();
+        } catch (error) {
+          console.error("Não foi possível tocar o alerta de entrega:", error);
+          stopDriverAlert("O som foi interrompido pelo navegador. Toque em Ativar alerta sonoro novamente.");
+        }
+      }
+
       async function openAuthenticatedSession(user) {
         const { data: profile, error } = await supabaseClient
           .from("delivery_drivers")
@@ -1116,11 +1206,13 @@
 
       async function refreshDriverOrders() {
         if (!driverProfile || !currentUser || !isDriverPortal) return false;
+        const userId = currentUser.id;
         const { data: latestProfile, error: profileError } = await supabaseClient
           .from("delivery_drivers")
           .select("active")
           .eq("user_id", driverProfile.user_id)
           .maybeSingle();
+        if (currentUser?.id !== userId || !driverProfile) return false;
         if (profileError) {
           console.error("Não foi possível verificar o acesso do entregador:", profileError);
           driverOrdersError = "Não foi possível verificar seu acesso. Confira a conexão e tente atualizar.";
@@ -1131,6 +1223,7 @@
         if (!driverProfile.active) {
           driverOrders = [];
           driverOrdersError = "Seu acesso está pausado. Fale com a loja.";
+          if (driverAlertEnabled) stopDriverAlert("Seu acesso está pausado e o alerta sonoro foi desativado.");
           renderDriverPortal();
           return false;
         }
@@ -1138,6 +1231,7 @@
           .from("online_orders")
           .select("id,status,payment_status,order_data,total,created_at,delivery_driver_id")
           .order("created_at", { ascending: true });
+        if (currentUser?.id !== userId || !driverProfile) return false;
         if (error) {
           console.error("Não foi possível carregar os pedidos de entrega:", error);
           driverOrdersError = "Não foi possível carregar os pedidos. Verifique a conexão e tente atualizar.";
@@ -1147,6 +1241,7 @@
         driverOrders = Array.isArray(data) ? data : [];
         driverOrdersError = "";
         renderDriverPortal();
+        alertAvailableDriverOrders();
         return true;
       }
 
@@ -1505,6 +1600,7 @@
             onlineOrderRefreshTimer = null;
             if (driverRefreshTimer) clearInterval(driverRefreshTimer);
             driverRefreshTimer = null;
+            stopDriverAlert();
             showAuth();
           }
         });
@@ -4757,6 +4853,10 @@
         }
       });
       document.getElementById("driverRefreshButton").addEventListener("click", refreshDriverOrders);
+      document.getElementById("driverAlertButton").addEventListener("click", toggleDriverAlert);
+      document.addEventListener("visibilitychange", () => {
+        if (isDriverPortal && !document.hidden && driverProfile && currentUser) refreshDriverOrders();
+      });
 
       document.addEventListener("error", event => {
         const image = event.target;
