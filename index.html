@@ -258,6 +258,7 @@
     .order-card-actions .order-status-select { min-width: 0; width: 100%; }
     .orders-empty { padding: 18px 8px; border: 1px dashed #d6dbd2; border-radius: 9px; color: var(--muted); background: rgba(255,255,255,.55); text-align: center; font-size: 10px; }
     .order-card-actions .button.receipt-button { border-color: #dce5da; color: var(--green); background: #f5f8f3; }
+    .order-card-actions .reject-order { border-color: #efcaca; color: var(--red); }
     .order-card-actions .order-details-trigger { width: 36px; height: 34px; justify-self: end; padding: 0; }
     .orders-completed-list { display: grid; gap: 10px; }
     .order-details-list { display: grid; gap: 11px; }
@@ -651,6 +652,9 @@
       let financeKindFilter = "all";
       let lastRegisteredSaleId = null;
       let showTodaySales = false;
+      let autoAcceptOnlineOrders = false;
+      let autoAcceptRunning = false;
+      const onlineOrderDecisionsInProgress = new Set();
       let editingId = null;
       let editingType = null;
 
@@ -962,15 +966,20 @@
       }
 
       async function refreshOnlineOrders(notifyNewOrders = false) {
-        if (!currentUser || !onlineMenuReady) return;
+        if (!currentUser || !onlineMenuReady) return false;
         const { data, error } = await supabaseClient
           .from("online_orders")
           .select("id,payment_status,status,order_data,total,created_at,paid_at")
           .order("created_at", { ascending: false });
         if (error) {
           console.error("Não foi possível carregar pedidos online:", error);
-          showToast("Não foi possível atualizar os pedidos online.");
-          return;
+          if (autoAcceptOnlineOrders) {
+            autoAcceptOnlineOrders = false;
+            showToast("Não foi possível atualizar os pedidos. Aceite automático desativado; verifique a conexão.");
+          } else {
+            showToast("Não foi possível atualizar os pedidos online.");
+          }
+          return false;
         }
         const previousAlertableOrders = new Set(onlineOrders.filter(orderCanTriggerAlert).map(order => order.id));
         onlineOrders = data || [];
@@ -983,6 +992,7 @@
             if (currentPage === "pedidos") renderOrders();
             showToast("O navegador bloqueou o som. Ative o alerta novamente.");
           }
+          return true;
         }
       }
 
@@ -1012,6 +1022,7 @@
       }
 
       async function openBusinessSession(user) {
+        autoAcceptOnlineOrders = false;
         currentUser = user;
         onlineOrders = [];
         onlineMenuReady = false;
@@ -1254,6 +1265,7 @@
         }
         supabaseClient.auth.onAuthStateChange(event => {
           if (event === "SIGNED_OUT") {
+            autoAcceptOnlineOrders = false;
             currentUser = null;
             onlineOrders = [];
             onlineMenuReady = false;
@@ -1935,6 +1947,16 @@
 
       function changeSaleStatus(sale, status, onSuccess, onFailure) {
         const previousStatus = sale.status;
+        if (sale.onlineOrderId && status === "Cancelado" && previousStatus !== "Cancelado") {
+          const warning = sale.paid
+            ? "Este pedido já foi pago. O cancelamento NÃO faz o estorno nem avisa o cliente. Você precisará devolver o pagamento e contatar o cliente manualmente. Deseja cancelar?"
+            : "Deseja cancelar este pedido? O cliente não será avisado automaticamente; entre em contato com ele.";
+          if (!confirm(warning)) {
+            render();
+            onFailure?.();
+            return;
+          }
+        }
         sale.status = status;
         if (sale.onlineOrderId) {
           render();
@@ -1942,7 +1964,10 @@
             try {
               const { error } = await supabaseClient.from("online_orders").update({ status }).eq("id", sale.onlineOrderId);
               if (error) throw error;
-              showToast("Status do pedido atualizado.");
+              showToast(status === "Cancelado" ? sale.paid
+                ? "Pedido cancelado. Faça o estorno e avise o cliente manualmente."
+                : "Pedido cancelado. Avise o cliente manualmente."
+                : "Status do pedido atualizado.");
               onSuccess?.();
             } catch (error) {
               console.error("Não foi possível atualizar o status do pedido online:", error);
@@ -1968,6 +1993,83 @@
 
       function advanceOrder(sale, status) {
         changeSaleStatus(sale, status);
+      }
+
+      async function decideOnlineOrder(sale, accept, automatic = false) {
+        if (!currentUser || !onlineMenuReady || !sale?.onlineOrderId || sale.status !== "Recebido" || (sale.paymentMethod === "pix" && !sale.paid)) {
+          if (!automatic) showToast("Este pedido não está disponível para aceitação ou recusa.");
+          return false;
+        }
+        if (onlineOrderDecisionsInProgress.has(sale.onlineOrderId)) return false;
+        if (!automatic && !accept) {
+          const warning = sale.paid
+            ? "Este pedido já foi pago. A recusa NÃO faz o estorno nem avisa o cliente. Você precisará devolver o pagamento e contatar o cliente manualmente. Deseja recusar?"
+            : "Deseja recusar este pedido? O cliente não será avisado automaticamente; entre em contato com ele.";
+          if (!confirm(warning)) return false;
+        }
+        onlineOrderDecisionsInProgress.add(sale.onlineOrderId);
+        const userId = currentUser?.id;
+        try {
+          let query = supabaseClient.from("online_orders")
+            .update({ status: accept ? "Em preparo" : "Cancelado" })
+            .eq("id", sale.onlineOrderId)
+            .eq("business_id", userId)
+            .eq("status", "Recebido");
+          if (sale.paymentMethod === "pix") query = query.eq("payment_status", "approved");
+          const { data, error } = await query.select("id").maybeSingle();
+          if (error) throw error;
+          if (!data) throw new Error("O pedido mudou ou não está mais disponível.");
+          if (!automatic) showToast(accept ? "Pedido aceito e enviado para preparo." : sale.paid
+            ? "Pedido recusado. Faça o estorno e avise o cliente manualmente."
+            : "Pedido recusado. Avise o cliente manualmente.");
+          return true;
+        } catch (error) {
+          console.error("Não foi possível decidir o pedido online:", error);
+          if (automatic) autoAcceptOnlineOrders = false;
+          showToast(automatic
+            ? "Não foi possível aceitar um pedido. Aceite automático desativado; confira os pedidos e a conexão."
+            : "Não foi possível atualizar o pedido. Ele pode ter sido alterado; confira a conexão e tente novamente.");
+          return false;
+        } finally {
+          onlineOrderDecisionsInProgress.delete(sale.onlineOrderId);
+          try {
+            if (!await refreshOnlineOrders()) {
+              autoAcceptOnlineOrders = false;
+              showToast("Não foi possível atualizar os pedidos. Aceite automático desativado; verifique a conexão.");
+            }
+          } catch (error) {
+            autoAcceptOnlineOrders = false;
+            console.error("Não foi possível atualizar a lista de pedidos:", error);
+            showToast("Não foi possível atualizar os pedidos. Aceite automático desativado; verifique a conexão.");
+          }
+          if (currentPage === "pedidos") renderOrders();
+        }
+      }
+
+      async function acceptPendingOnlineOrders() {
+        if (!autoAcceptOnlineOrders || autoAcceptRunning || currentPage !== "pedidos" || document.hidden) return;
+        autoAcceptRunning = true;
+        try {
+          const pending = allSales().filter(sale => sale.onlineOrderId && sale.status === "Recebido"
+            && (sale.paymentMethod !== "pix" || sale.paid));
+          for (const sale of pending) {
+            if (!autoAcceptOnlineOrders || currentPage !== "pedidos" || document.hidden) break;
+            if (onlineOrderDecisionsInProgress.has(sale.onlineOrderId)) continue;
+            if (!await decideOnlineOrder(sale, true, true)) break;
+          }
+        } finally {
+          autoAcceptRunning = false;
+        }
+      }
+
+      function toggleAutoAcceptOnlineOrders() {
+        if (!autoAcceptOnlineOrders && (!currentUser || !onlineMenuReady)) {
+          showToast("Não foi possível acessar os pedidos online. Verifique a conexão antes de ativar o aceite automático.");
+          return;
+        }
+        if (!autoAcceptOnlineOrders && !confirm("Ativar o aceite automático? Os pedidos online já aguardando e os novos serão enviados para preparo enquanto esta tela estiver aberta. Pedidos Pix só serão aceitos após a confirmação do pagamento.")) return;
+        autoAcceptOnlineOrders = !autoAcceptOnlineOrders;
+        renderOrders();
       }
 
       function renderOrders() {
@@ -2008,7 +2110,7 @@
             ${sale.fulfillment ? `<div class="order-card-meta"><span>${sale.fulfillment === "pickup" ? "Retirada no local" : "Entrega"}${sale.deliveryFee ? ` · taxa ${money(sale.deliveryFee)}` : ""}</span></div>` : ""}
             ${sale.address ? `<div class="order-card-contact">${sale.fulfillment === "pickup" ? "Retirada em" : "Endereço"}: ${escapeHtml(sale.address)}</div>` : sale.pickupAddress ? `<div class="order-card-contact">Retirada em: ${escapeHtml(sale.pickupAddress)}</div>` : ""}
             ${sale.notes ? `<div class="order-card-contact">Obs.: ${escapeHtml(sale.notes)}</div>` : ""}
-            <div class="order-card-actions">${!isPendingPix && nextStatus ? `<button type="button" class="button primary" data-action="advance-order" data-id="${escapeHtml(sale.id)}" data-status="${nextStatus}">${nextLabel} →</button>` : ""}${!sale.onlineOrderId && !sale.paid && sale.payment !== "Crediário" && sale.status !== "Cancelado" ? `<button type="button" class="button" data-action="edit-sale-payment" data-id="${escapeHtml(sale.id)}">Alterar / receber pagamento</button>` : ""}<button type="button" class="button icon-button order-details-trigger" data-action="order-details" data-id="${escapeHtml(sale.id)}" aria-label="Detalhes do pedido #${escapeHtml(String(sale.id || "").slice(-5))}" title="Detalhes do pedido"><svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="m16 16 4 4M11 8v.1M11 11v4"></path></svg></button></div>
+            <div class="order-card-actions">${sale.onlineOrderId && sale.status === "Recebido" && !isPendingPix ? `<button type="button" class="button primary" data-action="accept-online-order" data-id="${escapeHtml(sale.id)}">Aceitar pedido →</button><button type="button" class="button reject-order" data-action="reject-online-order" data-id="${escapeHtml(sale.id)}">Recusar pedido</button>` : !isPendingPix && nextStatus ? `<button type="button" class="button primary" data-action="advance-order" data-id="${escapeHtml(sale.id)}" data-status="${nextStatus}">${nextLabel} →</button>` : ""}${!sale.onlineOrderId && !sale.paid && sale.payment !== "Crediário" && sale.status !== "Cancelado" ? `<button type="button" class="button" data-action="edit-sale-payment" data-id="${escapeHtml(sale.id)}">Alterar / receber pagamento</button>` : ""}<button type="button" class="button icon-button order-details-trigger" data-action="order-details" data-id="${escapeHtml(sale.id)}" aria-label="Detalhes do pedido #${escapeHtml(String(sale.id || "").slice(-5))}" title="Detalhes do pedido"><svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="m16 16 4 4M11 8v.1M11 11v4"></path></svg></button></div>
           </article>`;
         };
         const columns = statusColumns.map(column => {
@@ -2018,7 +2120,7 @@
           return `<section class="orders-column"><div class="orders-column-head"><h2>${column.label}</h2><span class="orders-column-count">${orders.length}</span></div><div class="orders-column-list">${orders.map(card).join("") || `<div class="orders-empty">Nenhum pedido nesta etapa.</div>`}</div></section>`;
         }).join("");
         document.getElementById("pageContent").innerHTML = `
-          <div class="page-heading"><div><div class="eyebrow">Acompanhe a operação</div><h1>Pedidos</h1><p class="subtitle">Veja cada pedido por etapa e atualize o andamento com um toque.</p></div><div class="page-heading-actions"><button class="button ${orderAlertEnabled ? "primary" : ""}" type="button" data-toggle-order-alert>${orderAlertEnabled ? "♫ Som ativo · Desativar" : "♫ Ativar som de pedidos"}</button><button class="button rounded" type="button" data-completed-orders>Pedidos finalizados (${completedOrders.length})</button><button class="button" data-page="vendas">＋ Nova venda</button></div></div>
+          <div class="page-heading"><div><div class="eyebrow">Acompanhe a operação</div><h1>Pedidos</h1><p class="subtitle">Veja cada pedido por etapa e atualize o andamento com um toque.</p><p class="helper">Aceite automático: ${autoAcceptOnlineOrders ? "ativado nesta sessão; funciona somente com esta tela aberta e visível." : "desativado."}</p></div><div class="page-heading-actions"><button class="button ${autoAcceptOnlineOrders ? "primary" : ""}" type="button" data-action="toggle-auto-accept" aria-pressed="${autoAcceptOnlineOrders}">${autoAcceptOnlineOrders ? "✓ Aceite automático ativo" : "Ativar aceite automático"}</button><button class="button ${orderAlertEnabled ? "primary" : ""}" type="button" data-toggle-order-alert>${orderAlertEnabled ? "♫ Som ativo · Desativar" : "♫ Ativar som de pedidos"}</button><button class="button rounded" type="button" data-completed-orders>Pedidos finalizados (${completedOrders.length})</button><button class="button" data-page="vendas">＋ Nova venda</button></div></div>
           <section class="orders-summary">
             <article class="orders-summary-card"><span>Em andamento</span><strong>${activeOrders.length}</strong></article>
             <article class="orders-summary-card"><span>Novos</span><strong>${newOrders.length}</strong></article>
@@ -2034,6 +2136,7 @@
           openModal(`Pedidos finalizados (${completedOrders.length})`, body, "completedOrders");
         });
         document.querySelector("[data-toggle-order-alert]").addEventListener("click", toggleOrderAlert);
+        acceptPendingOnlineOrders();
       }
 
       function showOrderDetails(sale) {
@@ -4322,6 +4425,11 @@
         if (action.dataset.action === "advance-order") {
           const sale = allSales().find(item => item.id === id);
           if (sale) advanceOrder(sale, action.dataset.status);
+        }
+        if (action.dataset.action === "toggle-auto-accept") toggleAutoAcceptOnlineOrders();
+        if (action.dataset.action === "accept-online-order" || action.dataset.action === "reject-online-order") {
+          const sale = allSales().find(item => item.id === id);
+          decideOnlineOrder(sale, action.dataset.action === "accept-online-order");
         }
         if (action.dataset.action === "order-details") {
           showOrderDetails(allSales().find(item => item.id === id));
