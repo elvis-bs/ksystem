@@ -97,6 +97,9 @@
     .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 13px; margin-bottom: 21px; }
     .stat-card, .panel, .product-card { border: 1px solid var(--line); border-radius: 13px; background: var(--surface); }
     .stat-card { min-height: 116px; padding: 17px 18px; }
+    .finance-stat-button { width: 100%; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: border-color .15s, box-shadow .15s, transform .15s; }
+    .finance-stat-button:hover { border-color: #9dc5a6; box-shadow: 0 5px 16px #194b2e14; transform: translateY(-1px); }
+    .finance-stat-button:focus-visible { outline: 3px solid #78ad88; outline-offset: 2px; }
     .stat-top { display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: 11px; }
     .stat-icon { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 9px; color: var(--green); background: var(--green-soft); font-size: 14px; }
     .stat-value { margin-top: 12px; font-size: 24px; font-weight: 750; letter-spacing: -.8px; }
@@ -274,6 +277,12 @@
     #modalForm[data-type="completedOrders"] .modal-footer { display: none; }
     #modalForm[data-type="cashReceipts"] .modal-footer { display: none; }
     #modalForm[data-type="financeBalance"] .modal-footer { display: none; }
+    #modalForm[data-type="financeSummary"] .modal-footer { display: none; }
+    .finance-summary-item { padding: 12px 0; border-bottom: 1px solid var(--line); }
+    .finance-summary-item:last-child { border-bottom: 0; }
+    .finance-summary-item-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+    .finance-summary-item-head strong:first-child { overflow-wrap: anywhere; }
+    .finance-summary-item-meta { margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
     .finance-balance-result { margin: 16px 0; padding: 18px; border-radius: 12px; color: #fff; background: var(--green-dark); }
     .finance-balance-result span { display: block; color: #c1d5c8; font-size: 11px; }
     .finance-balance-result strong { display: block; margin-top: 6px; font-size: 28px; letter-spacing: -.6px; }
@@ -2487,13 +2496,49 @@
         }
       }
 
+      function financeSummaryData(entries) {
+        const receivables = entries.filter(entry => entry.kind === "receivable" && financeBalance(entry) > 0);
+        const payables = entries.filter(entry => entry.kind === "payable" && financeBalance(entry) > 0);
+        const overdue = entries.filter(entry => financeEntryStatus(entry) === "Atrasado");
+        const received = receivables.reduce((sum, entry) => sum + financeBalance(entry), 0);
+        const payable = payables.reduce((sum, entry) => sum + financeBalance(entry), 0);
+        return { receivables, payables, overdue, received, payable };
+      }
+
+      function showFinanceSummary(type) {
+        const entries = [...state.financeEntries].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        const summary = financeSummaryData(entries);
+        const groups = {
+          receivables: { title: "Contas a receber", entries: summary.receivables },
+          payables: { title: "Contas a pagar", entries: summary.payables },
+          overdue: { title: "Contas atrasadas", entries: summary.overdue },
+          balance: { title: "Saldo previsto", entries: [...summary.receivables, ...summary.payables] }
+        };
+        const group = groups[type];
+        if (!group) {
+          showToast("Não foi possível abrir os detalhes deste indicador.");
+          return;
+        }
+        const items = group.entries.map(entry => {
+          const label = entry.kind === "receivable" ? "A receber" : entry.kind === "payable" ? "A pagar" : "Despesa";
+          const due = entry.dueDate ? new Date(`${entry.dueDate}T00:00:00`).toLocaleDateString("pt-BR") : "Sem vencimento";
+          const status = financeEntryStatus(entry);
+          return `<div class="finance-summary-item"><div class="finance-summary-item-head"><strong>${escapeHtml(String(entry.description || "").trim() || "Sem descrição")}</strong><strong>${money(financeBalance(entry))}</strong></div><div class="finance-summary-item-meta">${escapeHtml(entry.partyName || "Pessoa não informada")} · ${escapeHtml(label)} · ${escapeHtml(status)}<br>Valor: ${money(entry.amount)} · Pago: ${money(entry.paidAmount)} · Vencimento: ${escapeHtml(due)}</div></div>`;
+        }).join("");
+        const explanation = type === "balance"
+          ? `<div class="cost-summary"><div class="cost-row"><span>A receber</span><strong>${money(summary.received)}</strong></div><div class="cost-row"><span>A pagar</span><strong>− ${money(summary.payable)}</strong></div><div class="cost-row"><span>Saldo previsto</span><strong>${money(summary.received - summary.payable)}</strong></div></div>`
+          : type === "overdue" ? `<p class="helper">${group.entries.length} conta(s) em aberto com vencimento anterior a hoje.</p>`
+          : `<p class="helper">Saldo em aberto: <strong>${money(type === "receivables" ? summary.received : summary.payable)}</strong> · ${group.entries.length} conta(s).</p>`;
+        const body = `<p class="helper">Todos os lançamentos, independentemente dos filtros da página.</p>${explanation}${items ? `<div style="margin-top:12px">${items}</div>` : `<div class="empty-state">Nenhuma conta ${type === "overdue" ? "atrasada" : "em aberto"} para mostrar.</div>`}`;
+        openModal(group.title, body, "financeSummary");
+      }
+
       function renderFinance() {
         const entries = [...state.financeEntries].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        const receivables = entries.filter(entry => entry.kind === "receivable");
-        const payables = entries.filter(entry => entry.kind === "payable");
-        const receivableBalance = receivables.reduce((sum, entry) => sum + financeBalance(entry), 0);
-        const payableBalance = payables.reduce((sum, entry) => sum + financeBalance(entry), 0);
-        const overdueCount = entries.filter(entry => financeEntryStatus(entry) === "Atrasado").length;
+        const summary = financeSummaryData(entries);
+        const receivableBalance = summary.received;
+        const payableBalance = summary.payable;
+        const overdueCount = summary.overdue.length;
         const searchTerm = financeSearch.trim().toLocaleLowerCase("pt-BR");
         const filteredEntries = entries.filter(entry => {
           const entryDate = localDateKey(entry.createdAt);
@@ -2523,10 +2568,10 @@
         document.getElementById("pageContent").innerHTML = `
           <div class="page-heading"><div><div class="eyebrow">Controle financeiro</div><h1>Fluxo financeiro</h1><p class="subtitle">Acompanhe despesas, contas a pagar, valores a receber e notas fiadas.</p></div><div class="filters"><button type="button" class="button finance-balance-button" data-action="finance-sales-balance">↗ Ver resultado das vendas</button><button class="button" data-action="new-finance-receivable">＋ Conta a receber</button><button class="button" data-action="new-finance-payable">− Conta a pagar</button><button class="button primary" data-action="new-finance-expense">− Lançar despesa</button></div></div>
           <section class="stats">
-            <article class="stat-card"><div class="stat-top"><span>Contas a receber</span><span class="stat-icon">↗</span></div><div class="stat-value">${money(receivableBalance)}</div><div class="stat-note">${receivables.filter(entry => financeBalance(entry) > 0).length} em aberto</div></article>
-            <article class="stat-card"><div class="stat-top"><span>Contas a pagar</span><span class="stat-icon">↙</span></div><div class="stat-value">${money(payableBalance)}</div><div class="stat-note">${payables.filter(entry => financeBalance(entry) > 0).length} em aberto</div></article>
-            <article class="stat-card"><div class="stat-top"><span>Saldo previsto</span><span class="stat-icon">↕</span></div><div class="stat-value">${money(receivableBalance - payableBalance)}</div><div class="stat-note">a receber menos a pagar</div></article>
-            <article class="stat-card"><div class="stat-top"><span>Contas atrasadas</span><span class="stat-icon">!</span></div><div class="stat-value">${overdueCount}</div><div class="stat-note">com vencimento anterior a hoje</div></article>
+            <button type="button" class="stat-card finance-stat-button" data-action="finance-summary" data-summary="receivables"><div class="stat-top"><span>Contas a receber</span><span class="stat-icon">↗</span></div><div class="stat-value">${money(receivableBalance)}</div><div class="stat-note">${summary.receivables.length} em aberto · Ver detalhes</div></button>
+            <button type="button" class="stat-card finance-stat-button" data-action="finance-summary" data-summary="payables"><div class="stat-top"><span>Contas a pagar</span><span class="stat-icon">↙</span></div><div class="stat-value">${money(payableBalance)}</div><div class="stat-note">${summary.payables.length} em aberto · Ver detalhes</div></button>
+            <button type="button" class="stat-card finance-stat-button" data-action="finance-summary" data-summary="balance"><div class="stat-top"><span>Saldo previsto</span><span class="stat-icon">↕</span></div><div class="stat-value">${money(receivableBalance - payableBalance)}</div><div class="stat-note">a receber menos a pagar · Ver detalhes</div></button>
+            <button type="button" class="stat-card finance-stat-button" data-action="finance-summary" data-summary="overdue"><div class="stat-top"><span>Contas atrasadas</span><span class="stat-icon">!</span></div><div class="stat-value">${overdueCount}</div><div class="stat-note">vencidas · Ver detalhes</div></button>
           </section>
           <article class="panel" style="margin-bottom:14px"><form class="report-filters" id="financeFilters"><div class="field"><label for="financeDate">Dia do lançamento</label><input id="financeDate" name="date" type="date" value="${escapeHtml(financeDateFilter)}"></div><div class="field"><label for="financeKind">Tipo</label><select id="financeKind" name="kind"><option value="all" ${financeKindFilter === "all" ? "selected" : ""}>Todos</option><option value="receivable" ${financeKindFilter === "receivable" ? "selected" : ""}>A receber</option><option value="payable" ${financeKindFilter === "payable" ? "selected" : ""}>A pagar</option><option value="expense" ${financeKindFilter === "expense" ? "selected" : ""}>Despesas</option></select></div><div class="field"><label for="financeSearch">Pesquisar descrição / pessoa</label><input id="financeSearch" name="search" type="search" value="${escapeHtml(financeSearch)}" placeholder="Ex.: fornecedor, cliente"></div><button class="button primary" type="submit">Filtrar</button><button class="button" type="button" data-action="clear-finance-filters">Todos os dias</button></form></article>
           <article class="panel"><div class="panel-heading"><h2>Lançamentos financeiros</h2><span>${filteredEntries.length} resultado(s) · despesas no período: ${money(dailyExpenses)}</span></div>
@@ -4484,6 +4529,7 @@
         }
         if (action.dataset.action === "new-finance-receivable") financeEntryForm("receivable");
         if (action.dataset.action === "finance-sales-balance") showFinanceSalesBalance();
+        if (action.dataset.action === "finance-summary") showFinanceSummary(action.dataset.summary);
         if (action.dataset.action === "new-finance-payable") financeEntryForm("payable");
         if (action.dataset.action === "new-finance-expense") financeEntryForm("expense");
         if (action.dataset.action === "edit-finance-entry") {
