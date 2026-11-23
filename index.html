@@ -1898,6 +1898,7 @@
           payment,
           paid: isPaid,
           cashSessionId: isPaid ? session.id : null,
+          paidAt: isPaid ? new Date().toISOString() : null,
           status: "Recebido",
           items: saleCart.map(item => ({ ...item, addons: item.addons.map(addon => ({ ...addon })) })),
           total: saleCart.reduce((sum, item) => sum + saleLineTotal(item), 0)
@@ -2318,12 +2319,14 @@
           showToast("Pagamento registrado no caixa.");
           return;
         }
-        const previous = { paid: sale.paid, payment: sale.payment, cashSessionId: sale.cashSessionId };
+        const previous = { ...sale };
         sale.payment = method;
         sale.paid = true;
         sale.cashSessionId = session.id;
+        sale.paidAt = new Date().toISOString();
         if (!saveState()) {
           Object.assign(sale, previous);
+          if (!Object.hasOwn(previous, "paidAt")) delete sale.paidAt;
           return;
         }
         closeModal();
@@ -2337,17 +2340,94 @@
         return "Em aberto";
       }
 
-      function financeSalesBalance(sales, entries) {
+      function financeSalesBalance(sales, entries, start = "", end = "") {
         const saleReceivables = entries.filter(entry => entry.kind === "receivable" && entry.saleId);
         const creditSaleIds = new Set(saleReceivables.map(entry => entry.saleId));
+        const filtered = Boolean(start || end);
+        let estimatedSales = 0;
+        let undatedAmount = 0;
+        const inPeriod = date => {
+          if (!date || !Number.isFinite(new Date(date).getTime())) return false;
+          const day = localDateKey(date);
+          return (!start || day >= start) && (!end || day <= end);
+        };
         const directSales = sales.filter(sale => sale.paid && !creditSaleIds.has(sale.id))
-          .reduce((sum, sale) => sum + number(sale.total), 0);
-        const creditPayments = saleReceivables.reduce((sum, entry) => sum + number(entry.paidAmount), 0);
+          .reduce((sum, sale) => {
+            if (!filtered) return sum + number(sale.total);
+            const date = sale.paidAt || sale.createdAt;
+            if (!date || !Number.isFinite(new Date(date).getTime())) {
+              undatedAmount += number(sale.total);
+              return sum;
+            }
+            if (!inPeriod(date)) return sum;
+            if (!sale.paidAt) estimatedSales++;
+            return sum + number(sale.total);
+          }, 0);
+        const entryPaid = entry => {
+          if (!filtered) return number(entry.paidAmount);
+          const payments = Array.isArray(entry.payments) ? entry.payments : [];
+          let known = 0;
+          let included = 0;
+          for (const payment of payments) {
+            const amount = number(payment.amount);
+            known += amount;
+            if (!payment.date || !Number.isFinite(new Date(payment.date).getTime())) undatedAmount += amount;
+            else if (inPeriod(payment.date)) included += amount;
+          }
+          const remainder = roundMoney(number(entry.paidAmount) - known);
+          if (remainder !== 0) {
+            if (entry.kind === "expense" && payments.length === 0 && inPeriod(entry.createdAt)) included += remainder;
+            else if (entry.kind !== "expense" || payments.length !== 0 || !entry.createdAt || !Number.isFinite(new Date(entry.createdAt).getTime())) undatedAmount += Math.abs(remainder);
+          }
+          return included;
+        };
+        const creditPayments = saleReceivables.reduce((sum, entry) => sum + entryPaid(entry), 0);
         const paidExpenses = entries.filter(entry => entry.kind === "expense" || entry.kind === "payable")
-          .reduce((sum, entry) => sum + number(entry.paidAmount), 0);
+          .reduce((sum, entry) => sum + entryPaid(entry), 0);
         const received = roundMoney(directSales + creditPayments);
         const spent = roundMoney(paidExpenses);
-        return { received, spent, balance: roundMoney(received - spent) };
+        return { received, spent, balance: roundMoney(received - spent), estimatedSales, undatedAmount: roundMoney(undatedAmount) };
+      }
+
+      function financeBalancePeriod(start, end) {
+        const format = value => value.split("-").reverse().join("/");
+        if (start && end) return `${format(start)} a ${format(end)}`;
+        if (start) return `A partir de ${format(start)}`;
+        if (end) return `Até ${format(end)}`;
+        return "Todo o histórico";
+      }
+
+      function financeBalanceWarnings(totals) {
+        const warnings = [];
+        if (totals.estimatedSales) warnings.push(`${totals.estimatedSales} venda(s) sem data de recebimento foram consideradas pela data da venda (estimativa).`);
+        if (totals.undatedAmount) warnings.push(`Movimentos sem data ou sem histórico suficiente (${money(totals.undatedAmount)}) não foram incluídos no período.`);
+        return warnings;
+      }
+
+      function printFinanceSalesBalance(totals, start, end) {
+        const printWindow = window.open("", "_blank");
+        if (!printWindow) {
+          showToast("Não foi possível abrir a impressão. Permita janelas pop-up e tente novamente.");
+          return;
+        }
+        const storeName = state.receiptSettings?.storeName || "Meu estabelecimento";
+        const generated = new Date().toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+        const warnings = financeBalanceWarnings(totals);
+        const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Resultado das vendas</title><style>
+          @page{size:A4;margin:18mm}*{box-sizing:border-box}body{margin:0;color:#1b2921;font:14px Arial,sans-serif;line-height:1.5}main{max-width:780px;margin:auto}header{border-bottom:3px solid #1d533a;padding-bottom:18px}.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:#42745a;font-weight:bold}h1{font-size:28px;margin:6px 0}p{margin:4px 0}.meta{color:#5d6c61;font-size:12px}.summary{margin:26px 0;padding:20px;border:2px solid #1d533a;border-radius:12px;background:#eff7f0;print-color-adjust:exact;-webkit-print-color-adjust:exact}.summary span{display:block;color:#42634e;font-size:12px}.summary strong{font-size:30px;color:#174c34}.row{display:flex;justify-content:space-between;gap:18px;padding:14px 0;border-bottom:1px solid #dfe7df}.row strong{white-space:nowrap}.notes{margin-top:24px;padding-top:12px;font-size:11px;color:#5d6c61}.warning{color:#80551b}footer{margin-top:26px;border-top:1px solid #dfe7df;padding-top:10px;font-size:10px;color:#718174}
+          </style></head><body><main><header><div class="eyebrow">Relatório financeiro</div><h1>Resultado das vendas</h1><p>${escapeHtml(storeName)}</p><p class="meta">Período: ${escapeHtml(financeBalancePeriod(start, end))} · Gerado em ${escapeHtml(generated)}</p></header>
+          <section class="summary"><span>Entradas de vendas menos gastos pagos</span><strong>${money(totals.balance)}</strong></section>
+          <div class="row"><span>Vendas recebidas, incluindo parcelas do crediário</span><strong>${money(totals.received)}</strong></div><div class="row"><span>Despesas e contas pagas</span><strong>− ${money(totals.spent)}</strong></div>
+          <div class="notes">${warnings.map(warning => `<p class="warning">${escapeHtml(warning)}</p>`).join("")}<p>Não inclui vendas ou contas ainda não pagas, outras contas a receber, fundo inicial, reforços ou sangrias. Valores dependem dos registros disponíveis e não consideram estornos ou custos não lançados. Isto não é lucro contábil nem saldo bancário.</p></div><footer>Consulta informativa · Não é documento fiscal</footer></main></body></html>`;
+        printWindow.document.open();
+        printWindow.document.write(html);
+        printWindow.document.close();
+        printWindow.addEventListener("afterprint", () => printWindow.close(), { once: true });
+        setTimeout(() => {
+          if (printWindow.closed) return;
+          printWindow.focus();
+          printWindow.print();
+        }, 250);
       }
 
       async function showFinanceSalesBalance() {
@@ -2373,12 +2453,34 @@
             showToast("A conta mudou durante a consulta. Tente novamente.");
             return;
           }
-          const totals = financeSalesBalance([...state.sales, ...orders.map(onlineOrderSale)], state.financeEntries);
-          const body = `<p class="helper">Consulta de todo o histórico registrado, independentemente dos filtros da tela.</p>
-            <div class="finance-balance-result"><span>Entradas de vendas menos gastos pagos</span><strong>${money(totals.balance)}</strong></div>
-            <div class="cost-summary"><div class="cost-row"><span>Vendas recebidas, incluindo parcelas do crediário</span><strong>${money(totals.received)}</strong></div><div class="cost-row"><span>Despesas e contas pagas</span><strong>− ${money(totals.spent)}</strong></div></div>
-            <p class="helper" style="margin-top:14px">Não inclui vendas ou contas ainda não pagas, outras contas a receber, fundo inicial, reforços ou sangrias. Valores dependem dos registros disponíveis e não consideram estornos ou custos não lançados. Isto não é lucro contábil nem saldo bancário.</p>`;
+          const sales = [...state.sales, ...orders.map(onlineOrderSale)];
+          const entries = state.financeEntries;
+          const body = `<p class="helper">Deixe as datas em branco para consultar todo o histórico, independentemente dos filtros da tela.</p>
+            <div class="report-filters" style="margin-top:14px"><div class="field"><label for="balanceStart">De</label><input id="balanceStart" type="date"></div><div class="field"><label for="balanceEnd">Até</label><input id="balanceEnd" type="date"></div><button type="button" class="button primary" id="balanceApply">Aplicar período</button></div>
+            <div id="balanceDetails"></div><button type="button" class="button" id="balancePrint" style="margin:14px 0">Imprimir resultado</button>
+            <p class="helper" style="margin-bottom:14px">Não inclui vendas ou contas ainda não pagas, outras contas a receber, fundo inicial, reforços ou sangrias. Valores dependem dos registros disponíveis e não consideram estornos ou custos não lançados. Isto não é lucro contábil nem saldo bancário.</p>`;
           openModal("Verificar resultado das vendas", body, "financeBalance");
+          const startInput = document.getElementById("balanceStart");
+          const endInput = document.getElementById("balanceEnd");
+          const details = document.getElementById("balanceDetails");
+          const apply = () => {
+            const start = startInput.value;
+            const end = endInput.value;
+            if (start && end && start > end) {
+              showToast("A data inicial não pode ser posterior à data final.");
+              return null;
+            }
+            const totals = financeSalesBalance(sales, entries, start, end);
+            const warnings = financeBalanceWarnings(totals);
+            details.innerHTML = `<p class="helper" style="margin-top:14px">Período: ${escapeHtml(financeBalancePeriod(start, end))}</p><div class="finance-balance-result"><span>Entradas de vendas menos gastos pagos</span><strong>${money(totals.balance)}</strong></div><div class="cost-summary"><div class="cost-row"><span>Vendas recebidas, incluindo parcelas do crediário</span><strong>${money(totals.received)}</strong></div><div class="cost-row"><span>Despesas e contas pagas</span><strong>− ${money(totals.spent)}</strong></div></div>${warnings.map(warning => `<p class="helper" style="margin-top:10px">${escapeHtml(warning)}</p>`).join("")}`;
+            return { totals, start, end };
+          };
+          document.getElementById("balanceApply").addEventListener("click", apply);
+          document.getElementById("balancePrint").addEventListener("click", () => {
+            const report = apply();
+            if (report) printFinanceSalesBalance(report.totals, report.start, report.end);
+          });
+          apply();
         } catch (error) {
           console.error("Não foi possível consultar o resultado das vendas:", error);
           showToast("Não foi possível carregar todos os pedidos online. Tente novamente.");
