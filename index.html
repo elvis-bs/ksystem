@@ -3365,6 +3365,12 @@
         });
       }
 
+      function cashSessionOverlapsPeriod(session, start, end, today) {
+        const openedDay = localDateKey(session.openedAt);
+        const lastDay = session.closedAt ? localDateKey(session.closedAt) : today;
+        return openedDay <= end && lastDay >= start;
+      }
+
       function renderCashReports() {
         const today = localDateKey(new Date());
         const start = cashReportStart || today;
@@ -3372,10 +3378,7 @@
         const validRange = start <= end;
         const sessions = validRange
           ? [...state.cashSessions]
-            .filter(session => {
-              const openedDay = localDateKey(session.openedAt);
-              return openedDay >= start && openedDay <= end;
-            })
+            .filter(session => cashSessionOverlapsPeriod(session, start, end, today))
             .sort((a, b) => new Date(b.openedAt) - new Date(a.openedAt))
           : [];
         const rows = sessions.map(session => {
@@ -3420,7 +3423,7 @@
           <div class="page-heading"><div><div class="eyebrow">Financeiro</div><h1>Relatório de caixa</h1><p class="subtitle">Confira vendas por turno, dinheiro esperado e diferenças de fechamento.</p></div><button class="button" data-action="print-report">Imprimir relatório</button></div>
           <form class="report-filters" id="cashReportFilters"><div class="field"><label for="cashReportStart">De</label><input id="cashReportStart" name="start" type="date" value="${start}" required></div><div class="field"><label for="cashReportEnd">Até</label><input id="cashReportEnd" name="end" type="date" value="${end}" required></div><button class="button primary" type="submit">Aplicar período</button></form>
           ${!validRange ? `<div class="callout"><span>!</span><div><b>Período inválido</b>A data inicial precisa ser anterior à data final.</div></div>` : ""}
-          <p class="helper" style="margin:12px 0">Os turnos são agrupados pela data de abertura. O total esperado inclui recebimentos em todas as formas, fundo inicial, adições e sangrias. Despesas financeiras não alteram o caixa; sangrias reduzem o total esperado e o dinheiro físico disponível.</p>
+          <p class="helper" style="margin:12px 0">São incluídos os turnos que estiveram abertos em qualquer dia do período, mesmo que tenham sido abertos antes ou fechados depois. Os valores apresentados são do turno inteiro, não apenas dos dias selecionados; o mesmo turno pode aparecer em relatórios de períodos diferentes. O total esperado inclui recebimentos em todas as formas, fundo inicial, adições e sangrias. Despesas financeiras não alteram o caixa; sangrias reduzem o total esperado e o dinheiro físico disponível.</p>
           <section class="stats" style="margin-top:15px">
             <article class="stat-card"><div class="stat-top"><span>Total recebido nos turnos</span><span class="stat-icon">↗</span></div><div class="stat-value">${money(totalSales)}</div><div class="stat-note">${allSales.length} recebimento(s), todas as formas</div></article>
             <article class="stat-card"><div class="stat-top"><span>Total esperado no caixa</span><span class="stat-icon">▣</span></div><div class="stat-value">${money(totalExpected)}</div><div class="stat-note">dinheiro + Pix + cartões + fundo + adições − sangrias</div></article>
