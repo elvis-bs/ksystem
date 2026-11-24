@@ -628,6 +628,8 @@
       let driverAlertAudioContext = null;
       let driverAlertGain = null;
       let deliveryDrivers = [];
+      let orderDriverNames = new Map();
+      let onlineOrdersRefreshVersion = 0;
       let driverOrdersError = "";
       let syncQueue = Promise.resolve();
       let authMode = "signin";
@@ -886,6 +888,7 @@
         return {
           id: `online-${order.id}`,
           onlineOrderId: order.id,
+          deliveryDriverId: order.delivery_driver_id || null,
           createdAt: order.created_at,
           customerName: data.customerName || "Cliente online",
           customerPhone: data.customerPhone || "",
@@ -1040,10 +1043,13 @@
 
       async function refreshOnlineOrders(notifyNewOrders = false) {
         if (!currentUser || !onlineMenuReady) return false;
+        const userId = currentUser.id;
+        const refreshVersion = ++onlineOrdersRefreshVersion;
         const { data, error } = await supabaseClient
           .from("online_orders")
-          .select("id,payment_status,status,order_data,total,created_at,paid_at")
+          .select("id,payment_status,status,order_data,total,created_at,paid_at,delivery_driver_id")
           .order("created_at", { ascending: false });
+        if (currentUser?.id !== userId || refreshVersion !== onlineOrdersRefreshVersion) return false;
         if (error) {
           console.error("Não foi possível carregar pedidos online:", error);
           if (autoAcceptOnlineOrders) {
@@ -1054,8 +1060,27 @@
           }
           return false;
         }
+        const nextOrders = data || [];
+        const driverIds = [...new Set(nextOrders
+          .filter(order => order.status === "Saiu para entrega" && order.order_data?.fulfillment === "delivery")
+          .map(order => order.delivery_driver_id).filter(Boolean))];
+        let names = new Map();
+        if (driverIds.length) {
+          try {
+            const { data: drivers, error: driverError } = await supabaseClient.from("delivery_drivers")
+              .select("user_id,name").eq("business_id", userId).in("user_id", driverIds);
+            if (driverError) throw driverError;
+            names = new Map((drivers || []).map(driver => [driver.user_id, driver.name]));
+          } catch (driverError) {
+            if (currentUser?.id !== userId || refreshVersion !== onlineOrdersRefreshVersion) return false;
+            console.error("Não foi possível carregar os nomes dos entregadores:", driverError);
+            showToast("Não foi possível carregar os nomes dos entregadores. Os pedidos continuam disponíveis.");
+          }
+          if (currentUser?.id !== userId || refreshVersion !== onlineOrdersRefreshVersion) return false;
+        }
         const previousAlertableOrders = new Set(onlineOrders.filter(orderCanTriggerAlert).map(order => order.id));
-        onlineOrders = data || [];
+        onlineOrders = nextOrders;
+        orderDriverNames = names;
         if (notifyNewOrders && orderAlertEnabled && onlineOrders.some(order => orderCanTriggerAlert(order) && !previousAlertableOrders.has(order.id))) {
           try {
             playOrderAlertSound();
@@ -1065,8 +1090,8 @@
             if (currentPage === "pedidos") renderOrders();
             showToast("O navegador bloqueou o som. Ative o alerta novamente.");
           }
-          return true;
         }
+        return true;
       }
 
       function setSyncStatus(message) {
@@ -1361,6 +1386,8 @@
         autoAcceptOnlineOrders = false;
         currentUser = user;
         onlineOrders = [];
+        orderDriverNames = new Map();
+        onlineOrdersRefreshVersion++;
         onlineMenuReady = false;
         onlineCashOrdersReady = false;
         mercadoPagoStatus = { configured: false, connected: false, sellerId: "" };
@@ -1617,6 +1644,8 @@
             autoAcceptOnlineOrders = false;
             currentUser = null;
             onlineOrders = [];
+            orderDriverNames = new Map();
+            onlineOrdersRefreshVersion++;
             driverProfile = null;
             driverOrders = [];
             driverOrdersError = "";
@@ -2478,6 +2507,10 @@
             <div class="order-card-total"><span>${(sale.items || []).reduce((sum, item) => sum + number(item.quantity), 0)} item(ns)</span><strong>${money(sale.total)}</strong></div>
             <div class="order-card-meta"><span>Pagamento: ${escapeHtml(sale.payment || "Não informado")}</span><span class="pill ${sale.paid ? "" : "orange"}">${escapeHtml(receiptPaymentStatus(sale))}</span></div>
             ${sale.fulfillment ? `<div class="order-card-meta"><span>${sale.fulfillment === "pickup" ? "Retirada no local" : "Entrega"}${sale.deliveryFee ? ` · taxa ${money(sale.deliveryFee)}` : ""}</span></div>` : ""}
+            ${sale.onlineOrderId && sale.fulfillment === "delivery" && sale.status === "Saiu para entrega"
+              ? `<div class="order-card-meta"><span>${sale.deliveryDriverId
+                ? `Entrega aceita por: ${escapeHtml(orderDriverNames.get(sale.deliveryDriverId) || "entregador não identificado")}`
+                : "Aguardando aceite do entregador"}</span></div>` : ""}
             ${sale.address ? `<div class="order-card-contact">${sale.fulfillment === "pickup" ? "Retirada em" : "Endereço"}: ${escapeHtml(sale.address)}</div>` : sale.pickupAddress ? `<div class="order-card-contact">Retirada em: ${escapeHtml(sale.pickupAddress)}</div>` : ""}
             ${sale.notes ? `<div class="order-card-contact">Obs.: ${escapeHtml(sale.notes)}</div>` : ""}
             <div class="order-card-actions">${sale.onlineOrderId && sale.status === "Recebido" && !isPendingPix ? `<button type="button" class="button primary" data-action="accept-online-order" data-id="${escapeHtml(sale.id)}">Aceitar pedido →</button><button type="button" class="button reject-order" data-action="reject-online-order" data-id="${escapeHtml(sale.id)}">Recusar pedido</button>` : !isPendingPix && nextStatus ? `<button type="button" class="button primary" data-action="advance-order" data-id="${escapeHtml(sale.id)}" data-status="${nextStatus}">${nextLabel} →</button>` : ""}${!sale.onlineOrderId && !sale.paid && sale.payment !== "Crediário" && sale.status !== "Cancelado" ? `<button type="button" class="button" data-action="edit-sale-payment" data-id="${escapeHtml(sale.id)}">Alterar / receber pagamento</button>` : ""}<button type="button" class="button icon-button order-details-trigger" data-action="order-details" data-id="${escapeHtml(sale.id)}" aria-label="Detalhes do pedido #${escapeHtml(String(sale.id || "").slice(-5))}" title="Detalhes do pedido"><svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="m16 16 4 4M11 8v.1M11 11v4"></path></svg></button></div>

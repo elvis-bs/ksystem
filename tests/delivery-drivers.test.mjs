@@ -61,3 +61,30 @@ test("a driver can claim an order and sees a conflict if another driver got it f
   assert.match(messages[1], /Entrega aceita/);
   assert.equal(refreshed, 2);
 });
+
+test("driver completion updates only their active delivery and refreshes the portal", async () => {
+  const start = html.indexOf("      async function finishDeliveryOrder(");
+  const end = html.indexOf("      function setAuthMode(", start);
+  assert.ok(start >= 0 && end > start);
+  const filters = [];
+  const messages = [];
+  let refreshed = 0;
+  const query = {
+    update(values) { assert.equal(values.status, "Concluído"); return this; },
+    eq(field, value) { filters.push([field, value]); return this; },
+    select() { return this; },
+    async maybeSingle() { return { data: { id: "order-id" }, error: null }; }
+  };
+  const context = {
+    driverProfile: { active: true, user_id: "driver-id" },
+    supabaseClient: { from: table => { assert.equal(table, "online_orders"); return query; } },
+    showToast: text => messages.push(text), refreshDriverOrders: async () => { refreshed++; },
+    console: { error() {} }
+  };
+  vm.createContext(context);
+  vm.runInContext(html.slice(start, end), context);
+  await context.finishDeliveryOrder("order-id");
+  assert.deepEqual(filters, [["id", "order-id"], ["delivery_driver_id", "driver-id"], ["status", "Saiu para entrega"]]);
+  assert.equal(refreshed, 1);
+  assert.match(messages[0], /marcado como entregue/);
+});
